@@ -28,6 +28,8 @@ Local fullstack tool for curating [LeRobot](https://github.com/huggingface/lerob
 - Python 3.10+
 - Node.js 18+
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- [hf-mount](https://pypi.org/project/hf-mount/) — for mounting HF datasets
+- nfs-common (`sudo apt install nfs-common -y`)
 
 ## Setup
 
@@ -151,6 +153,53 @@ cd frontend && npm run dev
 # Build frontend for production
 cd frontend && npm run build
 ```
+
+## HuggingFace Dataset Mounting
+
+Auto-mount all HuggingFace repos (models, datasets, spaces) from the [Phy-lab](https://huggingface.co/Phy-lab) organization to the local filesystem.
+
+### Mount Location
+
+```
+/tmp/hf-mounts/Phy-lab/
+├── model/<model-name>/
+├── dataset/<dataset-name>/
+└── space/<space-name>/
+```
+
+### Manual Run
+
+```bash
+sudo python3 scripts/hf_auto_mount.py
+
+# For private repos
+sudo HF_TOKEN=<token> python3 scripts/hf_auto_mount.py
+```
+
+Already-mounted repos are automatically skipped.
+
+### Auto-Mount on Boot (systemd)
+
+```bash
+sudo cp scripts/hf-auto-mount.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hf-auto-mount.service
+```
+
+### Mount Management
+
+| Command | Description |
+|---------|-------------|
+| `hf-mount status` | Check current mount status |
+| `sudo hf-mount stop <mount-path>` | Unmount a specific repo |
+| `sudo systemctl restart hf-auto-mount` | Restart service (remount all) |
+
+### Notes
+
+- CPU idle at 0%, active only on file access
+- ~20MB memory per mounted repo
+- Auto-remounts on reboot when systemd service is enabled
+- Run the script again to pick up newly added repos
 
 ## Technical Notes
 
