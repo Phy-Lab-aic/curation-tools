@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"source .venv/bin/activate && python tests/test_mockup.py 2>&1\",\"description\":\"Run backend mockup tests\"}",
+  "error": "Exit code 1\n/bin/bash: line 1: .venv/bin/activate: No such file or directory",
+  "timestamp": "2026-03-25T16:50:25.767Z",
+  "retry_count": 1
+}
