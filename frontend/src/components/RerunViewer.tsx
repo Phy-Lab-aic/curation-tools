@@ -39,8 +39,9 @@ export function RerunViewer({ episodeIndex }: RerunViewerProps) {
       </div>
       <iframe
         style={styles.iframe}
-        src="http://localhost:9090"
+        src={import.meta.env.VITE_RERUN_URL ?? "http://localhost:9090"}
         title="Rerun Viewer"
+        sandbox="allow-scripts allow-same-origin"
         allowFullScreen
       />
     </div>

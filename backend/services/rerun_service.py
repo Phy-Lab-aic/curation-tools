@@ -54,8 +54,10 @@ def _log_scalar_columns(entity_prefix: str, row: dict, columns: list[str]) -> No
             rr.log(entity, rr.BarChart(arr))
 
 
-def visualize_episode(episode_index: int) -> None:
+async def visualize_episode(episode_index: int) -> None:
     """Visualize a single episode in Rerun."""
+    import asyncio
+
     loc = dataset_service.get_episode_file_location(episode_index)
     dataset_path = Path(dataset_service.get_dataset_path())
     features = dataset_service.get_features()
@@ -73,7 +75,7 @@ def visualize_episode(episode_index: int) -> None:
     if not data_path.exists():
         raise FileNotFoundError(f"Data parquet not found: {data_path}")
 
-    table = pq.read_table(data_path)
+    table = await asyncio.to_thread(pq.read_table, data_path)
     df = table.to_pydict()
     all_columns = list(df.keys())
 

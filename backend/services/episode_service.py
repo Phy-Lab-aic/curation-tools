@@ -6,6 +6,7 @@ parquet files located at ``meta/episodes/chunk-{N}/file-{M}.parquet``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import tempfile
@@ -56,7 +57,7 @@ class EpisodeService:
         tasks_map = await dataset_service.get_tasks_map()
 
         for file_path in dataset_service.iter_episode_parquet_files():
-            table = pq.read_table(file_path)
+            table = await asyncio.to_thread(pq.read_table, file_path)
             for row in _iter_rows(table):
                 ep = _row_to_episode(row, tasks_map)
                 episodes[ep["episode_index"]] = ep
@@ -94,7 +95,7 @@ class EpisodeService:
                 f"Episode {episode_index} not found in any parquet file."
             )
 
-        table = pq.read_table(file_path)
+        table = await asyncio.to_thread(pq.read_table, file_path)
         for row in _iter_rows(table):
             if row.get("episode_index") == episode_index:
                 return _row_to_episode(row, tasks_map)
@@ -141,10 +142,10 @@ class EpisodeService:
 
         lock = dataset_service.get_file_lock(file_path)
         async with lock:
-            table = pq.read_table(file_path)
+            table = await asyncio.to_thread(pq.read_table, file_path)
             table = _ensure_metadata_columns(table)
             table = _update_row(table, episode_index, grade, tags)
-            _atomic_write(table, file_path)
+            await asyncio.to_thread(_atomic_write, table, file_path)
 
         tasks_map = await dataset_service.get_tasks_map()
         # Find the updated row and return it

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useDataset } from '../hooks/useDataset'
 import type { DatasetInfo } from '../types'
 
@@ -20,9 +20,11 @@ export function DatasetLoader({ onDatasetLoaded }: DatasetLoaderProps) {
   }
 
   // Notify parent when dataset changes
-  if (dataset) {
-    onDatasetLoaded(dataset)
-  }
+  useEffect(() => {
+    if (dataset) {
+      onDatasetLoaded(dataset)
+    }
+  }, [dataset, onDatasetLoaded])
 
   return (
     <div style={styles.container}>

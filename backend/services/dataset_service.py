@@ -118,7 +118,17 @@ class DatasetService:
     # ------------------------------------------------------------------
 
     def load_dataset(self, path: str | Path) -> None:
+        from backend.config import settings
+
         root = Path(path).resolve()
+
+        # Validate path is under an allowed root directory
+        allowed = [Path(r).resolve() for r in settings.allowed_dataset_roots]
+        if not any(root == base or base in root.parents for base in allowed):
+            raise ValueError(
+                f"Dataset path {root} is not under any allowed root: {allowed}"
+            )
+
         if not root.exists():
             raise FileNotFoundError(f"Dataset path does not exist: {root}")
         if not root.is_dir():
