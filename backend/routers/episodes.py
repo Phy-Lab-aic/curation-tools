@@ -27,10 +27,16 @@ async def get_episode(episode_index: int):
 @router.patch("/{episode_index}", response_model=Episode)
 async def update_episode(episode_index: int, update: EpisodeUpdate):
     try:
+        # C3: When tags not provided, preserve existing tags instead of erasing
+        if update.tags is not None:
+            tags = update.tags
+        else:
+            current = await episode_service.get_episode(episode_index)
+            tags = current.get("tags", [])
         return await episode_service.update_episode(
             episode_index=episode_index,
             grade=update.grade,
-            tags=update.tags if update.tags is not None else [],
+            tags=tags,
         )
     except EpisodeNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
