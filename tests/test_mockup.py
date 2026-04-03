@@ -11,8 +11,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from backend.services.dataset_service import DatasetService
 from backend.services.episode_service import EpisodeService
 from backend.services import task_service
-import pyarrow.parquet as pq
-
+from backend.services.export_service import export_dataset
 MOCK_DATASET = Path(__file__).parent / "mock_dataset"
 
 
@@ -26,6 +25,10 @@ def reset_mock_dataset() -> None:
 
 def make_services() -> tuple[DatasetService, EpisodeService]:
     """Create fresh service instances pointing at the mock dataset."""
+    from backend.config import settings
+    original_roots = settings.allowed_dataset_roots
+    if str(MOCK_DATASET.parent) not in original_roots:
+        settings.allowed_dataset_roots = original_roots + [str(MOCK_DATASET.parent)]
     ds = DatasetService()
     ds.load_dataset(MOCK_DATASET)
 
@@ -33,10 +36,12 @@ def make_services() -> tuple[DatasetService, EpisodeService]:
     import backend.services.dataset_service as ds_mod
     import backend.services.episode_service as ep_mod
     import backend.services.task_service as ts_mod
+    import backend.services.export_service as ex_mod
 
     ds_mod.dataset_service = ds
     ep_mod.dataset_service = ds
     ts_mod.dataset_service = ds
+    ex_mod.dataset_service = ds
 
     es = EpisodeService()
     return ds, es
@@ -69,22 +74,20 @@ async def run_tests() -> None:
     assert task_instructions[1] == "Place the cube on the plate", f"Unexpected task 1: {task_instructions[1]}"
     print("PASS: get_tasks() returns 2 tasks with correct instructions")
 
-    # --- update_episode 0 with grade="A" and tags=["good", "clean"] ---
-    updated = await es.update_episode(episode_index=0, grade="A", tags=["good", "clean"])
-    assert updated["grade"] == "A", f"Expected grade='A', got {updated['grade']}"
+    # --- update_episode 0 with grade="Good" and tags=["good", "clean"] ---
+    updated = await es.update_episode(episode_index=0, grade="Good", tags=["good", "clean"])
+    assert updated["grade"] == "Good", f"Expected grade='Good', got {updated['grade']}"
     assert updated["tags"] == ["good", "clean"], f"Unexpected tags: {updated['tags']}"
     print("PASS: update_episode() returns updated record with grade and tags")
 
-    # Verify persistence: re-read directly from parquet
-    ep_file = MOCK_DATASET / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
-    table = pq.read_table(ep_file)
-    ep_indices_col = table.column("episode_index").to_pylist()
-    row_pos = ep_indices_col.index(0)
-    persisted_grade = table.column("grade").to_pylist()[row_pos]
-    persisted_tags = table.column("tags").to_pylist()[row_pos]
-    assert persisted_grade == "A", f"Persisted grade mismatch: {persisted_grade}"
-    assert persisted_tags == ["good", "clean"], f"Persisted tags mismatch: {persisted_tags}"
-    print("PASS: Episode update persisted correctly to parquet")
+    # Verify persistence: re-read from sidecar JSON
+    from backend.services.episode_service import _load_sidecar
+    sidecar = _load_sidecar(MOCK_DATASET)
+    ann = sidecar.get("0")
+    assert ann is not None, "Episode 0 annotation not found in sidecar"
+    assert ann["grade"] == "Good", f"Persisted grade mismatch: {ann['grade']}"
+    assert ann["tags"] == ["good", "clean"], f"Persisted tags mismatch: {ann['tags']}"
+    print("PASS: Episode update persisted correctly to sidecar JSON")
 
     # --- update_task 0 instruction ---
     new_instruction = "Pick up the blue cube"
@@ -93,6 +96,7 @@ async def run_tests() -> None:
     print("PASS: update_task() returns updated task")
 
     # Verify persistence: re-read tasks.parquet directly
+    import pyarrow.parquet as pq
     tasks_file = MOCK_DATASET / "meta" / "tasks.parquet"
     tasks_table = pq.read_table(tasks_file)
     task_idx_col = tasks_table.column("task_index").to_pylist()
@@ -100,6 +104,43 @@ async def run_tests() -> None:
     persisted_task = tasks_table.column("task").to_pylist()[task_row_pos]
     assert persisted_task == new_instruction, f"Persisted task mismatch: {persisted_task}"
     print("PASS: Task update persisted correctly to parquet")
+
+    # --- export_dataset: mark episode 1 as Bad, export excluding Bad ---
+    import tempfile, shutil, json as json_mod
+    await es.update_episode(episode_index=1, grade="Bad", tags=["collision"])
+    export_dir = Path(tempfile.mkdtemp(prefix="curation_export_")) / "exported"
+    result = export_dataset(str(export_dir), exclude_grades=["Bad"])
+    assert result["total_episodes"] == 4, f"Expected 4 exported episodes, got {result['total_episodes']}"
+    assert result["excluded_count"] == 1, f"Expected 1 excluded, got {result['excluded_count']}"
+    # Verify info.json
+    exported_info = json_mod.loads((export_dir / "meta" / "info.json").read_text())
+    assert exported_info["total_episodes"] == 4, f"Exported info.json total_episodes mismatch"
+    # Verify tasks.parquet was copied
+    assert (export_dir / "meta" / "tasks.parquet").exists(), "tasks.parquet not exported"
+    # Verify episode parquet only has 4 episodes
+    import pyarrow.parquet as pq2
+    ep_files = list((export_dir / "meta" / "episodes").rglob("*.parquet"))
+    assert len(ep_files) > 0, "No episode parquet files exported"
+    total_exported_eps = 0
+    for ef in ep_files:
+        t = pq2.read_table(ef)
+        total_exported_eps += t.num_rows
+    assert total_exported_eps == 4, f"Expected 4 episode rows, got {total_exported_eps}"
+    exported_indices = set()
+    for ef in ep_files:
+        t = pq2.read_table(ef)
+        exported_indices.update(t.column("episode_index").to_pylist())
+    assert 1 not in exported_indices, "Bad episode 1 should not be in export"
+    # Verify data file was copied
+    assert (export_dir / "data" / "chunk-000" / "file-000.parquet").exists(), "Data parquet not exported"
+    # Verify exporting to existing path raises ValueError
+    try:
+        export_dataset(str(export_dir), exclude_grades=["Bad"])
+        assert False, "Should have raised ValueError for existing output path"
+    except ValueError:
+        pass
+    print("PASS: export_dataset() filters Bad episodes and creates valid output")
+    shutil.rmtree(export_dir.parent, ignore_errors=True)
 
     print()
     print("ALL TESTS PASSED")
