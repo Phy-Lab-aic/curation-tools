@@ -11,8 +11,19 @@ from httpx import ASGITransport, AsyncClient
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from backend.config import settings
 from backend.main import app
 from backend.services.dataset_ops_service import dataset_ops_service
+
+_orig_roots = list(settings.allowed_dataset_roots)
+
+
+@pytest.fixture(autouse=True)
+def _allow_tmp_paths(tmp_path):
+    """Allow tmp_path in dataset root validation for tests."""
+    settings.allowed_dataset_roots = _orig_roots + [str(tmp_path), "/nonexistent"]
+    yield
+    settings.allowed_dataset_roots = _orig_roots
 
 
 # ---------------------------------------------------------------------------
