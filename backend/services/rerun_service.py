@@ -49,7 +49,7 @@ def _log_scalar_columns(entity_prefix: str, row: dict, columns: list[str]) -> No
         arr = np.asarray(value, dtype=float).ravel()
         entity = f"{entity_prefix}/{col}"
         if arr.size == 1:
-            rr.log(entity, rr.Scalar(float(arr[0])))
+            rr.log(entity, rr.Scalars(float(arr[0])))
         elif arr.size > 1:
             rr.log(entity, rr.BarChart(arr))
 
@@ -105,7 +105,7 @@ async def visualize_episode(episode_index: int) -> None:
     # Per-frame scalar logging
     num_frames = to_idx - from_idx
     for global_idx in range(from_idx, min(to_idx, len(df.get(all_columns[0], [])))):
-        rr.set_time_sequence("frame", global_idx - from_idx)
+        rr.set_time("frame", sequence= global_idx - from_idx)
         row = {col: df[col][global_idx] for col in all_columns if global_idx < len(df[col])}
         _log_scalar_columns("observation", row, state_columns)
         _log_scalar_columns("action", row, action_columns)
@@ -127,7 +127,8 @@ async def visualize_episode(episode_index: int) -> None:
             continue
 
         try:
-            frames = _extract_video_frames(video_path, from_idx, num_frames)
+            # Video files are per-episode, so start from frame 0 (not global from_idx)
+            frames = _extract_video_frames(video_path, 0, num_frames)
         except Exception as exc:
             logger.warning("Video extraction failed for %s: %s", vkey, exc)
             continue
@@ -137,7 +138,7 @@ async def visualize_episode(episode_index: int) -> None:
 
         entity = f"camera/{vkey.replace('.', '/')}"
         for i, frame_rgb in enumerate(frames):
-            rr.set_time_sequence("frame", i)
+            rr.set_time("frame", sequence= i)
             rr.log(entity, rr.Image(frame_rgb))
 
     logger.info("Visualized episode %d (%d frames)", episode_index, num_frames)
