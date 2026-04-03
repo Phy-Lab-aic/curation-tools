@@ -164,8 +164,16 @@ export function ScalarChart({ episodeIndex, currentFrame }: ScalarChartProps) {
       {obsKeys.length > 0 && (
         <div style={chartStyles.section}>
           <div
+            role="button"
+            tabIndex={0}
             style={chartStyles.sectionHeader}
             onClick={() => setObsCollapsed(!obsCollapsed)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                setObsCollapsed(!obsCollapsed)
+              }
+            }}
           >
             <span style={chartStyles.sectionTitle}>
               {obsCollapsed ? '\u25B6' : '\u25BC'} Observations
@@ -188,8 +196,16 @@ export function ScalarChart({ episodeIndex, currentFrame }: ScalarChartProps) {
       {actKeys.length > 0 && (
         <div style={chartStyles.section}>
           <div
+            role="button"
+            tabIndex={0}
             style={chartStyles.sectionHeader}
             onClick={() => setActCollapsed(!actCollapsed)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                setActCollapsed(!actCollapsed)
+              }
+            }}
           >
             <span style={chartStyles.sectionTitle}>
               {actCollapsed ? '\u25B6' : '\u25BC'} Actions

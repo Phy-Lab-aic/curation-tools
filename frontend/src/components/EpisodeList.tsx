@@ -60,18 +60,27 @@ export function EpisodeList({ episodes, loading, error, onEpisodeSelect, selecte
         ))}
       </div>
 
-      <div style={styles.list}>
+      <div style={styles.list} role="listbox">
         {filtered.map(ep => {
           const isSelected = selectedIndex === ep.episode_index
           return (
             <div
               key={ep.episode_index}
+              role="option"
+              tabIndex={0}
+              aria-selected={isSelected}
               style={{
                 ...styles.item,
                 background: isSelected ? '#1a2a3a' : 'transparent',
                 borderLeft: isSelected ? '3px solid #3a6ea5' : '3px solid transparent',
               }}
               onClick={() => handleClick(ep)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleClick(ep)
+                }
+              }}
             >
               <div style={styles.itemTop}>
                 <span style={styles.index}>#{ep.episode_index}</span>
