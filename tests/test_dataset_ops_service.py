@@ -29,12 +29,18 @@ def derived_dir(tmp_path: Path) -> Path:
 def mock_lerobot():
     """Inject mock lerobot modules into sys.modules so local imports resolve."""
     mock_LeRobotDataset = MagicMock()
-    mock_split_dataset = MagicMock(return_value={})
+    def _fake_split(dataset, splits, output_dir=None):
+        """Mock split that creates the expected output_dir/selected/ subdirectory."""
+        if output_dir is not None:
+            selected_dir = Path(output_dir) / "selected"
+            selected_dir.mkdir(parents=True, exist_ok=True)
+        return {}
+
+    mock_split_dataset = MagicMock(side_effect=_fake_split)
     mock_merge_datasets = MagicMock(return_value=MagicMock())
 
-    # Build fake module hierarchy
+    # Build fake module hierarchy matching lerobot package structure
     mod_lerobot = MagicMock()
-    mod_common = MagicMock()
     mod_datasets_pkg = MagicMock()
     mod_lerobot_dataset = MagicMock()
     mod_dataset_tools = MagicMock()
@@ -46,10 +52,8 @@ def mock_lerobot():
     saved = {}
     modules_to_set = {
         "lerobot": mod_lerobot,
-        "lerobot.common": mod_common,
-        "lerobot.common.datasets": mod_datasets_pkg,
-        "lerobot.common.datasets.lerobot_dataset": mod_lerobot_dataset,
-        "lerobot.datasets": MagicMock(),
+        "lerobot.datasets": mod_datasets_pkg,
+        "lerobot.datasets.lerobot_dataset": mod_lerobot_dataset,
         "lerobot.datasets.dataset_tools": mod_dataset_tools,
     }
 

@@ -172,15 +172,19 @@ class DatasetOpsService:
             derived_root = Path(settings.derived_dataset_path).expanduser()
             derived_root.mkdir(parents=True, exist_ok=True)
 
-            temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix=".split-"))
+            temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-"))
 
             source_name = source_path.name
             dataset = LeRobotDataset(repo_id=source_name, root=source_path)
             split_dataset(dataset, splits={"selected": episode_ids}, output_dir=temp_dir)
+            # split_dataset creates output at output_dir/selected/
+            split_result = temp_dir / "selected"
 
             target_dir = derived_root / target_name
-            temp_dir.rename(target_dir)
-            temp_dir = None  # renamed successfully, no cleanup needed
+            split_result.rename(target_dir)
+            # Clean up the now-empty temp parent dir
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            temp_dir = None
 
             provenance = {
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -287,13 +291,15 @@ class DatasetOpsService:
             derived_root.mkdir(parents=True, exist_ok=True)
 
             # Step 1: Split selected episodes into a temp dir
-            split_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix=".split-tmp-"))
+            split_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-tmp-"))
             source_ds = LeRobotDataset(repo_id=source_path.name, root=source_path)
             split_dataset(source_ds, splits={"selected": episode_ids}, output_dir=split_tmp)
+            # split_dataset creates output at output_dir/selected/
+            split_result_dir = split_tmp / "selected"
 
             # Step 2: Merge split result with existing target
-            merge_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix=".merge-tmp-"))
-            split_ds = LeRobotDataset(repo_id=split_tmp.name, root=split_tmp)
+            merge_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-tmp-"))
+            split_ds = LeRobotDataset(repo_id="split-selected", root=split_result_dir)
             target_ds = LeRobotDataset(repo_id=target_path.name, root=target_path)
             merge_datasets([target_ds, split_ds], output_repo_id=target_name, output_dir=merge_tmp)
 
