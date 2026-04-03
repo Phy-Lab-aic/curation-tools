@@ -6,6 +6,7 @@ import { TaskEditor } from './components/TaskEditor'
 import { VideoPlayer, type VideoPlayerHandle } from './components/VideoPlayer'
 import { ScalarChart } from './components/ScalarChart'
 import { HubSync } from './components/HubSync'
+import { SplitMergePanel } from './components/SplitMergePanel'
 import { useEpisodes } from './hooks/useEpisodes'
 import { GRADES } from './types'
 import type { DatasetInfo, Episode } from './types'
@@ -119,6 +120,7 @@ export default function App() {
       <aside className="sidebar">
         <DatasetLoader onDatasetLoaded={handleDatasetLoaded} />
         <HubSync />
+        <SplitMergePanel datasetPath={dataset?.path ?? null} episodes={episodes} />
 
         {dataset && (
           <div className="progress-bar-container">
