@@ -91,6 +91,29 @@ function JobProgress({ jobStatus, polling }: { jobStatus: JobStatus | null; poll
   )
 }
 
+type SplitMode = 'grade' | 'tag'
+
+const GRADE_OPTIONS = ['Good', 'Normal', 'Bad', 'Ungraded'] as const
+
+function formatEpisodeRanges(indices: number[]): string {
+  if (indices.length === 0) return 'none'
+  const sorted = [...indices].sort((a, b) => a - b)
+  const ranges: string[] = []
+  let start = sorted[0]
+  let end = sorted[0]
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === end + 1) {
+      end = sorted[i]
+    } else {
+      ranges.push(start === end ? `${start}` : `${start}-${end}`)
+      start = sorted[i]
+      end = sorted[i]
+    }
+  }
+  ranges.push(start === end ? `${start}` : `${start}-${end}`)
+  return `Episodes: ${ranges.join(', ')}`
+}
+
 function SplitTab({
   datasetPath,
   episodes,
@@ -98,32 +121,41 @@ function SplitTab({
   datasetPath: string | null
   episodes: Episode[]
 }) {
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [splitMode, setSplitMode] = useState<SplitMode>('grade')
+  const [selectedGrades, setSelectedGrades] = useState<Set<string>>(new Set())
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
   const [targetName, setTargetName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { jobStatus, polling, startPolling, reset } = useJobPoller()
 
-  const toggleEpisode = (idx: number) => {
-    setSelectedIds(prev => {
+  const allTags = Array.from(new Set(episodes.flatMap(e => e.tags ?? []))).sort()
+
+  const matchingEpisodes = splitMode === 'grade'
+    ? episodes.filter(e => selectedGrades.has(e.grade ?? 'Ungraded'))
+    : episodes.filter(e => (e.tags ?? []).some(t => selectedTags.has(t)))
+
+  const toggleGrade = (grade: string) => {
+    setSelectedGrades(prev => {
       const next = new Set(prev)
-      if (next.has(idx)) next.delete(idx)
-      else next.add(idx)
+      if (next.has(grade)) next.delete(grade)
+      else next.add(grade)
       return next
     })
   }
 
-  const toggleAll = () => {
-    if (selectedIds.size === episodes.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(episodes.map(e => e.episode_index)))
-    }
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
   }
 
   const handleSubmit = async () => {
     if (!datasetPath) return
-    if (selectedIds.size === 0) { setSubmitError('Select at least one episode'); return }
+    if (matchingEpisodes.length === 0) { setSubmitError('No episodes match the selected filter'); return }
     if (!targetName.trim()) { setSubmitError('Enter a target dataset name'); return }
 
     setSubmitting(true)
@@ -133,7 +165,7 @@ function SplitTab({
     try {
       const resp = await client.post<{ job_id: string; operation: string; status: string }>('/datasets/split', {
         source_path: datasetPath,
-        episode_ids: Array.from(selectedIds).sort((a, b) => a - b),
+        episode_ids: matchingEpisodes.map(e => e.episode_index).sort((a, b) => a - b),
         target_name: targetName.trim(),
       })
       startPolling(resp.data.job_id)
@@ -149,33 +181,89 @@ function SplitTab({
     return <div style={s.emptyState}>Load a dataset first to split episodes.</div>
   }
 
-  const allSelected = selectedIds.size === episodes.length && episodes.length > 0
-
   return (
     <div style={s.tabContent}>
-      <div style={s.fieldLabel}>
-        Episodes ({selectedIds.size}/{episodes.length} selected)
-        <button style={s.selectAllBtn} onClick={toggleAll}>
-          {allSelected ? 'Deselect all' : 'Select all'}
-        </button>
-      </div>
-      <div style={s.episodeList}>
-        {episodes.length === 0 && <div style={s.emptyState}>No episodes in this dataset.</div>}
-        {episodes.map(ep => (
-          <label key={ep.episode_index} style={s.checkRow}>
-            <input
-              type="checkbox"
-              checked={selectedIds.has(ep.episode_index)}
-              onChange={() => toggleEpisode(ep.episode_index)}
-              style={s.checkbox}
-            />
-            <span style={s.epLabel}>
-              <span style={s.epIndex}>#{ep.episode_index}</span>
-              {ep.grade && <span style={{ ...s.gradeTag, color: gradeColor(ep.grade) }}>{ep.grade}</span>}
-              <span style={s.epTask}>{ep.task_instruction}</span>
-            </span>
-          </label>
+      {/* Split mode toggle */}
+      <div style={s.fieldLabel}>Split By</div>
+      <div style={s.modeToggle}>
+        {(['grade', 'tag'] as SplitMode[]).map(mode => (
+          <button
+            key={mode}
+            style={{ ...s.modeBtn, ...(splitMode === mode ? s.modeBtnActive : {}) }}
+            onClick={() => setSplitMode(mode)}
+          >
+            {mode === 'grade' ? 'Grade' : 'Tag'}
+          </button>
         ))}
+      </div>
+
+      {/* Grade filter */}
+      {splitMode === 'grade' && (
+        <>
+          <div style={s.fieldLabel}>Select grades</div>
+          <div style={s.chipRow}>
+            {GRADE_OPTIONS.map(grade => {
+              const active = selectedGrades.has(grade)
+              const color = grade === 'Good' ? '#4caf50' : grade === 'Bad' ? '#f44336' : grade === 'Normal' ? '#ffc107' : '#888'
+              return (
+                <button
+                  key={grade}
+                  style={{
+                    ...s.chip,
+                    borderColor: active ? color : '#333',
+                    color: active ? color : '#666',
+                    background: active ? `${color}18` : 'transparent',
+                  }}
+                  onClick={() => toggleGrade(grade)}
+                >
+                  {grade}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Tag filter */}
+      {splitMode === 'tag' && (
+        <>
+          <div style={s.fieldLabel}>Select tags</div>
+          {allTags.length === 0 ? (
+            <div style={s.empty}>No tags found in this dataset.</div>
+          ) : (
+            <div style={s.chipRow}>
+              {allTags.map(tag => {
+                const active = selectedTags.has(tag)
+                return (
+                  <button
+                    key={tag}
+                    style={{
+                      ...s.chip,
+                      borderColor: active ? '#3a6ea5' : '#333',
+                      color: active ? '#c0d8f0' : '#666',
+                      background: active ? '#3a6ea518' : 'transparent',
+                    }}
+                    onClick={() => toggleTag(tag)}
+                  >
+                    {tag}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Match preview */}
+      <div style={s.matchPreview}>
+        <span style={{ color: matchingEpisodes.length > 0 ? '#c0d8f0' : '#555' }}>
+          {matchingEpisodes.length} episode{matchingEpisodes.length !== 1 ? 's' : ''} match
+        </span>
+        {matchingEpisodes.length > 0 && (
+          <div style={s.matchRanges}>
+            {formatEpisodeRanges(matchingEpisodes.map(e => e.episode_index))}
+          </div>
+        )}
       </div>
 
       <div style={s.fieldLabel}>Target dataset name</div>
@@ -531,6 +619,55 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 10,
     padding: '2px 6px',
     cursor: 'pointer',
+  },
+  modeToggle: {
+    display: 'flex',
+    gap: 4,
+  },
+  modeBtn: {
+    background: 'transparent',
+    border: '1px solid #333',
+    borderRadius: 4,
+    color: '#666',
+    fontSize: 12,
+    padding: '4px 12px',
+    cursor: 'pointer',
+  },
+  modeBtnActive: {
+    background: '#2a3a4a',
+    border: '1px solid #3a6ea5',
+    color: '#c0d8f0',
+  },
+  chipRow: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: 6,
+  },
+  chip: {
+    background: 'transparent',
+    border: '1px solid #333',
+    borderRadius: 12,
+    fontSize: 11,
+    fontWeight: 600,
+    padding: '3px 10px',
+    cursor: 'pointer',
+    transition: 'all 0.1s',
+  },
+  matchPreview: {
+    background: '#1a1a1a',
+    border: '1px solid #2a2a2a',
+    borderRadius: 4,
+    padding: '8px 10px',
+    fontSize: 12,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 4,
+  },
+  matchRanges: {
+    fontSize: 11,
+    color: '#888',
+    fontFamily: 'monospace',
+    wordBreak: 'break-all' as const,
   },
   refreshBtn: {
     background: 'transparent',
