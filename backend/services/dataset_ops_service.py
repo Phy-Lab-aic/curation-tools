@@ -174,35 +174,27 @@ class DatasetOpsService:
 
             temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-"))
 
+            # Build HF repo_id: {org}/{target_name}
+            repo_id = f"{settings.hf_org}/{target_name}"
+
             source_name = source_path.name
             dataset = LeRobotDataset(repo_id=source_name, root=source_path)
-            split_dataset(dataset, splits={"selected": episode_ids}, output_dir=temp_dir)
-            # split_dataset creates output at output_dir/selected/
-            split_result = temp_dir / "selected"
+            result = split_dataset(dataset, splits={"selected": episode_ids}, output_dir=temp_dir)
+            split_ds = result["selected"]
 
-            target_dir = derived_root / target_name
-            split_result.rename(target_dir)
-            # Clean up the now-empty temp parent dir
+            # Push to HF Hub — sync service will auto-detect and mount
+            split_ds.repo_id = repo_id
+            split_ds.push_to_hub(private=False)
+            logger.info("Pushed split result to HF Hub: %s", repo_id)
+
+            # Clean up temp dir
             shutil.rmtree(temp_dir, ignore_errors=True)
             temp_dir = None
 
-            provenance = {
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "operation": "split",
-                "sources": [
-                    {"path": str(source_path), "episode_ids": episode_ids},
-                ],
-                "target_name": target_name,
-                "lerobot_version": "3.0",
-            }
-            (target_dir / "provenance.json").write_text(
-                json.dumps(provenance, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-
             job["status"] = "complete"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
-            job["result_path"] = str(target_dir)
-            logger.info("Split job %s complete: %s", job_id, target_dir)
+            job["result_path"] = f"https://huggingface.co/datasets/{repo_id}"
+            logger.info("Split job %s complete: %s", job_id, repo_id)
 
         except Exception as exc:
             job["status"] = "failed"
@@ -231,33 +223,27 @@ class DatasetOpsService:
             derived_root = Path(settings.derived_dataset_path).expanduser()
             derived_root.mkdir(parents=True, exist_ok=True)
 
-            temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix=".merge-"))
+            repo_id = f"{settings.hf_org}/{target_name}"
+
+            temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-"))
 
             datasets = []
             for p in source_paths:
                 datasets.append(LeRobotDataset(repo_id=p.name, root=p))
 
-            merge_datasets(datasets, output_repo_id=target_name, output_dir=temp_dir)
+            merged_ds = merge_datasets(datasets, output_repo_id=repo_id, output_dir=temp_dir)
 
-            target_dir = derived_root / target_name
-            temp_dir.rename(target_dir)
+            # Push to HF Hub
+            merged_ds.push_to_hub(private=False)
+            logger.info("Pushed merged result to HF Hub: %s", repo_id)
+
+            shutil.rmtree(temp_dir, ignore_errors=True)
             temp_dir = None
-
-            provenance = {
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "operation": "merge",
-                "sources": [{"path": str(p)} for p in source_paths],
-                "target_name": target_name,
-                "lerobot_version": "3.0",
-            }
-            (target_dir / "provenance.json").write_text(
-                json.dumps(provenance, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
 
             job["status"] = "complete"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
-            job["result_path"] = str(target_dir)
-            logger.info("Merge job %s complete: %s", job_id, target_dir)
+            job["result_path"] = f"https://huggingface.co/datasets/{repo_id}"
+            logger.info("Merge job %s complete: %s", job_id, repo_id)
 
         except Exception as exc:
             job["status"] = "failed"
@@ -281,7 +267,6 @@ class DatasetOpsService:
         job["status"] = "running"
         split_tmp: Path | None = None
         merge_tmp: Path | None = None
-        backup_path: Path | None = None
 
         try:
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -290,60 +275,40 @@ class DatasetOpsService:
             derived_root = Path(settings.derived_dataset_path).expanduser()
             derived_root.mkdir(parents=True, exist_ok=True)
 
+            # target_name should be the HF repo_id of the existing target (e.g. Phy-lab/changyong)
+            repo_id = target_name
+
             # Step 1: Split selected episodes into a temp dir
             split_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-tmp-"))
             source_ds = LeRobotDataset(repo_id=source_path.name, root=source_path)
             split_result = split_dataset(source_ds, splits={"selected": episode_ids}, output_dir=split_tmp)
-            split_ds = split_result["selected"]  # Already a LeRobotDataset
+            split_ds = split_result["selected"]
 
             # Step 2: Merge split result with existing target
             merge_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-tmp-"))
             target_ds = LeRobotDataset(repo_id=target_path.name, root=target_path)
-            merge_datasets([target_ds, split_ds], output_repo_id=target_name, output_dir=merge_tmp)
+            merged_ds = merge_datasets([target_ds, split_ds], output_repo_id=repo_id, output_dir=merge_tmp)
 
-            # Step 3: Backup old target, replace with merged result
-            backup_path = target_path.with_suffix(".bak")
-            if backup_path.exists():
-                shutil.rmtree(backup_path, ignore_errors=True)
-            target_path.rename(backup_path)
+            # Step 3: Push merged result to HF Hub (overwrites existing repo)
+            merged_ds.push_to_hub(private=False)
+            logger.info("Pushed split-and-merge result to HF Hub: %s", repo_id)
 
-            merge_tmp.rename(target_path)
-            merge_tmp = None  # renamed successfully
-
-            # Step 4: Write provenance
-            provenance = {
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "operation": "split_and_merge",
-                "sources": [
-                    {"path": str(source_path), "episode_ids": episode_ids},
-                    {"path": str(target_path), "note": "existing target (merged into)"},
-                ],
-                "target_name": target_name,
-                "lerobot_version": "3.0",
-            }
-            (target_path / "provenance.json").write_text(
-                json.dumps(provenance, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-
-            # Step 5: Clean up
+            # Step 4: Clean up temp dirs
             if split_tmp is not None and split_tmp.exists():
                 shutil.rmtree(split_tmp, ignore_errors=True)
-            if backup_path is not None and backup_path.exists():
-                shutil.rmtree(backup_path, ignore_errors=True)
+            shutil.rmtree(merge_tmp, ignore_errors=True)
+            merge_tmp = None
 
             job["status"] = "complete"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
-            job["result_path"] = str(target_path)
-            logger.info("Split-and-merge job %s complete: %s", job_id, target_path)
+            job["result_path"] = f"https://huggingface.co/datasets/{repo_id}"
+            logger.info("Split-and-merge job %s complete: %s", job_id, repo_id)
 
         except Exception as exc:
             job["status"] = "failed"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
             job["error"] = str(exc)
             logger.exception("Split-and-merge job %s failed", job_id)
-            # Restore backup if we moved the original
-            if backup_path is not None and backup_path.exists() and not target_path.exists():
-                backup_path.rename(target_path)
             if split_tmp is not None and split_tmp.exists():
                 shutil.rmtree(split_tmp, ignore_errors=True)
             if merge_tmp is not None and merge_tmp.exists():

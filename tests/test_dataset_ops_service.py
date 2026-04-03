@@ -34,10 +34,14 @@ def mock_lerobot():
         if output_dir is not None:
             selected_dir = Path(output_dir) / "selected"
             selected_dir.mkdir(parents=True, exist_ok=True)
-        return {}
+        mock_ds = MagicMock()
+        mock_ds.push_to_hub = MagicMock()
+        return {"selected": mock_ds}
 
     mock_split_dataset = MagicMock(side_effect=_fake_split)
-    mock_merge_datasets = MagicMock(return_value=MagicMock())
+    mock_merged_ds = MagicMock()
+    mock_merged_ds.push_to_hub = MagicMock()
+    mock_merge_datasets = MagicMock(return_value=mock_merged_ds)
 
     # Build fake module hierarchy matching lerobot package structure
     mod_lerobot = MagicMock()
@@ -120,6 +124,7 @@ class TestSplitDataset:
     ) -> None:
         with patch("backend.config.settings") as mock_settings:
             mock_settings.derived_dataset_path = str(derived_dir)
+            mock_settings.hf_org = "TestOrg"
 
             job_id = await service.split_dataset(
                 source_path="/tmp/source-ds",
@@ -134,16 +139,7 @@ class TestSplitDataset:
             assert job is not None
             assert job["status"] == "complete"
             assert job["error"] is None
-            assert job["result_path"] == str(derived_dir / "split-test")
-
-            # Check provenance was written
-            prov_path = derived_dir / "split-test" / "provenance.json"
-            assert prov_path.exists()
-            prov = json.loads(prov_path.read_text())
-            assert prov["operation"] == "split"
-            assert prov["target_name"] == "split-test"
-            assert prov["sources"][0]["episode_ids"] == [0, 1, 5]
-            assert prov["lerobot_version"] == "3.0"
+            assert job["result_path"] == "https://huggingface.co/datasets/TestOrg/split-test"
 
     @pytest.mark.asyncio
     async def test_split_failure_cleans_up(
@@ -184,6 +180,7 @@ class TestMergeDatasets:
     ) -> None:
         with patch("backend.config.settings") as mock_settings:
             mock_settings.derived_dataset_path = str(derived_dir)
+            mock_settings.hf_org = "TestOrg"
 
             job_id = await service.merge_datasets(
                 source_paths=["/tmp/ds-a", "/tmp/ds-b"],
@@ -195,13 +192,7 @@ class TestMergeDatasets:
             job = service.get_job_status(job_id)
             assert job is not None
             assert job["status"] == "complete"
-            assert job["result_path"] == str(derived_dir / "merged-test")
-
-            prov_path = derived_dir / "merged-test" / "provenance.json"
-            assert prov_path.exists()
-            prov = json.loads(prov_path.read_text())
-            assert prov["operation"] == "merge"
-            assert len(prov["sources"]) == 2
+            assert job["result_path"] == "https://huggingface.co/datasets/TestOrg/merged-test"
 
     @pytest.mark.asyncio
     async def test_merge_failure_cleans_up(
