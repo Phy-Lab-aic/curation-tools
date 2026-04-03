@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -6,8 +7,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.routers import datasets, episodes, tasks, rerun
+from backend.routers import datasets, episodes, tasks, rerun, videos, scalars, hf_sync
 from backend.services import rerun_service
+from backend.services.hf_sync_service import hf_sync_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,19 +17,27 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: initialize Rerun viewer
-    try:
-        rerun_service.init_rerun(
-            grpc_port=settings.rerun_grpc_port,
-            web_port=settings.rerun_web_port,
-        )
-        logger.info("Rerun viewer available at http://localhost:%d", settings.rerun_web_port)
-    except Exception as e:
-        logger.warning("Failed to initialize Rerun: %s (visualization will be unavailable)", e)
+    # Startup: Rerun is optional — video player is the primary visualization
+    if settings.enable_rerun:
+        try:
+            rerun_service.init_rerun(
+                grpc_port=settings.rerun_grpc_port,
+                web_port=settings.rerun_web_port,
+            )
+            logger.info("Rerun viewer available at http://localhost:%d", settings.rerun_web_port)
+        except Exception as e:
+            logger.warning("Rerun init failed: %s (video player still works)", e)
+    else:
+        logger.info("Rerun disabled — using native video player")
+
+    # HF sync: initialize and start background sync loop
+    hf_sync_service.init(settings.hf_org, settings.dataset_path)
+    sync_task = asyncio.create_task(hf_sync_service.run_sync_loop(settings.sync_interval_seconds))
 
     yield
 
-    # Shutdown: nothing to clean up
+    # Cleanup: cancel the sync loop
+    sync_task.cancel()
 
 
 app = FastAPI(
@@ -49,6 +59,9 @@ app.include_router(datasets.router)
 app.include_router(episodes.router)
 app.include_router(tasks.router)
 app.include_router(rerun.router)
+app.include_router(videos.router)
+app.include_router(scalars.router)
+app.include_router(hf_sync.router)
 
 
 @app.get("/api/health")

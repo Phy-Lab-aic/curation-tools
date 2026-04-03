@@ -5,6 +5,7 @@ import { EpisodeEditor } from './components/EpisodeEditor'
 import { TaskEditor } from './components/TaskEditor'
 import { VideoPlayer, type VideoPlayerHandle } from './components/VideoPlayer'
 import { ScalarChart } from './components/ScalarChart'
+import { HubSync } from './components/HubSync'
 import { useEpisodes } from './hooks/useEpisodes'
 import { GRADES } from './types'
 import type { DatasetInfo, Episode } from './types'
@@ -117,6 +118,7 @@ export default function App() {
       {/* Left sidebar */}
       <aside className="sidebar">
         <DatasetLoader onDatasetLoaded={handleDatasetLoaded} />
+        <HubSync />
 
         {dataset && (
           <div className="progress-bar-container">
