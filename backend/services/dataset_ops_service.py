@@ -19,16 +19,33 @@ from typing import Any
 
 
 def _set_writable_cache() -> None:
-    """Redirect HF datasets cache to a writable location.
-
-    FUSE-mounted datasets are read-only, but the datasets library
-    tries to create .cache dirs inside the data root. This redirects
-    the cache to a user-writable temp path.
-    """
+    """Redirect HF datasets cache to a writable location."""
     cache_dir = Path(tempfile.gettempdir()) / "hf-datasets-cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("HF_DATASETS_CACHE", str(cache_dir))
-    os.environ.setdefault("HF_HOME", str(cache_dir / "hub"))
+    os.environ["HF_DATASETS_CACHE"] = str(cache_dir)
+    os.environ["HF_HOME"] = str(cache_dir / "hub")
+
+
+def _make_writable_mirror(source: Path) -> Path:
+    """Create a writable mirror of a read-only dataset using symlinks.
+
+    The datasets library creates .cache dirs next to parquet files.
+    FUSE mounts are read-only so this fails. We create a temp directory
+    that mirrors the structure with symlinks to actual files, allowing
+    .cache creation while reading the original data.
+
+    Returns path to the writable mirror. Caller must clean up with shutil.rmtree().
+    """
+    mirror = Path(tempfile.mkdtemp(prefix="ds-mirror-"))
+    for item in source.rglob("*"):
+        relative = item.relative_to(source)
+        target = mirror / relative
+        if item.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.symlink_to(item)
+    return mirror
 
 logger = logging.getLogger(__name__)
 
@@ -158,14 +175,18 @@ class DatasetOpsService:
             repo_id = f"{settings.hf_org}/{target_name}"
 
             source_repo_id = f"{settings.hf_org}/{source_path.name}"
-            dataset = LeRobotDataset(repo_id=source_repo_id, root=source_path)
-            result = split_dataset(dataset, splits={"selected": episode_ids}, output_dir=temp_dir)
-            split_ds = result["selected"]
+            mirror = _make_writable_mirror(source_path)
+            try:
+                dataset = LeRobotDataset(repo_id=source_repo_id, root=mirror)
+                result = split_dataset(dataset, splits={"selected": episode_ids}, output_dir=temp_dir)
+                split_ds = result["selected"]
 
-            # Push to HF Hub — sync service will auto-detect and mount
-            split_ds.repo_id = repo_id
-            split_ds.push_to_hub(private=False)
-            logger.info("Pushed split result to HF Hub: %s", repo_id)
+                # Push to HF Hub — sync service will auto-detect and mount
+                split_ds.repo_id = repo_id
+                split_ds.push_to_hub(private=False)
+                logger.info("Pushed split result to HF Hub: %s", repo_id)
+            finally:
+                shutil.rmtree(mirror, ignore_errors=True)
 
             # Clean up temp dir
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -208,15 +229,22 @@ class DatasetOpsService:
 
             temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-"))
 
-            datasets = []
-            for p in source_paths:
-                datasets.append(LeRobotDataset(repo_id=f"{settings.hf_org}/{p.name}", root=p))
+            mirrors = []
+            try:
+                ds_list = []
+                for p in source_paths:
+                    m = _make_writable_mirror(p)
+                    mirrors.append(m)
+                    ds_list.append(LeRobotDataset(repo_id=f"{settings.hf_org}/{p.name}", root=m))
 
-            merged_ds = merge_datasets(datasets, output_repo_id=repo_id, output_dir=temp_dir)
+                merged_ds = merge_datasets(ds_list, output_repo_id=repo_id, output_dir=temp_dir)
 
-            # Push to HF Hub
-            merged_ds.push_to_hub(private=False)
-            logger.info("Pushed merged result to HF Hub: %s", repo_id)
+                # Push to HF Hub
+                merged_ds.push_to_hub(private=False)
+                logger.info("Pushed merged result to HF Hub: %s", repo_id)
+            finally:
+                for m in mirrors:
+                    shutil.rmtree(m, ignore_errors=True)
 
             shutil.rmtree(temp_dir, ignore_errors=True)
             temp_dir = None
@@ -260,22 +288,29 @@ class DatasetOpsService:
             # target_name should be the HF repo_id of the existing target (e.g. Phy-lab/changyong)
             repo_id = target_name
 
-            # Step 1: Split selected episodes into a temp dir
-            split_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-tmp-"))
-            source_ds = LeRobotDataset(repo_id=f"{settings.hf_org}/{source_path.name}", root=source_path)
-            split_result = split_dataset(source_ds, splits={"selected": episode_ids}, output_dir=split_tmp)
-            split_ds = split_result["selected"]
+            # Step 1: Mirror read-only sources
+            source_mirror = _make_writable_mirror(source_path)
+            target_mirror = _make_writable_mirror(target_path)
+            try:
+                # Step 2: Split selected episodes
+                split_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-tmp-"))
+                source_ds = LeRobotDataset(repo_id=f"{settings.hf_org}/{source_path.name}", root=source_mirror)
+                split_result = split_dataset(source_ds, splits={"selected": episode_ids}, output_dir=split_tmp)
+                split_ds = split_result["selected"]
 
-            # Step 2: Merge split result with existing target
-            merge_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-tmp-"))
-            target_ds = LeRobotDataset(repo_id=f"{settings.hf_org}/{target_path.name}", root=target_path)
-            merged_ds = merge_datasets([target_ds, split_ds], output_repo_id=repo_id, output_dir=merge_tmp)
+                # Step 3: Merge split result with existing target
+                merge_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-tmp-"))
+                target_ds = LeRobotDataset(repo_id=f"{settings.hf_org}/{target_path.name}", root=target_mirror)
+                merged_ds = merge_datasets([target_ds, split_ds], output_repo_id=repo_id, output_dir=merge_tmp)
 
-            # Step 3: Push merged result to HF Hub (overwrites existing repo)
-            merged_ds.push_to_hub(private=False)
-            logger.info("Pushed split-and-merge result to HF Hub: %s", repo_id)
+                # Step 4: Push merged result to HF Hub
+                merged_ds.push_to_hub(private=False)
+                logger.info("Pushed split-and-merge result to HF Hub: %s", repo_id)
+            finally:
+                shutil.rmtree(source_mirror, ignore_errors=True)
+                shutil.rmtree(target_mirror, ignore_errors=True)
 
-            # Step 4: Clean up temp dirs
+            # Clean up temp dirs
             if split_tmp is not None and split_tmp.exists():
                 shutil.rmtree(split_tmp, ignore_errors=True)
             shutil.rmtree(merge_tmp, ignore_errors=True)
