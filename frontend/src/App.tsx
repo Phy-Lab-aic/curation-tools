@@ -33,10 +33,24 @@ export default function App() {
 
   const handleSaveEpisode = useCallback(async (index: number, grade: string | null, tags: string[]) => {
     await updateEpisode(index, grade, tags)
+    // Auto-advance to next ungraded episode after grading
+    if (grade) {
+      const currentIdx = episodes.findIndex(e => e.episode_index === index)
+      // Look forward first (skip the episode we just graded)
+      let nextUngraded = episodes.find((e, i) => i > currentIdx && !e.grade)
+      // Wrap around if needed
+      if (!nextUngraded) {
+        nextUngraded = episodes.find((e, i) => i < currentIdx && !e.grade)
+      }
+      if (nextUngraded) {
+        setSelectedEpisode(nextUngraded)
+        return
+      }
+    }
     setSelectedEpisode(prev =>
       prev?.episode_index === index ? { ...prev, grade, tags } : prev
     )
-  }, [updateEpisode])
+  }, [updateEpisode, episodes])
 
   // Navigate to adjacent episode
   const navigateEpisode = useCallback((direction: -1 | 1) => {
