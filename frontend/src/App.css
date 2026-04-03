@@ -182,3 +182,35 @@ input:focus, textarea:focus, select:focus {
 button:hover:not(:disabled) {
   filter: brightness(1.15);
 }
+
+/* ===== Responsive ===== */
+@media (max-width: 1024px) {
+  .right-panel {
+    display: none;
+  }
+  .sidebar {
+    width: 240px;
+    min-width: 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-layout {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    min-width: unset;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid #222;
+    flex-shrink: 0;
+  }
+  .center-panel {
+    flex: 1;
+    min-height: 0;
+  }
+  .right-panel {
+    display: none;
+  }
+}
