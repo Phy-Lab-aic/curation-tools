@@ -45,7 +45,7 @@ export function HubSync() {
   const [errorsOpen, setErrorsOpen] = useState(false)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [sudoPassword, setSudoPassword] = useState('')
-  const [needsPassword, setNeedsPassword] = useState(false)
+  const [_needsPassword, setNeedsPassword] = useState(false)
 
   const fetchStatus = useCallback(async () => {
     try {

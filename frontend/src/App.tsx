@@ -16,10 +16,13 @@ const GRADE_KEYS: Record<string, string> = {
   '1': 'Good', '2': 'Normal', '3': 'Bad',
 }
 
+type RightTab = 'details' | 'splitmerge'
+
 export default function App() {
   const [dataset, setDataset] = useState<DatasetInfo | null>(null)
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null)
   const [currentFrame, setCurrentFrame] = useState(0)
+  const [rightTab, setRightTab] = useState<RightTab>('details')
   const videoRef = useRef<VideoPlayerHandle>(null)
   const { episodes, loading: episodesLoading, error: episodesError, fetchEpisodes, updateEpisode } = useEpisodes()
 
@@ -120,7 +123,6 @@ export default function App() {
       <aside className="sidebar">
         <DatasetLoader onDatasetLoaded={handleDatasetLoaded} />
         <HubSync />
-        <SplitMergePanel datasetPath={dataset?.path ?? null} episodes={episodes} />
 
         {dataset && (
           <div className="progress-bar-container">
@@ -177,15 +179,45 @@ export default function App() {
 
       {/* Right panel */}
       <aside className="right-panel">
-        <EpisodeEditor
-          episode={selectedEpisode}
-          onSave={handleSaveEpisode}
-        />
-        <TaskEditor episode={selectedEpisode} />
-        <ScalarChart
-          episodeIndex={selectedEpisode?.episode_index ?? null}
-          currentFrame={currentFrame}
-        />
+        {/* Tab bar */}
+        <div className="main-tab-bar" role="tablist">
+          <button
+            role="tab"
+            aria-selected={rightTab === 'details'}
+            className={`main-tab-btn${rightTab === 'details' ? ' active' : ''}`}
+            onClick={() => setRightTab('details')}
+          >
+            Details
+          </button>
+          <button
+            role="tab"
+            aria-selected={rightTab === 'splitmerge'}
+            className={`main-tab-btn${rightTab === 'splitmerge' ? ' active' : ''}`}
+            onClick={() => setRightTab('splitmerge')}
+          >
+            Split / Merge
+          </button>
+        </div>
+
+        {rightTab === 'details' && (
+          <>
+            <EpisodeEditor
+              episode={selectedEpisode}
+              onSave={handleSaveEpisode}
+            />
+            <TaskEditor episode={selectedEpisode} />
+            <ScalarChart
+              episodeIndex={selectedEpisode?.episode_index ?? null}
+              currentFrame={currentFrame}
+            />
+          </>
+        )}
+
+        {rightTab === 'splitmerge' && (
+          <div className="split-merge-main">
+            <SplitMergePanel datasetPath={dataset?.path ?? null} episodes={episodes} />
+          </div>
+        )}
       </aside>
     </div>
   )

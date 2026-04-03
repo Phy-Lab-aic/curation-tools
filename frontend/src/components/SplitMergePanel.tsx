@@ -486,12 +486,6 @@ function MergeTab() {
   )
 }
 
-function gradeColor(grade: string): string {
-  if (grade === 'Good') return '#4caf50'
-  if (grade === 'Bad') return '#f44336'
-  return '#ffc107'
-}
-
 export function SplitMergePanel({ datasetPath, episodes }: SplitMergePanelProps) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<TabId>('split')
