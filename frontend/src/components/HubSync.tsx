@@ -43,6 +43,9 @@ export function HubSync() {
   const [scanError, setScanError] = useState<string | null>(null)
   const [unmounting, setUnmounting] = useState<Set<string>>(new Set())
   const [errorsOpen, setErrorsOpen] = useState(false)
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
+  const [sudoPassword, setSudoPassword] = useState('')
+  const [needsPassword, setNeedsPassword] = useState(false)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -59,19 +62,35 @@ export function HubSync() {
     void fetchStatus()
   }, [open, fetchStatus])
 
-  const handleScan = async () => {
+  const doScan = async (password?: string) => {
     setScanning(true)
     setScanResult(null)
     setScanError(null)
+    setNeedsPassword(false)
     try {
-      const resp = await client.post<ScanResult>('/hf-sync/scan')
+      const body = password ? { password } : undefined
+      const resp = await client.post<ScanResult>('/hf-sync/scan', body)
       setScanResult(resp.data)
+      if (resp.data.failed && (Array.isArray(resp.data.failed) ? resp.data.failed.length > 0 : Object.keys(resp.data.failed).length > 0)) {
+        if (!password) {
+          setNeedsPassword(true)
+          setShowPasswordDialog(true)
+        }
+      }
       await fetchStatus()
     } catch {
       setScanError('Scan failed')
     } finally {
       setScanning(false)
     }
+  }
+
+  const handleScan = () => doScan()
+
+  const handleScanWithPassword = async () => {
+    setShowPasswordDialog(false)
+    await doScan(sudoPassword)
+    setSudoPassword('')
   }
 
   const handleUnmount = async (repoId: string) => {
@@ -93,16 +112,16 @@ export function HubSync() {
   return (
     <div style={s.container}>
       {/* Header / toggle */}
-      <button style={s.header} onClick={() => setOpen(v => !v)}>
+      <button style={s.header} onClick={() => setOpen(v => !v)} aria-expanded={open} aria-label="HF Hub Sync panel">
         <span style={s.headerTitle}>HF Hub Sync</span>
         <span style={s.headerMeta}>
           {status && (
-            <span style={{ color: status.initialized ? '#8bc34a' : '#ffc107', marginRight: 8, fontSize: 11 }}>
+            <span style={{ color: status.initialized ? '#8bc34a' : 'var(--color-warning)', marginRight: 8, fontSize: 11 }}>
               {status.initialized ? 'active' : 'idle'}
             </span>
           )}
           {status && (
-            <span style={{ color: '#888', fontSize: 11, marginRight: 8 }}>
+            <span style={{ color: 'var(--color-text-dim)', fontSize: 11, marginRight: 8 }}>
               {status.mounted_repos.length} repos
             </span>
           )}
@@ -150,15 +169,48 @@ export function HubSync() {
 
               {scanResult && (
                 <div style={s.scanResult}>
-                  <span style={{ color: '#8bc34a' }}>+{scanResult.new_mounts.length} new</span>
+                  <span style={{ color: 'var(--color-success)' }}>+{scanResult.new_mounts.length} new</span>
                   {' · '}
-                  <span style={{ color: '#888' }}>{scanResult.already_mounted.length} already mounted</span>
+                  <span style={{ color: 'var(--color-text-dim)' }}>{scanResult.already_mounted.length} already mounted</span>
                   {Object.keys(scanResult.failed).length > 0 && (
                     <>
                       {' · '}
-                      <span style={{ color: '#e05252' }}>{Object.keys(scanResult.failed).length} failed</span>
+                      <span style={{ color: 'var(--color-error)' }}>{Object.keys(scanResult.failed).length} failed</span>
                     </>
                   )}
+                </div>
+              )}
+
+              {/* Sudo password dialog */}
+              {showPasswordDialog && (
+                <div style={{ background: 'var(--color-bg-raised)', border: '1px solid #555', borderRadius: 6, padding: 12, marginTop: 8 }}>
+                  <div style={{ fontSize: 12, color: '#ccc', marginBottom: 8 }}>
+                    Mount requires sudo. Enter password:
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="password"
+                      value={sudoPassword}
+                      onChange={e => setSudoPassword(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleScanWithPassword()}
+                      placeholder="sudo password"
+                      style={{ flex: 1, padding: '4px 8px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text)', fontSize: 12 }}
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleScanWithPassword}
+                      disabled={!sudoPassword || scanning}
+                      style={{ padding: '4px 12px', background: 'var(--color-info)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                    >
+                      Mount
+                    </button>
+                    <button
+                      onClick={() => { setShowPasswordDialog(false); setSudoPassword('') }}
+                      style={{ padding: '4px 8px', background: 'transparent', color: 'var(--color-text-dim)', border: '1px solid #555', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -184,6 +236,7 @@ export function HubSync() {
                           }}
                           onClick={() => handleUnmount(detail.repo_id)}
                           disabled={unmounting.has(detail.repo_id)}
+                          aria-label={`Unmount ${detail.repo_id}`}
                         >
                           {unmounting.has(detail.repo_id) ? '...' : 'Unmount'}
                         </button>
@@ -194,14 +247,16 @@ export function HubSync() {
               )}
 
               {status.mounted_repos.length === 0 && (
-                <div style={s.empty}>No repos mounted</div>
+                <div style={s.empty}>
+                  No repos mounted yet. Click 'Scan Now' to discover datasets from HuggingFace.
+                </div>
               )}
 
               {/* Errors collapsible */}
               {status.errors.length > 0 && (
                 <div style={s.section}>
-                  <button style={s.errToggle} onClick={() => setErrorsOpen(v => !v)}>
-                    <span style={{ color: '#e05252' }}>
+                  <button style={s.errToggle} onClick={() => setErrorsOpen(v => !v)} aria-expanded={errorsOpen} aria-label="Toggle errors list">
+                    <span style={{ color: 'var(--color-error)' }}>
                       {status.errors.length} error{status.errors.length !== 1 ? 's' : ''}
                     </span>
                     <span style={s.chevron}>{errorsOpen ? '▲' : '▼'}</span>
@@ -306,9 +361,9 @@ const s: Record<string, React.CSSProperties> = {
   scanResult: {
     fontSize: 12,
     padding: '4px 8px',
-    background: '#1a1a1a',
+    background: 'var(--color-bg)',
     borderRadius: 4,
-    border: '1px solid #2a2a2a',
+    border: '1px solid var(--color-bg-raised)',
   },
   section: {
     display: 'flex',
@@ -334,9 +389,9 @@ const s: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     gap: 8,
     padding: '6px 8px',
-    background: '#1a1a1a',
+    background: 'var(--color-bg)',
     borderRadius: 4,
-    border: '1px solid #2a2a2a',
+    border: '1px solid var(--color-bg-raised)',
   },
   repoInfo: {
     display: 'flex',
@@ -377,16 +432,17 @@ const s: Record<string, React.CSSProperties> = {
     background: '#3a2020',
     border: '1px solid #5a2020',
     borderRadius: 3,
-    color: '#e05252',
+    color: 'var(--color-error)',
     padding: '3px 8px',
     fontSize: 11,
     cursor: 'pointer',
     flexShrink: 0,
   },
   empty: {
-    fontSize: 12,
-    color: '#555',
-    padding: '4px 0',
+    fontSize: 13,
+    color: 'var(--color-text-dim)',
+    padding: '24px',
+    textAlign: 'center' as const,
   },
   errToggle: {
     display: 'flex',
@@ -406,7 +462,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   errorItem: {
     fontSize: 11,
-    color: '#e05252',
+    color: 'var(--color-error)',
     fontFamily: 'monospace',
     padding: '3px 6px',
     background: '#1e1010',
@@ -415,10 +471,10 @@ const s: Record<string, React.CSSProperties> = {
   },
   error: {
     fontSize: 12,
-    color: '#e05252',
+    color: 'var(--color-error)',
   },
   loading: {
     fontSize: 12,
-    color: '#666',
+    color: 'var(--color-text-dim)',
   },
 }

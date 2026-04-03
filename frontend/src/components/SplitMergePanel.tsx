@@ -146,7 +146,7 @@ function SplitTab({
   }
 
   if (!datasetPath) {
-    return <div style={s.empty}>Load a dataset to use Split.</div>
+    return <div style={s.emptyState}>Load a dataset first to split episodes.</div>
   }
 
   const allSelected = selectedIds.size === episodes.length && episodes.length > 0
@@ -160,7 +160,7 @@ function SplitTab({
         </button>
       </div>
       <div style={s.episodeList}>
-        {episodes.length === 0 && <div style={s.empty}>No episodes loaded.</div>}
+        {episodes.length === 0 && <div style={s.emptyState}>No episodes in this dataset.</div>}
         {episodes.map(ep => (
           <label key={ep.episode_index} style={s.checkRow}>
             <input
@@ -278,7 +278,7 @@ function MergeTab() {
       <div style={s.episodeList}>
         {loadingDatasets && <div style={s.empty}>Loading...</div>}
         {!loadingDatasets && availableDatasets.length === 0 && (
-          <div style={s.empty}>No datasets found.</div>
+          <div style={s.emptyState}>No datasets available for merge. Mount datasets via Hub Sync first.</div>
         )}
         {availableDatasets.map(ds => (
           <label key={ds.path} style={s.checkRow}>
@@ -380,7 +380,7 @@ function DerivedTab() {
       {error && <div style={s.errorText}>{error}</div>}
 
       {!loading && derived.length === 0 && !error && (
-        <div style={s.empty}>No derived datasets found.</div>
+        <div style={s.emptyState}>No derived datasets yet. Use Split or Merge to create one.</div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -429,7 +429,7 @@ export function SplitMergePanel({ datasetPath, episodes }: SplitMergePanelProps)
 
   return (
     <div style={s.container}>
-      <button style={s.header} onClick={() => setOpen(v => !v)}>
+      <button style={s.header} onClick={() => setOpen(v => !v)} aria-expanded={open} aria-label="Split / Merge panel">
         <span style={s.headerTitle}>Split / Merge</span>
         <span style={s.chevron}>{open ? '▲' : '▼'}</span>
       </button>
@@ -639,6 +639,12 @@ const s: Record<string, React.CSSProperties> = {
     color: '#555',
     fontSize: 12,
     padding: '6px 0',
+  },
+  emptyState: {
+    fontSize: 13,
+    color: 'var(--color-text-dim)',
+    padding: '24px',
+    textAlign: 'center' as const,
   },
   derivedRow: {
     display: 'flex',
