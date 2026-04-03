@@ -8,7 +8,6 @@ executor to avoid blocking the async event loop.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import shutil
@@ -127,40 +126,6 @@ class DatasetOpsService:
             target_name,
         )
         return job_id
-
-    def list_derived_datasets(self) -> list[dict[str, Any]]:
-        """List datasets in the derived_dataset_path directory."""
-        from backend.config import settings
-
-        derived_root = Path(settings.derived_dataset_path).expanduser()
-        if not derived_root.exists():
-            return []
-
-        results: list[dict[str, Any]] = []
-        for child in sorted(derived_root.iterdir()):
-            if not child.is_dir():
-                continue
-            entry: dict[str, Any] = {"name": child.name, "path": str(child)}
-            prov_path = child / "provenance.json"
-            if prov_path.exists():
-                try:
-                    entry["provenance"] = json.loads(prov_path.read_text("utf-8"))
-                except (json.JSONDecodeError, OSError):
-                    entry["provenance"] = None
-            results.append(entry)
-        return results
-
-    def get_provenance(self, dataset_name: str) -> dict[str, Any] | None:
-        """Read provenance.json for a derived dataset."""
-        from backend.config import settings
-
-        prov_path = Path(settings.derived_dataset_path).expanduser() / dataset_name / "provenance.json"
-        if not prov_path.exists():
-            return None
-        try:
-            return json.loads(prov_path.read_text("utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return None
 
     # ------------------------------------------------------------------
     # Blocking workers (run in thread executor)

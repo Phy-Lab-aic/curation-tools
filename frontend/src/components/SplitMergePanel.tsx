@@ -17,13 +17,7 @@ interface JobStatus {
   result_path: string | null
 }
 
-interface DerivedDataset {
-  name: string
-  path: string
-  has_provenance: boolean
-}
-
-type TabId = 'split' | 'merge' | 'derived'
+type TabId = 'split' | 'merge'
 
 function useJobPoller() {
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
@@ -137,19 +131,8 @@ function SplitTab({
   const fetchAvailableDatasets = useCallback(async () => {
     setLoadingDatasets(true)
     try {
-      const [listResp, derivedResp] = await Promise.all([
-        client.get<{ name: string; path: string }[]>('/datasets/list'),
-        client.get<{ name: string; path: string; has_provenance: boolean }[]>('/datasets/derived'),
-      ])
-      const seen = new Set<string>()
-      const combined: { name: string; path: string }[] = []
-      for (const ds of [...listResp.data, ...derivedResp.data]) {
-        if (!seen.has(ds.path)) {
-          seen.add(ds.path)
-          combined.push({ name: ds.name, path: ds.path })
-        }
-      }
-      setAvailableDatasets(combined)
+      const resp = await client.get<{ name: string; path: string }[]>('/datasets/list')
+      setAvailableDatasets(resp.data)
     } catch {
       setAvailableDatasets([])
     } finally {
@@ -503,102 +486,6 @@ function MergeTab() {
   )
 }
 
-function DerivedTab() {
-  const [derived, setDerived] = useState<DerivedDataset[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [provenance, setProvenance] = useState<Record<string, unknown> | null>(null)
-  const [provenanceName, setProvenanceName] = useState<string | null>(null)
-  const [provenanceLoading, setProvenanceLoading] = useState(false)
-  const [provenanceError, setProvenanceError] = useState<string | null>(null)
-
-  const fetchDerived = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const resp = await client.get<DerivedDataset[]>('/datasets/derived')
-      setDerived(resp.data)
-    } catch {
-      setError('Failed to load derived datasets')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void fetchDerived()
-  }, [fetchDerived])
-
-  const viewProvenance = async (name: string) => {
-    if (provenanceName === name) {
-      // Toggle off
-      setProvenance(null)
-      setProvenanceName(null)
-      return
-    }
-    setProvenanceLoading(true)
-    setProvenanceError(null)
-    setProvenance(null)
-    setProvenanceName(name)
-    try {
-      const resp = await client.get<Record<string, unknown>>(`/datasets/derived/${encodeURIComponent(name)}/provenance`)
-      setProvenance(resp.data)
-    } catch {
-      setProvenanceError('Failed to load provenance')
-    } finally {
-      setProvenanceLoading(false)
-    }
-  }
-
-  return (
-    <div style={s.tabContent}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <div style={s.fieldLabel}>Derived Datasets</div>
-        <button style={s.refreshBtn} onClick={fetchDerived} disabled={loading}>
-          {loading ? '...' : 'Refresh'}
-        </button>
-      </div>
-
-      {error && <div style={s.errorText}>{error}</div>}
-
-      {!loading && derived.length === 0 && !error && (
-        <div style={s.emptyState}>No derived datasets yet. Use Split or Merge to create one.</div>
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {derived.map(ds => (
-          <div key={ds.name} style={s.derivedRow}>
-            <div style={s.derivedInfo}>
-              <span style={s.derivedName}>{ds.name}</span>
-              {ds.has_provenance && (
-                <span style={s.provenanceBadge}>provenance</span>
-              )}
-            </div>
-            {ds.has_provenance && (
-              <button
-                style={{ ...s.provenanceBtn, opacity: provenanceLoading && provenanceName === ds.name ? 0.6 : 1 }}
-                onClick={() => viewProvenance(ds.name)}
-                disabled={provenanceLoading && provenanceName === ds.name}
-              >
-                {provenanceName === ds.name && provenance ? 'Hide' : 'View'}
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {provenanceError && <div style={s.errorText}>{provenanceError}</div>}
-
-      {provenanceName && provenance && (
-        <div style={s.provenanceBox}>
-          <div style={s.provenanceTitle}>{provenanceName} — Provenance</div>
-          <pre style={s.provenancePre}>{JSON.stringify(provenance, null, 2)}</pre>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function gradeColor(grade: string): string {
   if (grade === 'Good') return '#4caf50'
   if (grade === 'Bad') return '#f44336'
@@ -619,7 +506,7 @@ export function SplitMergePanel({ datasetPath, episodes }: SplitMergePanelProps)
       {open && (
         <div style={s.body}>
           <div style={s.tabs}>
-            {(['split', 'merge', 'derived'] as TabId[]).map(t => (
+            {(['split', 'merge'] as TabId[]).map(t => (
               <button
                 key={t}
                 style={{ ...s.tabBtn, ...(tab === t ? s.tabBtnActive : {}) }}
@@ -632,7 +519,6 @@ export function SplitMergePanel({ datasetPath, episodes }: SplitMergePanelProps)
 
           {tab === 'split' && <SplitTab datasetPath={datasetPath} episodes={episodes} />}
           {tab === 'merge' && <MergeTab />}
-          {tab === 'derived' && <DerivedTab />}
         </div>
       )}
     </div>
@@ -876,73 +762,5 @@ const s: Record<string, React.CSSProperties> = {
     color: 'var(--color-text-dim)',
     padding: '24px',
     textAlign: 'center' as const,
-  },
-  derivedRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    padding: '6px 8px',
-    background: '#1a1a1a',
-    borderRadius: 4,
-    border: '1px solid #2a2a2a',
-  },
-  derivedInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    minWidth: 0,
-    flex: 1,
-  },
-  derivedName: {
-    fontSize: 12,
-    color: '#c0d8f0',
-    fontWeight: 500,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap' as const,
-  },
-  provenanceBadge: {
-    fontSize: 10,
-    color: '#888',
-    background: '#2a2a2a',
-    padding: '1px 5px',
-    borderRadius: 3,
-    flexShrink: 0,
-  },
-  provenanceBtn: {
-    background: '#2a3a4a',
-    border: '1px solid #3a5a7a',
-    borderRadius: 3,
-    color: '#c0d8f0',
-    padding: '3px 8px',
-    fontSize: 11,
-    cursor: 'pointer',
-    flexShrink: 0,
-  },
-  provenanceBox: {
-    background: '#1a1a1a',
-    border: '1px solid #2a2a2a',
-    borderRadius: 4,
-    padding: '8px',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 4,
-  },
-  provenanceTitle: {
-    fontSize: 11,
-    color: '#888',
-    fontWeight: 600,
-  },
-  provenancePre: {
-    margin: 0,
-    fontSize: 11,
-    color: '#c8e6c9',
-    fontFamily: 'monospace',
-    overflowX: 'auto' as const,
-    maxHeight: 200,
-    overflowY: 'auto' as const,
-    whiteSpace: 'pre-wrap' as const,
-    wordBreak: 'break-all' as const,
   },
 }

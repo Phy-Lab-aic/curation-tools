@@ -66,21 +66,6 @@ class JobStatusResponse(BaseModel):
     result_path: str | None = None
 
 
-class DerivedDatasetInfo(BaseModel):
-    name: str
-    path: str
-    has_provenance: bool
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _derived_names() -> set[str]:
-    return {d["name"] for d in dataset_ops_service.list_derived_datasets()}
-
-
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -92,12 +77,6 @@ async def split_dataset(req: SplitRequest):
     source = Path(req.source_path)
     if not source.exists():
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
-
-    if req.target_name in _derived_names():
-        raise HTTPException(
-            status_code=409,
-            detail=f"Derived dataset '{req.target_name}' already exists",
-        )
 
     job_id = await dataset_ops_service.split_dataset(
         source_path=req.source_path,
@@ -115,12 +94,7 @@ async def split_into_dataset(req: SplitIntoRequest):
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
 
     if req.target_path is None:
-        # New dataset mode — same as regular split
-        if req.target_name in _derived_names():
-            raise HTTPException(
-                status_code=409,
-                detail=f"Derived dataset '{req.target_name}' already exists",
-            )
+        # New dataset mode — push directly to HF Hub
         job_id = await dataset_ops_service.split_dataset(
             source_path=req.source_path,
             episode_ids=req.episode_ids,
@@ -148,43 +122,11 @@ async def merge_datasets(req: MergeRequest):
         if not Path(sp).exists():
             raise HTTPException(status_code=404, detail=f"Source path not found: {sp}")
 
-    if req.target_name in _derived_names():
-        raise HTTPException(
-            status_code=409,
-            detail=f"Derived dataset '{req.target_name}' already exists",
-        )
-
     job_id = await dataset_ops_service.merge_datasets(
         source_paths=req.source_paths,
         target_name=req.target_name,
     )
     return JobResponse(job_id=job_id, operation="merge", status="queued")
-
-
-@router.get("/derived", response_model=list[DerivedDatasetInfo])
-async def list_derived_datasets():
-    """List all derived datasets."""
-    items = dataset_ops_service.list_derived_datasets()
-    return [
-        DerivedDatasetInfo(
-            name=item["name"],
-            path=item["path"],
-            has_provenance="provenance" in item and item["provenance"] is not None,
-        )
-        for item in items
-    ]
-
-
-@router.get("/derived/{name}/provenance")
-async def get_provenance(name: str):
-    """Return provenance metadata for a derived dataset."""
-    provenance = dataset_ops_service.get_provenance(name)
-    if provenance is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No provenance found for dataset '{name}'",
-        )
-    return provenance
 
 
 @router.get("/ops/status/{job_id}", response_model=JobStatusResponse)

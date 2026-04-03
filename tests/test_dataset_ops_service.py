@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -217,58 +216,6 @@ class TestMergeDatasets:
 
             remaining = [p for p in derived_dir.iterdir() if p.name.startswith(".merge-")]
             assert len(remaining) == 0
-
-
-# ------------------------------------------------------------------
-# list_derived_datasets / get_provenance
-# ------------------------------------------------------------------
-
-
-class TestListAndProvenance:
-    def test_list_empty(self, service: DatasetOpsService, derived_dir: Path) -> None:
-        with patch("backend.config.settings") as mock_settings:
-            mock_settings.derived_dataset_path = str(derived_dir)
-            result = service.list_derived_datasets()
-            assert result == []
-
-    def test_list_with_datasets(self, service: DatasetOpsService, derived_dir: Path) -> None:
-        (derived_dir / "ds-a").mkdir()
-        (derived_dir / "ds-b").mkdir()
-        prov = {"operation": "split", "target_name": "ds-a"}
-        (derived_dir / "ds-a" / "provenance.json").write_text(json.dumps(prov))
-
-        with patch("backend.config.settings") as mock_settings:
-            mock_settings.derived_dataset_path = str(derived_dir)
-            result = service.list_derived_datasets()
-            assert len(result) == 2
-            assert result[0]["name"] == "ds-a"
-            assert result[0]["provenance"]["operation"] == "split"
-            assert result[1]["name"] == "ds-b"
-            assert "provenance" not in result[1]
-
-    def test_list_nonexistent_dir(self, service: DatasetOpsService, tmp_path: Path) -> None:
-        with patch("backend.config.settings") as mock_settings:
-            mock_settings.derived_dataset_path = str(tmp_path / "nope")
-            result = service.list_derived_datasets()
-            assert result == []
-
-    def test_get_provenance_exists(self, service: DatasetOpsService, derived_dir: Path) -> None:
-        ds_dir = derived_dir / "my-ds"
-        ds_dir.mkdir()
-        prov = {"operation": "merge", "target_name": "my-ds"}
-        (ds_dir / "provenance.json").write_text(json.dumps(prov))
-
-        with patch("backend.config.settings") as mock_settings:
-            mock_settings.derived_dataset_path = str(derived_dir)
-            result = service.get_provenance("my-ds")
-            assert result is not None
-            assert result["operation"] == "merge"
-
-    def test_get_provenance_missing(self, service: DatasetOpsService, derived_dir: Path) -> None:
-        with patch("backend.config.settings") as mock_settings:
-            mock_settings.derived_dataset_path = str(derived_dir)
-            result = service.get_provenance("nonexistent")
-            assert result is None
 
 
 # ------------------------------------------------------------------

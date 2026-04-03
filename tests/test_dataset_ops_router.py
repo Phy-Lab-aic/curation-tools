@@ -39,18 +39,11 @@ class TestSplitDataset:
         source = tmp_path / "source-ds"
         source.mkdir()
 
-        with (
-            patch.object(
-                dataset_ops_service,
-                "list_derived_datasets",
-                return_value=[],
-            ),
-            patch.object(
-                dataset_ops_service,
-                "split_dataset",
-                new_callable=AsyncMock,
-                return_value="abc-123",
-            ),
+        with patch.object(
+            dataset_ops_service,
+            "split_dataset",
+            new_callable=AsyncMock,
+            return_value="abc-123",
         ):
             resp = await client.post(
                 "/api/datasets/split",
@@ -81,28 +74,6 @@ class TestSplitDataset:
         assert "Source path not found" in resp.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_split_409_if_target_exists(self, client, tmp_path):
-        source = tmp_path / "source-ds"
-        source.mkdir()
-
-        with patch.object(
-            dataset_ops_service,
-            "list_derived_datasets",
-            return_value=[{"name": "existing", "path": "/tmp/existing"}],
-        ):
-            resp = await client.post(
-                "/api/datasets/split",
-                json={
-                    "source_path": str(source),
-                    "episode_ids": [0],
-                    "target_name": "existing",
-                },
-            )
-
-        assert resp.status_code == 409
-        assert "already exists" in resp.json()["detail"]
-
-    @pytest.mark.asyncio
     async def test_split_422_if_episode_ids_empty(self, client, tmp_path):
         source = tmp_path / "source-ds"
         source.mkdir()
@@ -129,18 +100,11 @@ class TestSplitIntoDataset:
         source = tmp_path / "source-ds"
         source.mkdir()
 
-        with (
-            patch.object(
-                dataset_ops_service,
-                "list_derived_datasets",
-                return_value=[],
-            ),
-            patch.object(
-                dataset_ops_service,
-                "split_dataset",
-                new_callable=AsyncMock,
-                return_value="new-job-1",
-            ),
+        with patch.object(
+            dataset_ops_service,
+            "split_dataset",
+            new_callable=AsyncMock,
+            return_value="new-job-1",
         ):
             resp = await client.post(
                 "/api/datasets/split-into",
@@ -229,27 +193,6 @@ class TestSplitIntoDataset:
         )
         assert resp.status_code == 422
 
-    @pytest.mark.asyncio
-    async def test_split_into_new_409_if_exists(self, client, tmp_path):
-        source = tmp_path / "source-ds"
-        source.mkdir()
-
-        with patch.object(
-            dataset_ops_service,
-            "list_derived_datasets",
-            return_value=[{"name": "existing", "path": "/tmp/existing"}],
-        ):
-            resp = await client.post(
-                "/api/datasets/split-into",
-                json={
-                    "source_path": str(source),
-                    "episode_ids": [0],
-                    "target_name": "existing",
-                },
-            )
-
-        assert resp.status_code == 409
-
 
 # ---------------------------------------------------------------------------
 # POST /api/datasets/merge
@@ -264,18 +207,11 @@ class TestMergeDatasets:
         src_a.mkdir()
         src_b.mkdir()
 
-        with (
-            patch.object(
-                dataset_ops_service,
-                "list_derived_datasets",
-                return_value=[],
-            ),
-            patch.object(
-                dataset_ops_service,
-                "merge_datasets",
-                new_callable=AsyncMock,
-                return_value="merge-job-999",
-            ),
+        with patch.object(
+            dataset_ops_service,
+            "merge_datasets",
+            new_callable=AsyncMock,
+            return_value="merge-job-999",
         ):
             resp = await client.post(
                 "/api/datasets/merge",
@@ -305,86 +241,6 @@ class TestMergeDatasets:
         )
         assert resp.status_code == 404
         assert "Source path not found" in resp.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_merge_409_if_target_exists(self, client, tmp_path):
-        src = tmp_path / "ds-a"
-        src.mkdir()
-
-        with patch.object(
-            dataset_ops_service,
-            "list_derived_datasets",
-            return_value=[{"name": "already-there", "path": "/tmp/already-there"}],
-        ):
-            resp = await client.post(
-                "/api/datasets/merge",
-                json={
-                    "source_paths": [str(src)],
-                    "target_name": "already-there",
-                },
-            )
-
-        assert resp.status_code == 409
-
-
-# ---------------------------------------------------------------------------
-# GET /api/datasets/derived
-# ---------------------------------------------------------------------------
-
-
-class TestListDerived:
-    @pytest.mark.asyncio
-    async def test_returns_empty_list(self, client):
-        with patch.object(dataset_ops_service, "list_derived_datasets", return_value=[]):
-            resp = await client.get("/api/datasets/derived")
-        assert resp.status_code == 200
-        assert resp.json() == []
-
-    @pytest.mark.asyncio
-    async def test_returns_dataset_info(self, client):
-        service_data = [
-            {"name": "ds-a", "path": "/tmp/derived/ds-a", "provenance": {"operation": "split"}},
-            {"name": "ds-b", "path": "/tmp/derived/ds-b"},
-        ]
-        with patch.object(
-            dataset_ops_service, "list_derived_datasets", return_value=service_data
-        ):
-            resp = await client.get("/api/datasets/derived")
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert len(data) == 2
-        assert data[0]["name"] == "ds-a"
-        assert data[0]["path"] == "/tmp/derived/ds-a"
-        assert data[0]["has_provenance"] is True
-        assert data[1]["name"] == "ds-b"
-        assert data[1]["has_provenance"] is False
-
-
-# ---------------------------------------------------------------------------
-# GET /api/datasets/derived/{name}/provenance
-# ---------------------------------------------------------------------------
-
-
-class TestGetProvenance:
-    @pytest.mark.asyncio
-    async def test_returns_provenance(self, client):
-        prov = {"operation": "split", "target_name": "ds-a", "sources": []}
-        with patch.object(dataset_ops_service, "get_provenance", return_value=prov):
-            resp = await client.get("/api/datasets/derived/ds-a/provenance")
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["operation"] == "split"
-        assert data["target_name"] == "ds-a"
-
-    @pytest.mark.asyncio
-    async def test_returns_404_if_missing(self, client):
-        with patch.object(dataset_ops_service, "get_provenance", return_value=None):
-            resp = await client.get("/api/datasets/derived/nonexistent/provenance")
-
-        assert resp.status_code == 404
-        assert "No provenance found" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
