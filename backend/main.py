@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.routers import datasets, episodes, tasks, rerun, videos, scalars, hf_sync
+from backend.routers import datasets, episodes, tasks, rerun, videos, scalars, hf_sync, dataset_ops
 from backend.services import rerun_service
 from backend.services.hf_sync_service import hf_sync_service
 
@@ -62,6 +62,7 @@ app.include_router(rerun.router)
 app.include_router(videos.router)
 app.include_router(scalars.router)
 app.include_router(hf_sync.router)
+app.include_router(dataset_ops.router)
 
 
 @app.get("/api/health")
