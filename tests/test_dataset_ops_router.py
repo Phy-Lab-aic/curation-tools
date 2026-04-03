@@ -119,6 +119,139 @@ class TestSplitDataset:
 
 
 # ---------------------------------------------------------------------------
+# POST /api/datasets/split-into
+# ---------------------------------------------------------------------------
+
+
+class TestSplitIntoDataset:
+    @pytest.mark.asyncio
+    async def test_split_into_new_returns_202(self, client, tmp_path):
+        source = tmp_path / "source-ds"
+        source.mkdir()
+
+        with (
+            patch.object(
+                dataset_ops_service,
+                "list_derived_datasets",
+                return_value=[],
+            ),
+            patch.object(
+                dataset_ops_service,
+                "split_dataset",
+                new_callable=AsyncMock,
+                return_value="new-job-1",
+            ),
+        ):
+            resp = await client.post(
+                "/api/datasets/split-into",
+                json={
+                    "source_path": str(source),
+                    "episode_ids": [0, 1],
+                    "target_name": "new-split",
+                },
+            )
+
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["job_id"] == "new-job-1"
+        assert data["operation"] == "split"
+
+    @pytest.mark.asyncio
+    async def test_split_into_existing_returns_202(self, client, tmp_path):
+        source = tmp_path / "source-ds"
+        source.mkdir()
+        target = tmp_path / "target-ds"
+        target.mkdir()
+
+        with patch.object(
+            dataset_ops_service,
+            "split_and_merge",
+            new_callable=AsyncMock,
+            return_value="merge-job-2",
+        ):
+            resp = await client.post(
+                "/api/datasets/split-into",
+                json={
+                    "source_path": str(source),
+                    "episode_ids": [3, 5],
+                    "target_name": "target-ds",
+                    "target_path": str(target),
+                },
+            )
+
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["job_id"] == "merge-job-2"
+        assert data["operation"] == "split_and_merge"
+
+    @pytest.mark.asyncio
+    async def test_split_into_404_source_missing(self, client):
+        resp = await client.post(
+            "/api/datasets/split-into",
+            json={
+                "source_path": "/nonexistent/source",
+                "episode_ids": [0],
+                "target_name": "x",
+            },
+        )
+        assert resp.status_code == 404
+        assert "Source path not found" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_split_into_404_target_missing(self, client, tmp_path):
+        source = tmp_path / "source-ds"
+        source.mkdir()
+
+        resp = await client.post(
+            "/api/datasets/split-into",
+            json={
+                "source_path": str(source),
+                "episode_ids": [0],
+                "target_name": "x",
+                "target_path": "/nonexistent/target",
+            },
+        )
+        assert resp.status_code == 404
+        assert "Target path not found" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_split_into_422_empty_episodes(self, client, tmp_path):
+        source = tmp_path / "source-ds"
+        source.mkdir()
+
+        resp = await client.post(
+            "/api/datasets/split-into",
+            json={
+                "source_path": str(source),
+                "episode_ids": [],
+                "target_name": "x",
+            },
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_split_into_new_409_if_exists(self, client, tmp_path):
+        source = tmp_path / "source-ds"
+        source.mkdir()
+
+        with patch.object(
+            dataset_ops_service,
+            "list_derived_datasets",
+            return_value=[{"name": "existing", "path": "/tmp/existing"}],
+        ):
+            resp = await client.post(
+                "/api/datasets/split-into",
+                json={
+                    "source_path": str(source),
+                    "episode_ids": [0],
+                    "target_name": "existing",
+                },
+            )
+
+        assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
 # POST /api/datasets/merge
 # ---------------------------------------------------------------------------
 

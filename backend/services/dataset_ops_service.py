@@ -60,13 +60,36 @@ class DatasetOpsService:
         job = self._create_job("split")
         job_id = job["id"]
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         loop.run_in_executor(
             None,
             self._run_split,
             job_id,
             Path(source_path),
             episode_ids,
+            target_name,
+        )
+        return job_id
+
+    async def split_and_merge(
+        self,
+        source_path: str | Path,
+        episode_ids: list[int],
+        target_path: str | Path,
+        target_name: str,
+    ) -> str:
+        """Queue a split-into-existing job. Returns the job ID."""
+        job = self._create_job("split_and_merge")
+        job_id = job["id"]
+
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(
+            None,
+            self._run_split_and_merge,
+            job_id,
+            Path(source_path),
+            episode_ids,
+            Path(target_path),
             target_name,
         )
         return job_id
@@ -81,7 +104,7 @@ class DatasetOpsService:
         job_id = job["id"]
 
         resolved = [(Path(p)) for p in source_paths]
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         loop.run_in_executor(
             None,
             self._run_merge,
@@ -95,7 +118,7 @@ class DatasetOpsService:
         """List datasets in the derived_dataset_path directory."""
         from backend.config import settings
 
-        derived_root = Path(settings.derived_dataset_path)
+        derived_root = Path(settings.derived_dataset_path).expanduser()
         if not derived_root.exists():
             return []
 
@@ -117,7 +140,7 @@ class DatasetOpsService:
         """Read provenance.json for a derived dataset."""
         from backend.config import settings
 
-        prov_path = Path(settings.derived_dataset_path) / dataset_name / "provenance.json"
+        prov_path = Path(settings.derived_dataset_path).expanduser() / dataset_name / "provenance.json"
         if not prov_path.exists():
             return None
         try:
@@ -143,10 +166,10 @@ class DatasetOpsService:
         temp_dir: Path | None = None
 
         try:
-            from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+            from lerobot.datasets.lerobot_dataset import LeRobotDataset
             from lerobot.datasets.dataset_tools import split_dataset
 
-            derived_root = Path(settings.derived_dataset_path)
+            derived_root = Path(settings.derived_dataset_path).expanduser()
             derived_root.mkdir(parents=True, exist_ok=True)
 
             temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix=".split-"))
@@ -198,10 +221,10 @@ class DatasetOpsService:
         temp_dir: Path | None = None
 
         try:
-            from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+            from lerobot.datasets.lerobot_dataset import LeRobotDataset
             from lerobot.datasets.dataset_tools import merge_datasets
 
-            derived_root = Path(settings.derived_dataset_path)
+            derived_root = Path(settings.derived_dataset_path).expanduser()
             derived_root.mkdir(parents=True, exist_ok=True)
 
             temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix=".merge-"))
@@ -239,6 +262,88 @@ class DatasetOpsService:
             logger.exception("Merge job %s failed", job_id)
             if temp_dir is not None and temp_dir.exists():
                 shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _run_split_and_merge(
+        self,
+        job_id: str,
+        source_path: Path,
+        episode_ids: list[int],
+        target_path: Path,
+        target_name: str,
+    ) -> None:
+        from backend.config import settings
+
+        job = self._jobs[job_id]
+        job["status"] = "running"
+        split_tmp: Path | None = None
+        merge_tmp: Path | None = None
+        backup_path: Path | None = None
+
+        try:
+            from lerobot.datasets.lerobot_dataset import LeRobotDataset
+            from lerobot.datasets.dataset_tools import split_dataset, merge_datasets
+
+            derived_root = Path(settings.derived_dataset_path).expanduser()
+            derived_root.mkdir(parents=True, exist_ok=True)
+
+            # Step 1: Split selected episodes into a temp dir
+            split_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix=".split-tmp-"))
+            source_ds = LeRobotDataset(repo_id=source_path.name, root=source_path)
+            split_dataset(source_ds, splits={"selected": episode_ids}, output_dir=split_tmp)
+
+            # Step 2: Merge split result with existing target
+            merge_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix=".merge-tmp-"))
+            split_ds = LeRobotDataset(repo_id=split_tmp.name, root=split_tmp)
+            target_ds = LeRobotDataset(repo_id=target_path.name, root=target_path)
+            merge_datasets([target_ds, split_ds], output_repo_id=target_name, output_dir=merge_tmp)
+
+            # Step 3: Backup old target, replace with merged result
+            backup_path = target_path.with_suffix(".bak")
+            if backup_path.exists():
+                shutil.rmtree(backup_path, ignore_errors=True)
+            target_path.rename(backup_path)
+
+            merge_tmp.rename(target_path)
+            merge_tmp = None  # renamed successfully
+
+            # Step 4: Write provenance
+            provenance = {
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "operation": "split_and_merge",
+                "sources": [
+                    {"path": str(source_path), "episode_ids": episode_ids},
+                    {"path": str(target_path), "note": "existing target (merged into)"},
+                ],
+                "target_name": target_name,
+                "lerobot_version": "3.0",
+            }
+            (target_path / "provenance.json").write_text(
+                json.dumps(provenance, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+
+            # Step 5: Clean up
+            if split_tmp is not None and split_tmp.exists():
+                shutil.rmtree(split_tmp, ignore_errors=True)
+            if backup_path is not None and backup_path.exists():
+                shutil.rmtree(backup_path, ignore_errors=True)
+
+            job["status"] = "complete"
+            job["completed_at"] = datetime.now(timezone.utc).isoformat()
+            job["result_path"] = str(target_path)
+            logger.info("Split-and-merge job %s complete: %s", job_id, target_path)
+
+        except Exception as exc:
+            job["status"] = "failed"
+            job["completed_at"] = datetime.now(timezone.utc).isoformat()
+            job["error"] = str(exc)
+            logger.exception("Split-and-merge job %s failed", job_id)
+            # Restore backup if we moved the original
+            if backup_path is not None and backup_path.exists() and not target_path.exists():
+                backup_path.rename(target_path)
+            if split_tmp is not None and split_tmp.exists():
+                shutil.rmtree(split_tmp, ignore_errors=True)
+            if merge_tmp is not None and merge_tmp.exists():
+                shutil.rmtree(merge_tmp, ignore_errors=True)
 
 
 dataset_ops_service = DatasetOpsService()

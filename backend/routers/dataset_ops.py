@@ -31,6 +31,20 @@ class SplitRequest(BaseModel):
         return v
 
 
+class SplitIntoRequest(BaseModel):
+    source_path: str
+    episode_ids: list[int]
+    target_name: str
+    target_path: str | None = None  # If set, merge into this existing dataset
+
+    @field_validator("episode_ids")
+    @classmethod
+    def episode_ids_nonempty(cls, v: list[int]) -> list[int]:
+        if not v:
+            raise ValueError("episode_ids must not be empty")
+        return v
+
+
 class MergeRequest(BaseModel):
     source_paths: list[str]
     target_name: str
@@ -91,6 +105,40 @@ async def split_dataset(req: SplitRequest):
         target_name=req.target_name,
     )
     return JobResponse(job_id=job_id, operation="split", status="queued")
+
+
+@router.post("/split-into", response_model=JobResponse, status_code=202)
+async def split_into_dataset(req: SplitIntoRequest):
+    """Split episodes into a new dataset, or merge them into an existing one."""
+    source = Path(req.source_path)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
+
+    if req.target_path is None:
+        # New dataset mode — same as regular split
+        if req.target_name in _derived_names():
+            raise HTTPException(
+                status_code=409,
+                detail=f"Derived dataset '{req.target_name}' already exists",
+            )
+        job_id = await dataset_ops_service.split_dataset(
+            source_path=req.source_path,
+            episode_ids=req.episode_ids,
+            target_name=req.target_name,
+        )
+        return JobResponse(job_id=job_id, operation="split", status="queued")
+    else:
+        # Existing dataset mode — split then merge into target
+        target = Path(req.target_path)
+        if not target.exists():
+            raise HTTPException(status_code=404, detail=f"Target path not found: {req.target_path}")
+        job_id = await dataset_ops_service.split_and_merge(
+            source_path=req.source_path,
+            episode_ids=req.episode_ids,
+            target_path=req.target_path,
+            target_name=req.target_name,
+        )
+        return JobResponse(job_id=job_id, operation="split_and_merge", status="queued")
 
 
 @router.post("/merge", response_model=JobResponse, status_code=202)

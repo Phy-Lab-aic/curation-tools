@@ -92,6 +92,7 @@ function JobProgress({ jobStatus, polling }: { jobStatus: JobStatus | null; poll
 }
 
 type SplitMode = 'grade' | 'tag'
+type SplitDestination = 'new' | 'existing'
 
 const GRADE_OPTIONS = ['Good', 'Normal', 'Bad', 'Ungraded'] as const
 
@@ -125,9 +126,42 @@ function SplitTab({
   const [selectedGrades, setSelectedGrades] = useState<Set<string>>(new Set())
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
   const [targetName, setTargetName] = useState('')
+  const [destination, setDestination] = useState<SplitDestination>('new')
+  const [availableDatasets, setAvailableDatasets] = useState<{ name: string; path: string }[]>([])
+  const [loadingDatasets, setLoadingDatasets] = useState(false)
+  const [selectedTargetPath, setSelectedTargetPath] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { jobStatus, polling, startPolling, reset } = useJobPoller()
+
+  const fetchAvailableDatasets = useCallback(async () => {
+    setLoadingDatasets(true)
+    try {
+      const [listResp, derivedResp] = await Promise.all([
+        client.get<{ name: string; path: string }[]>('/datasets/list'),
+        client.get<{ name: string; path: string; has_provenance: boolean }[]>('/datasets/derived'),
+      ])
+      const seen = new Set<string>()
+      const combined: { name: string; path: string }[] = []
+      for (const ds of [...listResp.data, ...derivedResp.data]) {
+        if (!seen.has(ds.path)) {
+          seen.add(ds.path)
+          combined.push({ name: ds.name, path: ds.path })
+        }
+      }
+      setAvailableDatasets(combined)
+    } catch {
+      setAvailableDatasets([])
+    } finally {
+      setLoadingDatasets(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (destination === 'existing') {
+      void fetchAvailableDatasets()
+    }
+  }, [destination, fetchAvailableDatasets])
 
   const allTags = Array.from(new Set(episodes.flatMap(e => e.tags ?? []))).sort()
 
@@ -156,19 +190,37 @@ function SplitTab({
   const handleSubmit = async () => {
     if (!datasetPath) return
     if (matchingEpisodes.length === 0) { setSubmitError('No episodes match the selected filter'); return }
-    if (!targetName.trim()) { setSubmitError('Enter a target dataset name'); return }
+
+    if (destination === 'new') {
+      if (!targetName.trim()) { setSubmitError('Enter a target dataset name'); return }
+    } else {
+      if (!selectedTargetPath) { setSubmitError('Select a target dataset'); return }
+    }
 
     setSubmitting(true)
     setSubmitError(null)
     reset()
 
     try {
-      const resp = await client.post<{ job_id: string; operation: string; status: string }>('/datasets/split', {
-        source_path: datasetPath,
-        episode_ids: matchingEpisodes.map(e => e.episode_index).sort((a, b) => a - b),
-        target_name: targetName.trim(),
-      })
-      startPolling(resp.data.job_id)
+      const episodeIds = matchingEpisodes.map(e => e.episode_index).sort((a, b) => a - b)
+
+      if (destination === 'new') {
+        const resp = await client.post<{ job_id: string; operation: string; status: string }>('/datasets/split-into', {
+          source_path: datasetPath,
+          episode_ids: episodeIds,
+          target_name: targetName.trim(),
+        })
+        startPolling(resp.data.job_id)
+      } else {
+        const targetDs = availableDatasets.find(ds => ds.path === selectedTargetPath)
+        const resp = await client.post<{ job_id: string; operation: string; status: string }>('/datasets/split-into', {
+          source_path: datasetPath,
+          episode_ids: episodeIds,
+          target_name: targetDs?.name ?? 'merged',
+          target_path: selectedTargetPath,
+        })
+        startPolling(resp.data.job_id)
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Split failed'
       setSubmitError(msg)
@@ -266,15 +318,57 @@ function SplitTab({
         )}
       </div>
 
-      <div style={s.fieldLabel}>Target dataset name</div>
-      <input
-        style={s.textInput}
-        type="text"
-        placeholder="e.g. my_dataset_split"
-        value={targetName}
-        onChange={e => setTargetName(e.target.value)}
-        disabled={submitting || polling}
-      />
+      {/* Destination toggle */}
+      <div style={s.fieldLabel}>Destination</div>
+      <div style={s.modeToggle}>
+        {(['new', 'existing'] as SplitDestination[]).map(mode => (
+          <button
+            key={mode}
+            style={{ ...s.modeBtn, ...(destination === mode ? s.modeBtnActive : {}) }}
+            onClick={() => setDestination(mode)}
+          >
+            {mode === 'new' ? 'New Dataset' : 'Existing Dataset'}
+          </button>
+        ))}
+      </div>
+
+      {destination === 'new' ? (
+        <>
+          <div style={s.fieldLabel}>Target dataset name</div>
+          <input
+            style={s.textInput}
+            type="text"
+            placeholder="e.g. my_dataset_split"
+            value={targetName}
+            onChange={e => setTargetName(e.target.value)}
+            disabled={submitting || polling}
+          />
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <div style={s.fieldLabel}>Target dataset</div>
+            <button style={s.refreshBtn} onClick={fetchAvailableDatasets} disabled={loadingDatasets}>
+              {loadingDatasets ? '...' : 'Refresh'}
+            </button>
+          </div>
+          {availableDatasets.length === 0 && !loadingDatasets ? (
+            <div style={s.empty}>No datasets available.</div>
+          ) : (
+            <select
+              style={{ ...s.textInput, cursor: 'pointer' }}
+              value={selectedTargetPath}
+              onChange={e => setSelectedTargetPath(e.target.value)}
+              disabled={submitting || polling || loadingDatasets}
+            >
+              <option value="">-- Select a dataset --</option>
+              {availableDatasets.map(ds => (
+                <option key={ds.path} value={ds.path}>{ds.name}</option>
+              ))}
+            </select>
+          )}
+        </>
+      )}
 
       {submitError && <div style={s.errorText}>{submitError}</div>}
 
@@ -283,7 +377,7 @@ function SplitTab({
         onClick={handleSubmit}
         disabled={submitting || polling}
       >
-        {submitting ? 'Submitting...' : 'Split Dataset'}
+        {submitting ? 'Submitting...' : destination === 'new' ? 'Split Dataset' : 'Split & Merge Into'}
       </button>
 
       <JobProgress jobStatus={jobStatus} polling={polling} />
