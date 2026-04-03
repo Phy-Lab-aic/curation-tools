@@ -52,7 +52,8 @@ class DatasetService:
     def _load_info(self, root: Path) -> dict:
         info_path = root / "meta" / "info.json"
         with info_path.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
+            content = fh.read().rstrip("\x00")
+            return json.loads(content)
 
     def _load_episodes(self, root: Path) -> list[dict]:
         pattern = str(root / "meta" / "episodes" / "chunk-*" / "file-*.parquet")
@@ -60,9 +61,20 @@ class DatasetService:
         self._episode_parquet_files = [Path(f) for f in parquet_files]
 
         if not parquet_files:
+            self._episode_to_file_map = {}
             return []
 
-        tables: list[pa.Table] = [pq.read_table(f) for f in parquet_files]
+        tables: list[pa.Table] = []
+        episode_to_file: dict[int, Path] = {}
+        for f in parquet_files:
+            file_path = Path(f)
+            table = pq.read_table(f)
+            tables.append(table)
+            # Build episode_index -> file_path mapping while we already have the table
+            for idx in table.column("episode_index").to_pylist():
+                episode_to_file[idx] = file_path
+
+        self._episode_to_file_map = episode_to_file
         combined: pa.Table = pa.concat_tables(tables, promote_options="default")
         return _table_to_list_of_dicts(combined)
 
@@ -104,15 +116,6 @@ class DatasetService:
 
         return index
 
-    def _build_episode_to_file_map(self) -> dict[int, Path]:
-        """Map each episode_index to the parquet file that contains it."""
-        mapping: dict[int, Path] = {}
-        for file_path in self._episode_parquet_files:
-            table = pq.read_table(file_path, columns=["episode_index"])
-            for idx in table.column("episode_index").to_pylist():
-                mapping[idx] = file_path
-        return mapping
-
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -139,7 +142,7 @@ class DatasetService:
         self._episodes = self._load_episodes(root)
         self._tasks = self._load_tasks(root)
         self._episode_file_index = self._build_episode_file_index(self._episodes, self._info)
-        self._episode_to_file_map = self._build_episode_to_file_map()
+        # _episode_to_file_map is already populated by _load_episodes()
         self._dataset_path = root
 
     def get_info(self) -> dict:
