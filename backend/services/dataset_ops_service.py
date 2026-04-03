@@ -177,8 +177,8 @@ class DatasetOpsService:
             # Build HF repo_id: {org}/{target_name}
             repo_id = f"{settings.hf_org}/{target_name}"
 
-            source_name = source_path.name
-            dataset = LeRobotDataset(repo_id=source_name, root=source_path)
+            source_repo_id = f"{settings.hf_org}/{source_path.name}"
+            dataset = LeRobotDataset(repo_id=source_repo_id, root=source_path)
             result = split_dataset(dataset, splits={"selected": episode_ids}, output_dir=temp_dir)
             split_ds = result["selected"]
 
@@ -229,7 +229,7 @@ class DatasetOpsService:
 
             datasets = []
             for p in source_paths:
-                datasets.append(LeRobotDataset(repo_id=p.name, root=p))
+                datasets.append(LeRobotDataset(repo_id=f"{settings.hf_org}/{p.name}", root=p))
 
             merged_ds = merge_datasets(datasets, output_repo_id=repo_id, output_dir=temp_dir)
 
@@ -280,13 +280,13 @@ class DatasetOpsService:
 
             # Step 1: Split selected episodes into a temp dir
             split_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-tmp-"))
-            source_ds = LeRobotDataset(repo_id=source_path.name, root=source_path)
+            source_ds = LeRobotDataset(repo_id=f"{settings.hf_org}/{source_path.name}", root=source_path)
             split_result = split_dataset(source_ds, splits={"selected": episode_ids}, output_dir=split_tmp)
             split_ds = split_result["selected"]
 
             # Step 2: Merge split result with existing target
             merge_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-tmp-"))
-            target_ds = LeRobotDataset(repo_id=target_path.name, root=target_path)
+            target_ds = LeRobotDataset(repo_id=f"{settings.hf_org}/{target_path.name}", root=target_path)
             merged_ds = merge_datasets([target_ds, split_ds], output_repo_id=repo_id, output_dir=merge_tmp)
 
             # Step 3: Push merged result to HF Hub (overwrites existing repo)
