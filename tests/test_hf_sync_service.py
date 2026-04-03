@@ -229,8 +229,9 @@ class TestMountRepo:
             with patch("pathlib.Path.mkdir"):
                 await svc.mount_repo("TestOrg/ds")
 
-        assert "--hf-token" in captured_cmd
-        assert "mytoken" in captured_cmd
+        # Token is now passed via HF_TOKEN env var, not CLI args
+        assert "--hf-token" not in captured_cmd
+        assert "mytoken" not in captured_cmd
 
     @pytest.mark.asyncio
     async def test_unmount_success(self, tmp_path):
