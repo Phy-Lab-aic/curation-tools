@@ -10,12 +10,26 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import shutil
 import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+def _set_writable_cache() -> None:
+    """Redirect HF datasets cache to a writable location.
+
+    FUSE-mounted datasets are read-only, but the datasets library
+    tries to create .cache dirs inside the data root. This redirects
+    the cache to a user-writable temp path.
+    """
+    cache_dir = Path(tempfile.gettempdir()) / "hf-datasets-cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("HF_DATASETS_CACHE", str(cache_dir))
+    os.environ.setdefault("HF_HOME", str(cache_dir / "hub"))
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +180,7 @@ class DatasetOpsService:
         temp_dir: Path | None = None
 
         try:
+            _set_writable_cache()
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
             from lerobot.datasets.dataset_tools import split_dataset
 
@@ -217,6 +232,7 @@ class DatasetOpsService:
         temp_dir: Path | None = None
 
         try:
+            _set_writable_cache()
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
             from lerobot.datasets.dataset_tools import merge_datasets
 
@@ -269,6 +285,7 @@ class DatasetOpsService:
         merge_tmp: Path | None = None
 
         try:
+            _set_writable_cache()
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
             from lerobot.datasets.dataset_tools import split_dataset, merge_datasets
 
