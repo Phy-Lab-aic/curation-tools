@@ -1,15 +1,6 @@
 import { useState, useEffect } from 'react'
+import { GRADE_COLORS } from '../types'
 import type { Episode } from '../types'
-
-const GRADES = ['', 'A', 'B', 'C', 'D', 'F'] as const
-
-const GRADE_COLORS: Record<string, string> = {
-  A: '#4caf50',
-  B: '#8bc34a',
-  C: '#ffc107',
-  D: '#ff9800',
-  F: '#f44336',
-}
 
 interface EpisodeEditorProps {
   episode: Episode | null
@@ -17,48 +8,49 @@ interface EpisodeEditorProps {
 }
 
 export function EpisodeEditor({ episode, onSave }: EpisodeEditorProps) {
-  const [grade, setGrade] = useState<string>('')
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     if (episode) {
-      setGrade(episode.grade ?? '')
       setTags(episode.tags)
       setTagInput('')
       setSaveError(null)
-      setSaved(false)
     }
   }, [episode])
 
   const handleAddTag = () => {
     const trimmed = tagInput.trim()
     if (trimmed && !tags.includes(trimmed)) {
-      setTags(prev => [...prev, trimmed])
+      const newTags = [...tags, trimmed]
+      setTags(newTags)
+      setTagInput('')
+      // Auto-save tags
+      if (episode) {
+        void saveTags(newTags)
+      }
+    } else {
+      setTagInput('')
     }
-    setTagInput('')
   }
 
   const handleRemoveTag = (tag: string) => {
-    setTags(prev => prev.filter(t => t !== tag))
+    const newTags = tags.filter(t => t !== tag)
+    setTags(newTags)
+    // Auto-save tags
+    if (episode) {
+      void saveTags(newTags)
+    }
   }
 
-  const handleTagKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleAddTag()
-  }
-
-  const handleSave = async () => {
+  const saveTags = async (newTags: string[]) => {
     if (!episode) return
     setSaving(true)
     setSaveError(null)
-    setSaved(false)
     try {
-      await onSave(episode.episode_index, grade || null, tags)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      await onSave(episode.episode_index, episode.grade, newTags)
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed')
     } finally {
@@ -66,10 +58,17 @@ export function EpisodeEditor({ episode, onSave }: EpisodeEditorProps) {
     }
   }
 
+  const handleTagKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleAddTag()
+    }
+  }
+
   if (!episode) {
     return (
       <div style={styles.container}>
-        <div style={styles.title}>Episode</div>
+        <div style={styles.title}>Episode Details</div>
         <div style={styles.empty}>Select an episode to edit</div>
       </div>
     )
@@ -77,38 +76,39 @@ export function EpisodeEditor({ episode, onSave }: EpisodeEditorProps) {
 
   return (
     <div style={styles.container}>
-      <div style={styles.titleRow}>
-        <span style={styles.title}>Episode #{episode.episode_index}</span>
-        <span style={styles.meta}>{episode.length} frames</span>
+      {/* Episode header */}
+      <div style={styles.headerRow}>
+        <div>
+          <div style={styles.epNumber}>Episode #{episode.episode_index}</div>
+          <div style={styles.meta}>
+            {episode.length} frames
+            {episode.grade && (
+              <span style={{
+                ...styles.gradeBadge,
+                background: GRADE_COLORS[episode.grade],
+              }}>
+                {episode.grade}
+              </span>
+            )}
+          </div>
+        </div>
+        {saving && <span style={styles.savingIndicator}>saving...</span>}
       </div>
 
-      <div style={styles.field}>
-        <label style={styles.label}>Grade</label>
-        <select
-          style={styles.select}
-          value={grade}
-          onChange={e => setGrade(e.target.value)}
-        >
-          {GRADES.map(g => (
-            <option key={g} value={g} style={g ? { color: GRADE_COLORS[g] } : {}}>
-              {g || 'No grade'}
-            </option>
-          ))}
-        </select>
-      </div>
+      {saveError && <div style={styles.error}>{saveError}</div>}
 
-      <div style={styles.field}>
+      {/* Tags */}
+      <div style={styles.section}>
         <label style={styles.label}>Tags</label>
         <div style={styles.tagInputRow}>
           <input
             style={styles.input}
             type="text"
-            placeholder="Add tag..."
+            placeholder="Add tag + Enter"
             value={tagInput}
             onChange={e => setTagInput(e.target.value)}
             onKeyDown={handleTagKeyDown}
           />
-          <button style={styles.addButton} onClick={handleAddTag}>Add</button>
         </div>
         <div style={styles.tagChips}>
           {tags.map(tag => (
@@ -122,67 +122,101 @@ export function EpisodeEditor({ episode, onSave }: EpisodeEditorProps) {
               </button>
             </span>
           ))}
-          {tags.length === 0 && <span style={styles.noTags}>No tags</span>}
+          {tags.length === 0 && <span style={styles.noTags}>No tags yet</span>}
         </div>
       </div>
 
-      {saveError && <div style={styles.error}>{saveError}</div>}
-
-      <button
-        style={{ ...styles.saveButton, opacity: saving ? 0.6 : 1 }}
-        onClick={handleSave}
-        disabled={saving}
-      >
-        {saving ? 'Saving...' : saved ? 'Saved!' : 'Save'}
-      </button>
+      {/* Preset tags */}
+      <div style={styles.section}>
+        <label style={styles.label}>Quick Tags</label>
+        <div style={styles.presetRow}>
+          {['good-demo', 'bad-grasp', 'collision', 'slow', 'incomplete', 'review'].map(preset => (
+            <button
+              key={preset}
+              style={{
+                ...styles.presetBtn,
+                ...(tags.includes(preset) ? styles.presetActive : {}),
+              }}
+              onClick={() => {
+                if (tags.includes(preset)) {
+                  handleRemoveTag(preset)
+                } else {
+                  const newTags = [...tags, preset]
+                  setTags(newTags)
+                  if (episode) void saveTags(newTags)
+                }
+              }}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    padding: '12px',
-    borderBottom: '1px solid #333',
+    padding: '14px',
+    borderBottom: '1px solid #222',
   },
-  titleRow: {
+  headerRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '12px',
+    alignItems: 'flex-start',
+    marginBottom: '14px',
   },
-  title: {
-    fontSize: '11px',
+  epNumber: {
+    fontSize: '14px',
     fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
-    color: '#888',
+    color: '#d0d8e0',
+    marginBottom: '3px',
   },
   meta: {
     fontSize: '11px',
     color: '#666',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  gradeBadge: {
+    fontSize: '10px',
+    fontWeight: 700,
+    color: '#fff',
+    padding: '0 5px',
+    borderRadius: '3px',
+    lineHeight: '16px',
+  },
+  savingIndicator: {
+    fontSize: '10px',
+    color: '#ffc107',
+    fontStyle: 'italic',
+  },
+  title: {
+    fontSize: '10px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    color: '#666',
+    marginBottom: '8px',
   },
   empty: {
-    color: '#666',
-    fontSize: '13px',
+    color: '#555',
+    fontSize: '12px',
     padding: '8px 0',
   },
-  field: {
-    marginBottom: '10px',
+  section: {
+    marginBottom: '12px',
   },
   label: {
     display: 'block',
-    fontSize: '11px',
-    color: '#888',
-    marginBottom: '4px',
-  },
-  select: {
-    width: '100%',
-    background: '#2a2a2a',
-    border: '1px solid #444',
-    borderRadius: '4px',
-    color: '#e0e0e0',
-    padding: '6px 8px',
-    fontSize: '13px',
+    fontSize: '10px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    color: '#555',
+    marginBottom: '5px',
   },
   tagInputRow: {
     display: 'flex',
@@ -191,36 +225,27 @@ const styles: Record<string, React.CSSProperties> = {
   },
   input: {
     flex: 1,
-    background: '#2a2a2a',
-    border: '1px solid #444',
+    background: '#1a1a1a',
+    border: '1px solid #2a2a2a',
     borderRadius: '4px',
     color: '#e0e0e0',
     padding: '5px 8px',
-    fontSize: '13px',
-    outline: 'none',
-  },
-  addButton: {
-    background: '#3a5a3a',
-    border: 'none',
-    borderRadius: '4px',
-    color: '#8bc34a',
-    padding: '5px 10px',
     fontSize: '12px',
-    cursor: 'pointer',
+    outline: 'none',
   },
   tagChips: {
     display: 'flex',
     flexWrap: 'wrap',
     gap: '4px',
-    minHeight: '24px',
+    minHeight: '20px',
   },
   chip: {
-    background: '#2a3a4a',
-    border: '1px solid #3a5a7a',
+    background: '#1a2530',
+    border: '1px solid #2a4a6a',
     borderRadius: '12px',
-    color: '#90caf9',
-    fontSize: '12px',
-    padding: '2px 8px',
+    color: '#7ab8e0',
+    fontSize: '11px',
+    padding: '1px 8px',
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
@@ -228,30 +253,42 @@ const styles: Record<string, React.CSSProperties> = {
   chipRemove: {
     background: 'none',
     border: 'none',
-    color: '#666',
+    color: '#556',
     cursor: 'pointer',
-    fontSize: '11px',
+    fontSize: '10px',
     padding: '0',
     lineHeight: 1,
   },
   noTags: {
-    color: '#555',
-    fontSize: '12px',
+    color: '#3a3a3a',
+    fontSize: '11px',
   },
   error: {
     color: '#e05252',
-    fontSize: '12px',
+    fontSize: '11px',
     marginBottom: '8px',
-  },
-  saveButton: {
-    width: '100%',
-    background: '#3a6ea5',
-    border: 'none',
+    padding: '4px 8px',
+    background: '#2a1414',
     borderRadius: '4px',
-    color: '#fff',
-    padding: '7px',
-    fontSize: '13px',
+  },
+  presetRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '4px',
+  },
+  presetBtn: {
+    background: '#1a1a1a',
+    border: '1px solid #2a2a2a',
+    borderRadius: '12px',
+    color: '#555',
+    fontSize: '10px',
+    padding: '2px 8px',
     cursor: 'pointer',
-    marginTop: '4px',
+    transition: 'all 0.1s',
+  },
+  presetActive: {
+    background: '#1a2530',
+    borderColor: '#2a4a6a',
+    color: '#7ab8e0',
   },
 }
