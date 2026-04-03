@@ -293,13 +293,11 @@ class DatasetOpsService:
             # Step 1: Split selected episodes into a temp dir
             split_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-tmp-"))
             source_ds = LeRobotDataset(repo_id=source_path.name, root=source_path)
-            split_dataset(source_ds, splits={"selected": episode_ids}, output_dir=split_tmp)
-            # split_dataset creates output at output_dir/selected/
-            split_result_dir = split_tmp / "selected"
+            split_result = split_dataset(source_ds, splits={"selected": episode_ids}, output_dir=split_tmp)
+            split_ds = split_result["selected"]  # Already a LeRobotDataset
 
             # Step 2: Merge split result with existing target
             merge_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-tmp-"))
-            split_ds = LeRobotDataset(repo_id="split-selected", root=split_result_dir)
             target_ds = LeRobotDataset(repo_id=target_path.name, root=target_path)
             merge_datasets([target_ds, split_ds], output_repo_id=target_name, output_dir=merge_tmp)
 
