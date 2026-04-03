@@ -22,10 +22,11 @@ from backend.services.hf_sync_service import HFSyncService
 def _make_service(tmp_path: Path, org: str = "TestOrg") -> HFSyncService:
     """Create a fresh HFSyncService initialized against a tmp directory."""
     dataset_path = str(tmp_path / org / "dataset" / "my-dataset")
+    state_dir = str(tmp_path / "state")
     svc = HFSyncService()
     svc._hf_mount_bin = "/usr/bin/hf-mount"  # fixed path for tests
     svc._hf_token = ""
-    svc.init(org=org, dataset_path=dataset_path)
+    svc.init(org=org, dataset_path=dataset_path, state_dir=state_dir)
     return svc
 
 
@@ -50,14 +51,35 @@ class TestInit:
 
     def test_state_file_path(self, tmp_path):
         dataset_path = str(tmp_path / "MyOrg" / "dataset" / "ds1")
+        state_dir = str(tmp_path / "mystate")
         svc = HFSyncService()
-        svc.init(org="MyOrg", dataset_path=dataset_path)
-        expected = tmp_path / "MyOrg" / "dataset" / "sync-state.json"
+        svc.init(org="MyOrg", dataset_path=dataset_path, state_dir=state_dir)
+        expected = tmp_path / "mystate" / "sync-state.json"
         assert svc._state_path == expected
+
+    def test_invalid_org_name_rejected(self):
+        svc = HFSyncService()
+        with pytest.raises(ValueError, match="Invalid org name"):
+            svc.init(org="../../etc", dataset_path="/tmp/test")
+
+    def test_is_initialized_property(self, tmp_path):
+        svc = HFSyncService()
+        assert svc.is_initialized is False
+        svc.init(org="TestOrg", dataset_path=str(tmp_path / "ds"))
+        assert svc.is_initialized is True
+
+    def test_get_mount_point_returns_none_if_not_mounted(self, tmp_path):
+        svc = _make_service(tmp_path)
+        assert svc.get_mount_point("TestOrg/unknown") is None
+
+    def test_get_mount_point_returns_path_if_mounted(self, tmp_path):
+        svc = _make_service(tmp_path)
+        svc._mounted["TestOrg/ds1"] = {"mount_point": "/tmp/hf-mounts/TestOrg/dataset/ds1", "mounted_at": "2024-01-01"}
+        assert svc.get_mount_point("TestOrg/ds1") == "/tmp/hf-mounts/TestOrg/dataset/ds1"
 
     def test_loads_existing_state(self, tmp_path):
         dataset_path = str(tmp_path / "MyOrg" / "dataset" / "ds1")
-        state_dir = tmp_path / "MyOrg" / "dataset"
+        state_dir = tmp_path / "state"
         state_dir.mkdir(parents=True)
         state_file = state_dir / "sync-state.json"
         state_file.write_text(json.dumps({
@@ -67,7 +89,7 @@ class TestInit:
         }))
 
         svc = HFSyncService()
-        svc.init(org="MyOrg", dataset_path=dataset_path)
+        svc.init(org="MyOrg", dataset_path=dataset_path, state_dir=str(state_dir))
         assert "MyOrg/ds1" in svc._mounted
         assert svc._last_scan == 1234567890.0
 
@@ -249,7 +271,7 @@ class TestScan:
         async def fake_fetch():
             return ["TestOrg/repo1", "TestOrg/repo2"]
 
-        async def fake_mount(repo_id):
+        async def fake_mount(repo_id, **kwargs):
             svc._mounted[repo_id] = {"mount_point": f"/tmp/x/{repo_id}", "mounted_at": "now"}
             return True
 
@@ -270,7 +292,7 @@ class TestScan:
         async def fake_fetch():
             return ["TestOrg/repo1", "TestOrg/repo2"]
 
-        async def fake_mount(repo_id):
+        async def fake_mount(repo_id, **kwargs):
             svc._mounted[repo_id] = {"mount_point": f"/tmp/x/{repo_id}", "mounted_at": "now"}
             return True
 
@@ -289,7 +311,7 @@ class TestScan:
         async def fake_fetch():
             return ["TestOrg/bad-repo"]
 
-        async def fake_mount(repo_id):
+        async def fake_mount(repo_id, **kwargs):
             return False
 
         svc._fetch_dataset_repos = fake_fetch

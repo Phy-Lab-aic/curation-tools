@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
@@ -31,7 +32,8 @@ async def lifespan(app: FastAPI):
         logger.info("Rerun disabled — using native video player")
 
     # HF sync: initialize and start background sync loop
-    hf_sync_service.init(settings.hf_org, settings.dataset_path)
+    derived_path = str(Path(settings.derived_dataset_path).expanduser())
+    hf_sync_service.init(settings.hf_org, settings.dataset_path, state_dir=derived_path)
     sync_task = asyncio.create_task(hf_sync_service.run_sync_loop(settings.sync_interval_seconds))
 
     yield
