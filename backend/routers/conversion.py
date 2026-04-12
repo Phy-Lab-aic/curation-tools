@@ -35,6 +35,10 @@ class ProfileCreateRequest(BaseModel):
     config: dict[str, Any]
 
 
+class ProfileUpdateRequest(BaseModel):
+    config: dict[str, Any]
+
+
 class WatchStartRequest(BaseModel):
     profile_name: str
 
@@ -66,17 +70,23 @@ async def create_config(
     req: ProfileCreateRequest,
     svc: ConversionService = Depends(get_conversion_service),
 ):
-    svc.save_profile(req.name, req.config)
+    try:
+        svc.save_profile(req.name, req.config)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return {"name": req.name}
 
 
 @router.put("/configs/{name}")
 async def update_config(
     name: str,
-    req: ProfileCreateRequest,
+    req: ProfileUpdateRequest,
     svc: ConversionService = Depends(get_conversion_service),
 ):
-    svc.save_profile(name, req.config)
+    try:
+        svc.save_profile(name, req.config)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return {"name": name}
 
 
@@ -89,6 +99,8 @@ async def get_config(
         return svc.load_profile(name)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Profile not found: {name}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.delete("/configs/{name}", status_code=204)
@@ -100,6 +112,8 @@ async def delete_config(
         svc.delete_profile(name)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Profile not found: {name}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +188,7 @@ async def stream_jobs(svc: ConversionService = Depends(get_conversion_service)):
         try:
             while True:
                 jobs = svc.get_jobs()
-                data = json.dumps(jobs)
+                data = json.dumps(jobs, default=str)
                 yield f"data: {data}\n\n"
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
