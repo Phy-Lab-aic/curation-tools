@@ -49,6 +49,7 @@ export function ConfigPanel({
 
   const addJoint = () => {
     if (!newJoint.trim()) return
+    if (profileData.joint_names.includes(newJoint.trim())) return  // prevent duplicates
     update({ joint_names: [...profileData.joint_names, newJoint.trim()] })
     setNewJoint('')
   }
@@ -139,7 +140,7 @@ export function ConfigPanel({
           ))}
           <div className="conversion-repo-create" onClick={() => {
             const id = prompt('New repo_id (e.g. org/name):')
-            if (id) update({ repo_id: id, output_path: '' })
+            if (id?.trim()) update({ repo_id: id.trim(), output_path: '' })
           }}>
             <span>+</span> 새 저장소 생성
           </div>

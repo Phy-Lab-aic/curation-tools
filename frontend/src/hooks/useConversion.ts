@@ -131,7 +131,8 @@ export function useConversion() {
 
   // SSE job stream
   useEffect(() => {
-    const es = new EventSource('/api/conversion/jobs/stream')
+    const baseURL = (apiClient.defaults.baseURL ?? '/api').replace(/\/$/, '')
+    const es = new EventSource(`${baseURL}/conversion/jobs/stream`)
     eventSourceRef.current = es
     es.onmessage = (e) => {
       try {
