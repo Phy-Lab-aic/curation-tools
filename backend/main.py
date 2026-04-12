@@ -8,9 +8,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.routers import datasets, episodes, tasks, rerun, videos, scalars, hf_sync, dataset_ops
+from backend.routers import datasets, episodes, tasks, rerun, videos, scalars, hf_sync, dataset_ops, conversion
 from backend.services import rerun_service
 from backend.services.hf_sync_service import hf_sync_service
+from backend.services.conversion_service import conversion_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
 
     # Cleanup: cancel the sync loop
     sync_task.cancel()
+    conversion_service.shutdown()  # stop watchdog if running
 
 
 app = FastAPI(
@@ -65,6 +67,7 @@ app.include_router(videos.router)
 app.include_router(scalars.router)
 app.include_router(hf_sync.router)
 app.include_router(dataset_ops.router)
+app.include_router(conversion.router)
 
 
 @app.get("/api/health")
