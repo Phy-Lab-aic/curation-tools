@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import sys
+import tempfile
 import threading
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -68,11 +70,18 @@ class ConversionService:
     # Profile CRUD
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _validate_profile_name(name: str) -> None:
+        if not name or Path(name).name != name:
+            raise ValueError(f"Invalid profile name: {name!r}")
+
     def save_profile(self, name: str, data: dict) -> None:
+        self._validate_profile_name(name)
         path = self._profiles_dir / f"{name}.json"
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def load_profile(self, name: str) -> dict:
+        self._validate_profile_name(name)
         path = self._profiles_dir / f"{name}.json"
         if not path.exists():
             raise FileNotFoundError(f"Profile not found: {name}")
@@ -82,6 +91,7 @@ class ConversionService:
         return sorted(p.stem for p in self._profiles_dir.glob("*.json"))
 
     def delete_profile(self, name: str) -> None:
+        self._validate_profile_name(name)
         path = self._profiles_dir / f"{name}.json"
         if not path.exists():
             raise FileNotFoundError(f"Profile not found: {name}")
@@ -103,16 +113,21 @@ class ConversionService:
             job = ConversionJob(id=str(uuid.uuid4()), folder=folder, status="queued")
             self._jobs.append(job)
             self._queued_folders.add(folder)
-            # Cap history
-            if len(self._jobs) > self.MAX_HISTORY:
-                self._jobs = self._jobs[-self.MAX_HISTORY:]
+            # Cap history — discard evicted jobs from dedup set
+            while len(self._jobs) > self.MAX_HISTORY:
+                evicted = self._jobs.pop(0)
+                if evicted.status in ("done", "failed"):
+                    self._queued_folders.discard(evicted.folder)
             return job
 
     def _update_job(self, job_id: str, **kwargs) -> None:
+        valid_fields = {f.name for f in fields(ConversionJob)}
         with self._lock:
             for j in self._jobs:
                 if j.id == job_id:
                     for k, v in kwargs.items():
+                        if k not in valid_fields:
+                            raise ValueError(f"Invalid ConversionJob field: {k!r}")
                         setattr(j, k, v)
                     break
 
@@ -124,8 +139,12 @@ class ConversionService:
         """Blocking: runs in ThreadPoolExecutor."""
         _ensure_rosbag_on_path()
         try:
-            from main import run_conversion  # noqa: PLC0415
-        except ImportError as exc:
+            import importlib.util as _ilu
+            _spec = _ilu.spec_from_file_location("rosbag_main", ROSBAG_SRC / "main.py")
+            _mod = _ilu.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
+            run_conversion = _mod.run_conversion
+        except Exception as exc:
             self._update_job(
                 job.id,
                 status="failed",
@@ -143,7 +162,6 @@ class ConversionService:
         folder_path = input_path / job.folder
 
         # Write a temporary config JSON that run_conversion can read
-        import tempfile, os
         cfg_for_run = {k: v for k, v in profile.items()
                        if k not in ("input_path", "output_path")}
         cfg_for_run["folders"] = [job.folder]
@@ -212,10 +230,11 @@ class ConversionService:
     # ------------------------------------------------------------------
 
     def get_watch_status(self) -> dict:
-        return {
-            "watching": self._watching,
-            "input_path": self._watch_input_path,
-        }
+        with self._lock:
+            return {
+                "watching": self._watching,
+                "input_path": self._watch_input_path,
+            }
 
     # ------------------------------------------------------------------
     # Watchdog
@@ -252,9 +271,10 @@ class ConversionService:
         observer.schedule(McapHandler(), str(input_path), recursive=True)
         observer.start()
 
-        self._observer = observer
-        self._watching = True
-        self._watch_input_path = str(input_path)
+        with self._lock:
+            self._observer = observer
+            self._watching = True
+            self._watch_input_path = str(input_path)
         logger.info("Watching %s for new MCAP files", input_path)
 
     def stop_watching(self) -> None:
@@ -262,8 +282,9 @@ class ConversionService:
             self._observer.stop()
             self._observer.join(timeout=5)
             self._observer = None
-        self._watching = False
-        self._watch_input_path = None
+        with self._lock:
+            self._watching = False
+            self._watch_input_path = None
         logger.info("Stopped watching")
 
     def shutdown(self) -> None:
