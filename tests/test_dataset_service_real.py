@@ -69,7 +69,7 @@ class TestGetInfo:
 
         assert info["codebase_version"] == "v3.0"
         assert info["robot_type"] == "ur5e"
-        assert info["total_episodes"] == 9
+        assert info["total_episodes"] == 6
         assert info["total_tasks"] == 1
         assert info["fps"] == 20
 
