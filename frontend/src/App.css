@@ -282,13 +282,13 @@ button:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #1e1e2e;
+  background: #111;
 }
 
 .page-tab-bar {
   display: flex;
-  background: #181825;
-  border-bottom: 2px solid #313244;
+  background: #141414;
+  border-bottom: 2px solid #2a2a2a;
   flex-shrink: 0;
 }
 
@@ -296,20 +296,20 @@ button:hover:not(:disabled) {
   padding: 10px 24px;
   background: transparent;
   border: none;
-  color: #6c7086;
+  color: #666;
   font-size: 13px;
   cursor: pointer;
   transition: color 0.15s;
 }
 
-.page-tab:hover { color: #cdd6f4; }
+.page-tab:hover { color: #e0e0e0; }
 
 .page-tab.active {
-  color: #cdd6f4;
+  color: #e0e0e0;
   font-weight: 600;
   border-top: 2px solid #89b4fa;
   margin-top: -2px;
-  background: #1e1e2e;
+  background: #111;
 }
 
 /* ============================================================
@@ -323,8 +323,8 @@ button:hover:not(:disabled) {
 
 .conversion-config-panel {
   width: 340px;
-  background: #181825;
-  border-right: 1px solid #313244;
+  background: #141414;
+  border-right: 1px solid #2a2a2a;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -332,7 +332,7 @@ button:hover:not(:disabled) {
 
 .conversion-status-panel {
   flex: 1;
-  background: #1e1e2e;
+  background: #111;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -342,7 +342,7 @@ button:hover:not(:disabled) {
 
 .conversion-section {
   padding: 12px 14px;
-  border-bottom: 1px solid #313244;
+  border-bottom: 1px solid #2a2a2a;
 }
 
 .conversion-label {
@@ -359,16 +359,16 @@ button:hover:not(:disabled) {
 .conversion-field-label {
   display: block;
   font-size: 10px;
-  color: #a6adc8;
+  color: #888;
   margin-bottom: 3px;
 }
 
 .conversion-input {
   width: 100%;
-  background: #313244;
-  border: 1px solid #45475a;
+  background: #2a2a2a;
+  border: 1px solid #444;
   border-radius: 4px;
-  color: #cdd6f4;
+  color: #e0e0e0;
   font-size: 11px;
   padding: 4px 8px;
   box-sizing: border-box;
@@ -381,15 +381,15 @@ button:hover:not(:disabled) {
 
 .conversion-select {
   width: 100%;
-  background: #313244;
-  border: 1px solid #45475a;
+  background: #2a2a2a;
+  border: 1px solid #444;
   border-radius: 4px;
-  color: #cdd6f4;
+  color: #e0e0e0;
   font-size: 11px;
   padding: 4px 8px;
 }
 
-.conversion-profile-bar { background: #11111b; }
+.conversion-profile-bar { background: #0d0d0d; }
 
 .conversion-profile-row {
   display: flex;
@@ -414,13 +414,13 @@ button:hover:not(:disabled) {
 
 .conversion-key-input { width: 80px !important; }
 
-.conversion-arrow { color: #6c7086; font-size: 10px; flex-shrink: 0; }
+.conversion-arrow { color: #666; font-size: 10px; flex-shrink: 0; }
 
 .conversion-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .conversion-tag {
-  background: #313244;
-  color: #cdd6f4;
+  background: #2a2a2a;
+  color: #e0e0e0;
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 10px;
@@ -444,7 +444,7 @@ button:hover:not(:disabled) {
 .conversion-repo-list {
   display: flex;
   flex-direction: column;
-  border: 1px solid #313244;
+  border: 1px solid #2a2a2a;
   border-radius: 6px;
   overflow: hidden;
 }
@@ -455,24 +455,24 @@ button:hover:not(:disabled) {
   gap: 8px;
   padding: 8px 10px;
   cursor: pointer;
-  border-bottom: 1px solid #313244;
+  border-bottom: 1px solid #2a2a2a;
 }
 
 .conversion-repo-item:last-child { border-bottom: none; }
-.conversion-repo-item:hover { background: #313244; }
-.conversion-repo-item.selected { background: #313244; }
+.conversion-repo-item:hover { background: #2a2a2a; }
+.conversion-repo-item.selected { background: #2a2a2a; }
 
 .conversion-repo-dot {
   width: 7px; height: 7px;
   border-radius: 50%;
-  background: #6c7086;
+  background: #666;
   flex-shrink: 0;
 }
 
 .conversion-repo-dot.mounted { background: #a6e3a1; }
 
-.conversion-repo-name { font-size: 10px; color: #cdd6f4; }
-.conversion-repo-mount { font-size: 9px; color: #6c7086; }
+.conversion-repo-name { font-size: 10px; color: #e0e0e0; }
+.conversion-repo-mount { font-size: 9px; color: #666; }
 .conversion-repo-check { margin-left: auto; font-size: 10px; color: #89b4fa; }
 
 .conversion-repo-create {
@@ -483,13 +483,13 @@ button:hover:not(:disabled) {
   cursor: pointer;
   font-size: 10px;
   color: #89b4fa;
-  border-top: 1px dashed #45475a;
+  border-top: 1px dashed #444;
 }
 
 .conversion-save-bar {
   padding: 10px 14px;
-  border-top: 1px solid #313244;
-  background: #11111b;
+  border-top: 1px solid #2a2a2a;
+  background: #0d0d0d;
   margin-top: auto;
 }
 
@@ -498,14 +498,14 @@ button:hover:not(:disabled) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #181825;
+  background: #141414;
   padding: 12px 16px;
   border-radius: 6px;
-  border: 1px solid #313244;
+  border: 1px solid #2a2a2a;
 }
 
-.conversion-watch-title { font-size: 12px; color: #cdd6f4; font-weight: 600; }
-.conversion-watch-sub { font-size: 10px; color: #6c7086; margin-top: 2px; }
+.conversion-watch-title { font-size: 12px; color: #e0e0e0; font-weight: 600; }
+.conversion-watch-sub { font-size: 10px; color: #666; margin-top: 2px; }
 
 .conversion-watch-toggle {
   display: flex;
@@ -515,7 +515,7 @@ button:hover:not(:disabled) {
 
 .toggle-btn {
   width: 36px; height: 20px;
-  background: #45475a;
+  background: #444;
   border: none;
   border-radius: 10px;
   position: relative;
@@ -538,7 +538,7 @@ button:hover:not(:disabled) {
 
 .toggle-btn.active .toggle-knob { left: 18px; }
 
-.toggle-label { font-size: 10px; color: #6c7086; }
+.toggle-label { font-size: 10px; color: #666; }
 .toggle-label.active { color: #a6e3a1; font-weight: 600; }
 
 /* Controls */
@@ -549,21 +549,21 @@ button:hover:not(:disabled) {
 .conversion-jobs-section { display: flex; flex-direction: column; gap: 6px; }
 .conversion-jobs-title {
   font-size: 10px;
-  color: #a6adc8;
+  color: #888;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
 .conversion-jobs-list {
-  background: #181825;
-  border: 1px solid #313244;
+  background: #141414;
+  border: 1px solid #2a2a2a;
   border-radius: 6px;
   overflow: hidden;
 }
 
 .conversion-job-item {
   padding: 9px 12px;
-  border-bottom: 1px solid #313244;
+  border-bottom: 1px solid #2a2a2a;
 }
 
 .conversion-job-item:last-child { border-bottom: none; }
@@ -581,7 +581,7 @@ button:hover:not(:disabled) {
   margin-bottom: 5px;
 }
 
-.conversion-job-folder { font-size: 11px; color: #cdd6f4; }
+.conversion-job-folder { font-size: 11px; color: #e0e0e0; }
 
 .conversion-job-badge {
   font-size: 9px;
@@ -594,13 +594,13 @@ button:hover:not(:disabled) {
 .conversion-job-badge.done { color: #a6e3a1; }
 .conversion-job-badge.failed { color: #f38ba8; }
 
-.conversion-job-message { font-size: 9px; color: #6c7086; margin-top: 3px; }
-.conversion-job-dest { font-size: 9px; color: #6c7086; margin-right: 8px; }
+.conversion-job-message { font-size: 9px; color: #666; margin-top: 3px; }
+.conversion-job-dest { font-size: 9px; color: #666; margin-right: 8px; }
 .conversion-job-outcome { display: flex; align-items: center; }
 
 .conversion-progress-bar {
   height: 3px;
-  background: #313244;
+  background: #2a2a2a;
   border-radius: 2px;
   overflow: hidden;
 }
@@ -618,13 +618,13 @@ button:hover:not(:disabled) {
   100% { transform: translateX(350%); }
 }
 
-.conversion-empty { font-size: 12px; color: #6c7086; text-align: center; padding: 24px; }
+.conversion-empty { font-size: 12px; color: #666; text-align: center; padding: 24px; }
 
 /* Button helpers */
 .btn-sm {
-  background: #313244;
-  border: 1px solid #45475a;
-  color: #cdd6f4;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #e0e0e0;
   font-size: 10px;
   padding: 4px 10px;
   border-radius: 4px;
@@ -633,9 +633,9 @@ button:hover:not(:disabled) {
 }
 
 .btn-xs {
-  background: #313244;
-  border: 1px solid #45475a;
-  color: #cdd6f4;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #e0e0e0;
   font-size: 9px;
   padding: 2px 7px;
   border-radius: 3px;
@@ -647,7 +647,7 @@ button:hover:not(:disabled) {
   width: 100%;
   background: #89b4fa;
   border: none;
-  color: #1e1e2e;
+  color: #111;
   font-size: 11px;
   font-weight: 600;
   padding: 8px;
@@ -658,9 +658,9 @@ button:hover:not(:disabled) {
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-secondary {
-  background: #313244;
-  border: 1px solid #45475a;
-  color: #cdd6f4;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #e0e0e0;
   font-size: 11px;
   padding: 6px 12px;
   border-radius: 4px;
@@ -669,7 +669,7 @@ button:hover:not(:disabled) {
 
 .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.btn-danger { background: #f38ba8 !important; color: #1e1e2e !important; border-color: #f38ba8 !important; }
+.btn-danger { background: #f38ba8 !important; color: #111 !important; border-color: #f38ba8 !important; }
 .btn-danger-outline {
   background: transparent;
   border: 1px solid #f38ba8;
