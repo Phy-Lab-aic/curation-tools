@@ -158,7 +158,7 @@ async def run_once(
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Profile not found: {req.profile_name}")
 
-    input_path = Path(profile.get("input_path", ""))
+    input_path = Path(profile.get("input_path", "")).expanduser()
     if not input_path.exists():
         raise HTTPException(status_code=400, detail=f"Input path does not exist: {input_path}")
 

@@ -33,7 +33,7 @@ export interface WatchStatus {
 const DEFAULT_PROFILE: ConversionProfile = {
   task: '',
   fps: 20,
-  input_path: '',
+  input_path: '~/aic_community_e2e',
   output_path: '',
   repo_id: '',
   camera_topic_map: {},

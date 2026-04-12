@@ -157,7 +157,7 @@ class ConversionService:
 
         self._update_job(job.id, status="converting", message="Starting conversion...")
 
-        input_path = Path(profile.get("input_path", ""))
+        input_path = Path(profile.get("input_path", "")).expanduser()
         output_path = profile.get("output_path", "")
         folder_path = input_path / job.folder
 
@@ -245,7 +245,7 @@ class ConversionService:
             self.stop_watching()
 
         profile = self.load_profile(profile_name)
-        input_path = Path(profile.get("input_path", ""))
+        input_path = Path(profile.get("input_path", "")).expanduser()
         if not input_path.exists():
             raise ValueError(f"Input path does not exist: {input_path}")
 
