@@ -31,13 +31,24 @@ export interface WatchStatus {
 }
 
 const DEFAULT_PROFILE: ConversionProfile = {
-  task: '',
+  task: 'aic_task',
   fps: 20,
   input_path: '~/aic_community_e2e',
   output_path: '',
-  repo_id: '',
-  camera_topic_map: {},
-  joint_names: [],
+  repo_id: 'psedulab/aic_task',
+  camera_topic_map: {
+    cam_left: '/left_camera/image',
+    cam_center: '/center_camera/image',
+    cam_right: '/right_camera/image',
+  },
+  joint_names: [
+    'shoulder_pan_joint',
+    'shoulder_lift_joint',
+    'elbow_joint',
+    'wrist_1_joint',
+    'wrist_2_joint',
+    'wrist_3_joint',
+  ],
   state_topic: '/joint_states',
   action_topics_map: { leader: '/joint_states' },
   task_instruction: [],
