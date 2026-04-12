@@ -1,5 +1,4 @@
 // frontend/src/components/conversion/StatusPanel.tsx
-import React from 'react'
 import type { ConversionJob, WatchStatus } from '../../hooks/useConversion'
 
 interface Props {
