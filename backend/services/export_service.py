@@ -14,6 +14,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from backend.config import settings
 from backend.services.dataset_service import dataset_service
 from backend.services.episode_service import _load_sidecar
 
@@ -49,6 +50,9 @@ def export_dataset(output_path: str, exclude_grades: list[str]) -> dict:
     kept_indices = {ep["episode_index"] for ep in kept_episodes}
 
     out = Path(output_path).resolve()
+    allowed = [Path(r).resolve() for r in settings.allowed_dataset_roots]
+    if not any(out == root or root in out.parents for root in allowed):
+        raise ValueError(f"Output path not under allowed roots: {out}")
     if out.exists():
         raise ValueError(f"Output path already exists: {out}")
 

@@ -66,16 +66,16 @@ function JobProgress({ jobStatus, polling }: { jobStatus: JobStatus | null; poll
   const isFail = jobStatus.status === 'failed'
 
   return (
-    <div style={{ ...s.statusBox, borderColor: isOk ? '#4caf50' : isFail ? '#e05252' : '#3a6ea5' }}>
+    <div style={{ ...s.statusBox, borderColor: isOk ? '#a6e3a1' : isFail ? '#f38ba8' : '#89b4fa' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ color: isOk ? '#4caf50' : isFail ? '#e05252' : '#aaa', fontSize: 12, fontWeight: 600 }}>
+        <span style={{ color: isOk ? '#a6e3a1' : isFail ? '#f38ba8' : '#aaa', fontSize: 12, fontWeight: 600 }}>
           {jobStatus.status.toUpperCase()}
         </span>
         {polling && <span style={s.spinner}>⟳</span>}
       </div>
       {isOk && jobStatus.result_path && (
         <div style={s.resultPath}>
-          Result: <span style={{ fontFamily: 'monospace', color: '#c8e6c9' }}>{jobStatus.result_path}</span>
+          Result: <span style={{ fontFamily: 'monospace', color: '#a6e3a1' }}>{jobStatus.result_path}</span>
         </div>
       )}
       {isFail && jobStatus.error && (
@@ -239,7 +239,7 @@ function SplitTab({
           <div style={s.chipRow}>
             {GRADE_OPTIONS.map(grade => {
               const active = selectedGrades.has(grade)
-              const color = grade === 'Good' ? '#4caf50' : grade === 'Bad' ? '#f44336' : grade === 'Normal' ? '#ffc107' : '#888'
+              const color = grade === 'Good' ? '#a6e3a1' : grade === 'Bad' ? '#f38ba8' : grade === 'Normal' ? '#f9e2af' : '#888'
               return (
                 <button
                   key={grade}
@@ -274,9 +274,9 @@ function SplitTab({
                     key={tag}
                     style={{
                       ...s.chip,
-                      borderColor: active ? '#3a6ea5' : '#333',
-                      color: active ? '#c0d8f0' : '#666',
-                      background: active ? '#3a6ea518' : 'transparent',
+                      borderColor: active ? '#89b4fa' : '#333',
+                      color: active ? '#89b4fa' : '#666',
+                      background: active ? '#89b4fa18' : 'transparent',
                     }}
                     onClick={() => toggleTag(tag)}
                   >
@@ -291,7 +291,7 @@ function SplitTab({
 
       {/* Match preview */}
       <div style={s.matchPreview}>
-        <span style={{ color: matchingEpisodes.length > 0 ? '#c0d8f0' : '#555' }}>
+        <span style={{ color: matchingEpisodes.length > 0 ? '#89b4fa' : '#555' }}>
           {matchingEpisodes.length} episode{matchingEpisodes.length !== 1 ? 's' : ''} match
         </span>
         {matchingEpisodes.length > 0 && (
@@ -454,7 +454,7 @@ function MergeTab() {
               style={s.checkbox}
             />
             <span style={s.epLabel}>
-              <span style={{ ...s.epIndex, color: '#c0d8f0' }}>{ds.name}</span>
+              <span style={{ ...s.epIndex, color: '#89b4fa' }}>{ds.name}</span>
               <span style={s.epTask}>{ds.path}</span>
             </span>
           </label>
@@ -568,7 +568,7 @@ const s: Record<string, React.CSSProperties> = {
     borderRadius: '3px 3px 0 0',
   },
   tabBtnActive: {
-    color: '#c0d8f0',
+    color: '#89b4fa',
     background: '#2a2a2a',
   },
   tabContent: {
@@ -609,8 +609,8 @@ const s: Record<string, React.CSSProperties> = {
   },
   modeBtnActive: {
     background: '#2a3a4a',
-    border: '1px solid #3a6ea5',
-    color: '#c0d8f0',
+    border: '1px solid #89b4fa',
+    color: '#89b4fa',
   },
   chipRow: {
     display: 'flex',
@@ -674,7 +674,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   checkbox: {
     flexShrink: 0,
-    accentColor: '#3a6ea5',
+    accentColor: '#89b4fa',
   },
   epLabel: {
     display: 'flex',
@@ -713,7 +713,7 @@ const s: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box' as const,
   },
   actionBtn: {
-    background: '#3a6ea5',
+    background: '#89b4fa',
     border: 'none',
     borderRadius: 4,
     color: '#fff',
@@ -739,7 +739,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   errorText: {
     fontSize: 12,
-    color: '#e05252',
+    color: '#f38ba8',
   },
   spinner: {
     display: 'inline-block',

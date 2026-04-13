@@ -4,12 +4,27 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Activate virtual environment
-if [ -d ".venv" ]; then
+# Set up Python virtual environment if missing
+if [ ! -d ".venv" ]; then
+    echo "Setting up Python environment..."
+    if ! command -v uv &>/dev/null; then
+        echo "Installing uv..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+    fi
+    uv venv .venv
     source .venv/bin/activate
+    uv pip install -e .
+    echo "Python environment ready."
 else
-    echo "Error: .venv not found. Run: uv venv .venv && uv pip install -e ."
-    exit 1
+    source .venv/bin/activate
+fi
+
+# Install frontend dependencies if missing
+if [ ! -d "frontend/node_modules" ]; then
+    echo "Installing frontend dependencies..."
+    (cd frontend && npm install)
+    echo "Frontend dependencies ready."
 fi
 
 # Ensure dataset mount point exists

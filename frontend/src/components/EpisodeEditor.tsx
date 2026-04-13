@@ -190,7 +190,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   savingIndicator: {
     fontSize: '10px',
-    color: '#ffc107',
+    color: '#f9e2af',
     fontStyle: 'italic',
   },
   title: {
@@ -264,7 +264,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '11px',
   },
   error: {
-    color: '#e05252',
+    color: '#f38ba8',
     fontSize: '11px',
     marginBottom: '8px',
     padding: '4px 8px',

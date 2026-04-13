@@ -2,9 +2,9 @@ export const GRADES = ['Good', 'Normal', 'Bad'] as const;
 export type Grade = (typeof GRADES)[number];
 
 export const GRADE_COLORS: Record<string, string> = {
-  Good: '#4caf50',
-  Normal: '#ffc107',
-  Bad: '#f44336',
+  Good: '#a6e3a1',
+  Normal: '#f9e2af',
+  Bad: '#f38ba8',
 };
 
 export interface DatasetInfo {

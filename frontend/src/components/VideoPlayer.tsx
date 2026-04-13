@@ -269,7 +269,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
                 style={{
                   ...styles.speedBtn,
                   ...(playbackRate === rate ? styles.speedActive : {}),
-                  ...(defaultRate === rate ? { borderBottom: '2px solid #90caf9' } : {}),
+                  ...(defaultRate === rate ? { borderBottom: '2px solid #89b4fa' } : {}),
                 }}
                 onClick={() => changeSpeed(rate)}
                 onDoubleClick={() => setAsDefault(rate)}
@@ -352,7 +352,7 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1,
   },
   playBtn: {
-    background: '#3a6ea5',
+    background: '#89b4fa',
     border: 'none',
     borderRadius: '50%',
     color: '#fff',
@@ -369,7 +369,7 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     height: '4px',
     cursor: 'pointer',
-    accentColor: '#3a6ea5',
+    accentColor: '#89b4fa',
   },
   timeLabel: {
     fontSize: '11px',
@@ -396,8 +396,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   speedActive: {
     background: '#2a3a4a',
-    borderColor: '#3a6ea5',
-    color: '#90caf9',
+    borderColor: '#89b4fa',
+    color: '#89b4fa',
   },
   empty: {
     display: 'flex',

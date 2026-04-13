@@ -16,3 +16,6 @@ logs/
 *.log
 .env
 .gstack/
+
+# Conversion config profiles (user-local, not committed)
+conversion_configs/*.json

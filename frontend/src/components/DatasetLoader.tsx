@@ -1,11 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useDataset } from '../hooks/useDataset'
 import client from '../api/client'
 import type { DatasetInfo } from '../types'
 
-interface DatasetEntry {
-  name: string
-  path: string
+interface MountDetail {
+  repo_id: string
+  mount_point: string
+  mounted_at: string
+}
+
+interface HubSyncStatus {
+  mount_details: Record<string, { mount_point: string; mounted_at: string }>
+  initialized: boolean
 }
 
 interface DatasetLoaderProps {
@@ -13,26 +19,29 @@ interface DatasetLoaderProps {
 }
 
 export function DatasetLoader({ onDatasetLoaded }: DatasetLoaderProps) {
-  const [availableDatasets, setAvailableDatasets] = useState<DatasetEntry[]>([])
-  const [listLoading, setListLoading] = useState(true)
+  const [mountDetails, setMountDetails] = useState<MountDetail[]>([])
   const [listError, setListError] = useState<string | null>(null)
   const [manualPath, setManualPath] = useState('')
   const { dataset, loading, error, loadDataset } = useDataset()
 
-  // Fetch available datasets on mount
-  useEffect(() => {
-    const fetchList = async () => {
-      try {
-        const resp = await client.get<DatasetEntry[]>('/datasets/list')
-        setAvailableDatasets(resp.data)
-      } catch {
-        setListError('Failed to fetch dataset list')
-      } finally {
-        setListLoading(false)
-      }
+  const fetchMountedRepos = useCallback(async () => {
+    try {
+      const resp = await client.get<HubSyncStatus>('/hf-sync/status')
+      const details = Object.entries(resp.data.mount_details).map(([repo_id, d]) => ({
+        repo_id,
+        mount_point: d.mount_point,
+        mounted_at: d.mounted_at,
+      }))
+      setMountDetails(details)
+      setListError(null)
+    } catch {
+      setListError('Failed to fetch mounted repos')
     }
-    void fetchList()
   }, [])
+
+  useEffect(() => {
+    void fetchMountedRepos()
+  }, [fetchMountedRepos])
 
   // Notify parent when dataset changes
   useEffect(() => {
@@ -41,30 +50,14 @@ export function DatasetLoader({ onDatasetLoaded }: DatasetLoaderProps) {
     }
   }, [dataset, onDatasetLoaded])
 
-  const [deleting, setDeleting] = useState<string | null>(null)
-
-  const handleSelect = async (entry: DatasetEntry) => {
-    await loadDataset(entry.path)
-  }
-
-  const handleDelete = async (entry: DatasetEntry, e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!confirm(`Delete dataset "${entry.name}" from HF Hub? This cannot be undone.`)) return
-    const repoId = `Phy-lab/${entry.name}`
-    setDeleting(entry.name)
-    try {
-      await client.delete(`/hf-sync/repos/${repoId}`)
-      setAvailableDatasets(prev => prev.filter(d => d.name !== entry.name))
-    } catch {
-      setListError(`Failed to delete ${entry.name}`)
-    } finally {
-      setDeleting(null)
-    }
+  const handleSelect = async (detail: MountDetail) => {
+    await loadDataset(detail.mount_point)
   }
 
   const handleManualLoad = async () => {
     if (!manualPath.trim()) return
     await loadDataset(manualPath.trim())
+    await fetchMountedRepos()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -94,43 +87,36 @@ export function DatasetLoader({ onDatasetLoaded }: DatasetLoaderProps) {
         </button>
       </div>
 
-      {listLoading && <div style={styles.message}>Scanning datasets...</div>}
       {listError && <div style={styles.error}>{listError}</div>}
 
-      {!listLoading && availableDatasets.length === 0 && (
-        <div style={styles.message}>No datasets found</div>
-      )}
-
-      <div style={styles.list}>
-        {availableDatasets.map(entry => {
-          const isSelected = dataset?.path === entry.path
+      <div className="conversion-repo-list">
+        {mountDetails.map(detail => {
+          const isSelected = dataset?.path === detail.mount_point
           return (
             <div
-              key={entry.path}
-              style={{
-                ...styles.item,
-                background: isSelected ? '#2a3a4a' : 'transparent',
-                borderLeft: isSelected ? '2px solid #3a6ea5' : '2px solid transparent',
-                opacity: loading ? 0.6 : 1,
-                pointerEvents: loading ? 'none' : 'auto',
-              }}
-              onClick={() => handleSelect(entry)}
+              key={detail.repo_id}
+              className={`conversion-repo-item${isSelected ? ' selected' : ''}`}
+              style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}
+              onClick={() => handleSelect(detail)}
             >
-              <div style={styles.itemHeader}>
-                <div style={styles.itemName}>{entry.name}</div>
-                <button
-                  style={styles.deleteButton}
-                  onClick={(e) => handleDelete(entry, e)}
-                  disabled={deleting === entry.name}
-                  title="Delete from HF Hub"
-                >
-                  {deleting === entry.name ? '...' : '×'}
-                </button>
+              <span className="conversion-repo-dot mounted" />
+              <div>
+                <div className="conversion-repo-name">{detail.repo_id}</div>
+                <div className="conversion-repo-mount">{detail.mount_point}</div>
               </div>
-              <div style={styles.itemPath}>{entry.path}</div>
+              {isSelected && <span className="conversion-repo-check">✓</span>}
             </div>
           )
         })}
+        {mountDetails.length === 0 && (
+          <div style={styles.message}>No mounted repos. Sync HF Hub below.</div>
+        )}
+        <div className="conversion-repo-create" onClick={() => {
+          const id = prompt('New repo_id (e.g. org/name):')
+          if (id?.trim()) setManualPath(id.trim())
+        }}>
+          <span>+</span> Create new repository
+        </div>
       </div>
 
       {loading && <div style={styles.message}>Loading...</div>}
@@ -191,53 +177,13 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
   },
   button: {
-    background: '#3a6ea5',
+    background: '#89b4fa',
     border: 'none',
     borderRadius: '4px',
     color: '#fff',
     padding: '6px 12px',
     fontSize: '13px',
     cursor: 'pointer',
-    whiteSpace: 'nowrap',
-  },
-  list: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  item: {
-    padding: '8px 10px',
-    cursor: 'pointer',
-    borderRadius: '4px',
-    transition: 'background 0.1s',
-  },
-  itemHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  itemName: {
-    fontSize: '13px',
-    color: '#c0d8f0',
-    fontWeight: 500,
-  },
-  deleteButton: {
-    background: 'transparent',
-    border: 'none',
-    color: '#666',
-    fontSize: '16px',
-    cursor: 'pointer',
-    padding: '0 4px',
-    lineHeight: 1,
-    borderRadius: '2px',
-  },
-  itemPath: {
-    fontSize: '10px',
-    color: '#666',
-    fontFamily: 'monospace',
-    marginTop: '2px',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   message: {
@@ -247,7 +193,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   error: {
     marginTop: '6px',
-    color: '#e05252',
+    color: '#f38ba8',
     fontSize: '12px',
   },
   info: {
@@ -266,7 +212,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#888',
   },
   value: {
-    color: '#c8e6c9',
+    color: '#a6e3a1',
     fontFamily: 'monospace',
   },
 }

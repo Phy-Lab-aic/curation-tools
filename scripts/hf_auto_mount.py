@@ -102,9 +102,9 @@ def mount_repo(repo_id: str, repo_type: str, mount_point: str) -> bool:
     }
     prefixed_id = f"{type_prefix_map[repo_type]}{repo_id}"
 
+    # HF_TOKEN is set in the process environment; hf-mount reads it automatically.
+    # Never pass tokens as CLI args — they are visible in /proc/*/cmdline.
     cmd = [HF_MOUNT_BIN, "start", "--", "repo", prefixed_id, mount_point]
-    if HF_TOKEN:
-        cmd = [HF_MOUNT_BIN, "start", "--", "repo", "--hf-token", HF_TOKEN, prefixed_id, mount_point]
 
     print(f"  Mounting {prefixed_id} -> {mount_point}")
     result = subprocess.run(cmd, capture_output=True, text=True)

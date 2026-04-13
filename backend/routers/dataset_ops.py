@@ -6,7 +6,20 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
+from backend.config import settings
 from backend.services.dataset_ops_service import dataset_ops_service
+
+
+def _validate_path(path_str: str) -> Path:
+    """Validate that a path is under an allowed dataset root."""
+    resolved = Path(path_str).resolve()
+    allowed = [Path(r).resolve() for r in settings.allowed_dataset_roots]
+    if not any(resolved == root or root in resolved.parents for root in allowed):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Path not under allowed roots: {path_str}",
+        )
+    return resolved
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +87,7 @@ class JobStatusResponse(BaseModel):
 @router.post("/split", response_model=JobResponse, status_code=202)
 async def split_dataset(req: SplitRequest):
     """Split episodes from a source dataset into a new derived dataset."""
-    source = Path(req.source_path)
+    source = _validate_path(req.source_path)
     if not source.exists():
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
 
@@ -89,7 +102,7 @@ async def split_dataset(req: SplitRequest):
 @router.post("/split-into", response_model=JobResponse, status_code=202)
 async def split_into_dataset(req: SplitIntoRequest):
     """Split episodes into a new dataset, or merge them into an existing one."""
-    source = Path(req.source_path)
+    source = _validate_path(req.source_path)
     if not source.exists():
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
 
@@ -103,7 +116,7 @@ async def split_into_dataset(req: SplitIntoRequest):
         return JobResponse(job_id=job_id, operation="split", status="queued")
     else:
         # Existing dataset mode — split then merge into target
-        target = Path(req.target_path)
+        target = _validate_path(req.target_path)
         if not target.exists():
             raise HTTPException(status_code=404, detail=f"Target path not found: {req.target_path}")
         job_id = await dataset_ops_service.split_and_merge(
@@ -119,6 +132,7 @@ async def split_into_dataset(req: SplitIntoRequest):
 async def merge_datasets(req: MergeRequest):
     """Merge multiple source datasets into a new derived dataset."""
     for sp in req.source_paths:
+        _validate_path(sp)
         if not Path(sp).exists():
             raise HTTPException(status_code=404, detail=f"Source path not found: {sp}")
 
