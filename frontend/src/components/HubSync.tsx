@@ -1,16 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import client from '../api/client'
 
-interface MountDetail {
-  repo_id: string
-  mount_point: string
-  mounted_at: string
-}
-
 interface HubSyncStatus {
   org: string
   mounted_repos: string[]
-  mount_details: MountDetail[]
+  mount_details: Record<string, { mount_point: string; mounted_at: string }>
   last_scan: string | null
   errors: string[]
   initialized: boolean
@@ -55,6 +49,12 @@ export function HubSync() {
     } catch {
       setStatusError('Failed to fetch HF sync status')
     }
+  }, [])
+
+  // Auto-scan on mount
+  useEffect(() => {
+    void doScan()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -116,7 +116,7 @@ export function HubSync() {
         <span style={s.headerTitle}>HF Hub Sync</span>
         <span style={s.headerMeta}>
           {status && (
-            <span style={{ color: status.initialized ? '#8bc34a' : 'var(--color-warning)', marginRight: 8, fontSize: 11 }}>
+            <span style={{ color: status.initialized ? '#a6e3a1' : 'var(--color-warning)', marginRight: 8, fontSize: 11 }}>
               {status.initialized ? 'active' : 'idle'}
             </span>
           )}
@@ -215,30 +215,30 @@ export function HubSync() {
               )}
 
               {/* Mounted repos table */}
-              {status.mount_details.length > 0 && (
+              {Object.keys(status.mount_details).length > 0 && (
                 <div style={s.section}>
                   <div style={s.sectionTitle}>Mounted Repos</div>
                   <div style={s.repoList}>
-                    {status.mount_details.map(detail => (
-                      <div key={detail.repo_id} style={s.repoRow}>
+                    {Object.entries(status.mount_details).map(([repoId, detail]) => (
+                      <div key={repoId} style={s.repoRow}>
                         <div style={s.repoInfo}>
-                          <div style={s.repoName}>{detail.repo_id}</div>
+                          <div style={s.repoName}>{repoId}</div>
                           <div style={s.repoMeta}>
                             <span style={s.repoMount}>{detail.mount_point}</span>
                             <span style={s.repoDot}>·</span>
-                            <span style={s.repoTime}>{timeAgo(detail.mounted_at)}</span>
+                            <span style={s.repoTime}>{detail.mounted_at === 'pre-existing' ? 'pre-existing' : timeAgo(detail.mounted_at)}</span>
                           </div>
                         </div>
                         <button
                           style={{
                             ...s.unmountBtn,
-                            opacity: unmounting.has(detail.repo_id) ? 0.5 : 1,
+                            opacity: unmounting.has(repoId) ? 0.5 : 1,
                           }}
-                          onClick={() => handleUnmount(detail.repo_id)}
-                          disabled={unmounting.has(detail.repo_id)}
-                          aria-label={`Unmount ${detail.repo_id}`}
+                          onClick={() => handleUnmount(repoId)}
+                          disabled={unmounting.has(repoId)}
+                          aria-label={`Unmount ${repoId}`}
                         >
-                          {unmounting.has(detail.repo_id) ? '...' : 'Unmount'}
+                          {unmounting.has(repoId) ? '...' : 'Unmount'}
                         </button>
                       </div>
                     ))}
@@ -337,14 +337,14 @@ const s: Record<string, React.CSSProperties> = {
   },
   statValue: {
     fontSize: 12,
-    color: '#c8e6c9',
+    color: '#a6e3a1',
     fontFamily: 'monospace',
   },
   scanBtn: {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
-    background: '#3a6ea5',
+    background: '#89b4fa',
     border: 'none',
     borderRadius: 4,
     color: '#fff',
@@ -402,7 +402,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   repoName: {
     fontSize: 12,
-    color: '#c0d8f0',
+    color: '#89b4fa',
     fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',

@@ -72,7 +72,7 @@ export function EpisodeList({ episodes, loading, error, onEpisodeSelect, selecte
               style={{
                 ...styles.item,
                 background: isSelected ? '#1a2a3a' : 'transparent',
-                borderLeft: isSelected ? '3px solid #3a6ea5' : '3px solid transparent',
+                borderLeft: isSelected ? '3px solid #89b4fa' : '3px solid transparent',
               }}
               onClick={() => handleClick(ep)}
               onKeyDown={(e) => {
@@ -161,8 +161,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   filterActive: {
     background: '#1a2a3a',
-    borderColor: '#3a6ea5',
-    color: '#90caf9',
+    borderColor: '#89b4fa',
+    color: '#89b4fa',
   },
   list: {
     overflowY: 'auto',
@@ -183,7 +183,7 @@ const styles: Record<string, React.CSSProperties> = {
   index: {
     fontFamily: 'monospace',
     fontSize: '12px',
-    color: '#aab8c8',
+    color: '#cdd6f4',
   },
   badges: {
     display: 'flex',
@@ -214,7 +214,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'monospace',
   },
   tagCount: {
-    color: '#4a7a9a',
+    color: '#89b4fa',
   },
   message: {
     padding: '16px 12px',
@@ -223,7 +223,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   errorMessage: {
     padding: '16px 12px',
-    color: '#e05252',
+    color: '#f38ba8',
     fontSize: '12px',
   },
 }

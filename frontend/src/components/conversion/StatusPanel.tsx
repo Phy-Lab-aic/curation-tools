@@ -20,7 +20,7 @@ export function StatusPanel({ watchStatus, jobs, selectedProfile, onStartWatch, 
       <div className="conversion-watch-card">
         <div className="conversion-watch-info">
           <div className="conversion-watch-title">Auto Watch Mode</div>
-          <div className="conversion-watch-sub">새 MCAP 감지 → 변환 → processed/ 이동</div>
+          <div className="conversion-watch-sub">Detects new MCAP → converts → moves to processed/</div>
         </div>
         <div className="conversion-watch-toggle">
           <button

@@ -142,7 +142,7 @@ export function ConfigPanel({
             const id = prompt('New repo_id (e.g. org/name):')
             if (id?.trim()) update({ repo_id: id.trim(), output_path: '' })
           }}>
-            <span>+</span> 새 저장소 생성
+            <span>+</span> Create new repository
           </div>
         </div>
       </div>

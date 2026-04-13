@@ -74,16 +74,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   epLabel: {
     fontSize: '12px',
-    color: '#90caf9',
+    color: '#89b4fa',
     fontFamily: 'monospace',
   },
   loading: {
     fontSize: '12px',
-    color: '#ffc107',
+    color: '#f9e2af',
   },
   error: {
     fontSize: '12px',
-    color: '#e05252',
+    color: '#f38ba8',
   },
   iframe: {
     flex: 1,

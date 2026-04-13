@@ -114,7 +114,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '8px',
   },
   error: {
-    color: '#e05252',
+    color: '#f38ba8',
     fontSize: '12px',
     marginBottom: '8px',
   },
@@ -123,7 +123,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#3a5a3a',
     border: 'none',
     borderRadius: '4px',
-    color: '#8bc34a',
+    color: '#a6e3a1',
     padding: '7px',
     fontSize: '13px',
     cursor: 'pointer',
