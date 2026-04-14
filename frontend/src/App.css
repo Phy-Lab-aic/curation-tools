@@ -610,3 +610,213 @@ code, .mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
 .text-green  { color: var(--c-green); }
 .text-yellow { color: var(--c-yellow); }
 .text-red    { color: var(--c-red); }
+
+/* ── Overview tab ─────────────────────────────── */
+.overview-layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.overview-fields-panel {
+  width: 220px;
+  flex-shrink: 0;
+  background: #111;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.fields-panel-section {
+  border-bottom: 1px solid var(--border);
+}
+.fields-panel-section-header {
+  padding: 8px 12px;
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.fields-panel-section-header:hover { color: var(--text-muted); }
+
+.field-checkbox {
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.field-checkbox:hover { color: var(--text); background: var(--panel2); }
+.field-checkbox input[type="checkbox"] { accent-color: var(--accent); }
+.field-checkbox.checked { color: var(--text); }
+
+.overview-charts {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chart-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.chart-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.chart-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: monospace;
+}
+.chart-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+}
+.chart-panel-close:hover { color: var(--text-muted); }
+.chart-panel-body {
+  padding: 12px;
+  height: 200px;
+}
+
+.chart-type-select {
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 2px 4px;
+  outline: none;
+}
+.chart-type-select:focus { border-color: var(--accent); }
+
+/* ── Fields tab ───────────────────────────────── */
+.fields-layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.fields-nav {
+  width: 180px;
+  flex-shrink: 0;
+  background: #111;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.fields-nav-item {
+  padding: 10px 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  background: none;
+  border-top: none;
+  border-bottom: 1px solid #1a1a1a;
+  border-right: none;
+  text-align: left;
+}
+.fields-nav-item:hover { color: var(--text); background: var(--panel2); }
+.fields-nav-item.active {
+  color: var(--text);
+  border-left-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.fields-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.field-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.field-table th {
+  text-align: left;
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.field-table td {
+  font-size: 11px;
+  color: var(--text);
+  padding: 5px 10px;
+  border-bottom: 1px solid #1a1a1a;
+  font-family: monospace;
+}
+.field-table .system { color: var(--text-muted); }
+.field-table .custom { color: var(--text); }
+
+.field-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+.field-delete-btn:hover { color: var(--c-red); }
+
+.field-add-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.field-add-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.field-add-form input, .field-add-form select {
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: var(--text);
+  outline: none;
+}
+.field-add-form input:focus, .field-add-form select:focus { border-color: var(--accent); }
+
+.parquet-warning {
+  background: rgba(250, 222, 42, 0.06);
+  border: 1px solid rgba(250, 222, 42, 0.15);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 10px;
+  color: var(--c-yellow);
+  margin-bottom: 12px;
+}
