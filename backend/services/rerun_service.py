@@ -1,11 +1,20 @@
 """Rerun visualization service for LeRobot dataset episodes."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 
-import numpy as np
-import pyarrow.parquet as pq
-import rerun as rr
+try:
+    import numpy as np
+    import pyarrow.parquet as pq
+    import rerun as rr
+    HAS_RERUN = True
+except ImportError:
+    HAS_RERUN = False
+    rr = None  # type: ignore[assignment]
+    np = None  # type: ignore[assignment]
+    pq = None  # type: ignore[assignment]
 
 from backend.services.dataset_service import dataset_service
 
@@ -14,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 def init_rerun(grpc_port: int, web_port: int) -> None:
     """Initialize Rerun with gRPC server and web viewer."""
+    if not HAS_RERUN:
+        raise ImportError("rerun package not installed — install with: pip install rerun-sdk")
     rr.init("curation_tools")
     server_uri = rr.serve_grpc(grpc_port=grpc_port)
     rr.serve_web_viewer(open_browser=False, web_port=web_port, connect_to=server_uri)
