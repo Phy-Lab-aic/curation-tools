@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.routers import datasets, episodes, tasks, rerun, videos, scalars, dataset_ops, cells, distribution, fields
+from backend.routers import datasets, episodes, tasks, rerun, videos, scalars, dataset_ops, cells, distribution, fields, converter
 from backend.services import rerun_service
 
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +55,7 @@ app.include_router(dataset_ops.router)
 app.include_router(cells.router)
 app.include_router(distribution.router)
 app.include_router(fields.router)
+app.include_router(converter.router)
 
 
 @app.get("/api/health")
