@@ -207,8 +207,18 @@ def parse_progress() -> tuple[list[TaskProgress], str]:
     if rc != 0 or not output:
         return [], ""
 
+    # Strip timestamp + [LEVEL] prefix from each line
+    # e.g. "2026-04-15 10:23:01 [INFO]   cell_a/task_1  ..." → "  cell_a/task_1  ..."
+    raw_lines = output.splitlines()
+    lines: list[str] = []
+    for raw in raw_lines:
+        idx = raw.find("]")
+        if idx != -1 and "[" in raw[:idx]:
+            lines.append(raw[idx + 1:])
+        else:
+            lines.append(raw)
+
     # Find the last scan table block bounded by ━ lines
-    lines = output.splitlines()
     block_start: int | None = None
     block_end: int | None = None
     for i, line in enumerate(lines):
@@ -226,23 +236,20 @@ def parse_progress() -> tuple[list[TaskProgress], str]:
     summary = ""
 
     for line in lines[block_start:block_end + 1]:
-        m = _ROW_RE.match(line)
-        if m:
+        row_m = _ROW_RE.match(line)
+        if row_m:
             tasks.append(TaskProgress(
-                cell_task=m.group(1).strip(),
-                total=int(m.group(2)),
-                done=int(m.group(3)),
-                pending=int(m.group(4)),
-                failed=int(m.group(5)),
-                retry=int(m.group(6)),
+                cell_task=row_m.group(1).strip(),
+                total=int(row_m.group(2)),
+                done=int(row_m.group(3)),
+                pending=int(row_m.group(4)),
+                failed=int(row_m.group(5)),
+                retry=int(row_m.group(6)),
             ))
 
-    # Look for the Total summary line after the table
-    for line in lines[block_end:]:
-        m = _TOTAL_RE.search(line)
-        if m:
+        total_m = _TOTAL_RE.search(line)
+        if total_m:
             summary = line.strip()
-            break
 
     return tasks, summary
 
