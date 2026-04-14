@@ -8,13 +8,11 @@ interface EpisodeEditorProps {
 
 export function EpisodeEditor({ episode, onSave }: EpisodeEditorProps) {
   const [tags, setTags] = useState<string[]>([])
-  const [tagInput, setTagInput] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (episode) {
       setTags(episode.tags)
-      setTagInput('')
     }
   }, [episode?.episode_index])
 
