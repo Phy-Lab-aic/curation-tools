@@ -2,10 +2,9 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    dataset_path: str = "/data/datasets"
+    dataset_path: str = "/mnt/synology/data/data_div/2026_1/lerobot"
     allowed_dataset_roots: list[str] = [
-        "/tmp/hf-mounts/Phy-lab/dataset",
-        "/data/datasets",
+        "/mnt/synology/data/data_div/2026_1/lerobot",
     ]
     host: str = "127.0.0.1"
     fastapi_port: int = 8000
