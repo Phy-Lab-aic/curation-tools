@@ -26,6 +26,7 @@ export function useDataset(): UseDatasetReturn {
         ? (typeof err.response?.data?.detail === 'string' ? err.response.data.detail : err.message)
         : (err instanceof Error ? err.message : 'Failed to load dataset')
       setError(message)
+      throw err
     } finally {
       setLoading(false)
     }

@@ -31,8 +31,16 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: Dat
 
   // Load dataset when path changes
   useEffect(() => {
-    void loadDataset(datasetPath).then(() => fetchEpisodes())
-  }, [datasetPath])
+    let cancelled = false
+    async function init() {
+      await loadDataset(datasetPath)
+      if (!cancelled) {
+        await fetchEpisodes()
+      }
+    }
+    void init()
+    return () => { cancelled = true }
+  }, [datasetPath, loadDataset, fetchEpisodes])
 
   const handleSaveEpisode = useCallback(async (index: number, grade: string | null, tags: string[]) => {
     await updateEpisode(index, grade, tags)
