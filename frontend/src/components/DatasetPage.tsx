@@ -7,6 +7,8 @@ import { ScalarChart } from './ScalarChart'
 import { SplitMergePanel } from './SplitMergePanel'
 import { useDataset } from '../hooks/useDataset'
 import { useEpisodes } from '../hooks/useEpisodes'
+import { OverviewTab } from './OverviewTab'
+import { FieldsTab } from './FieldsTab'
 import type { DatasetTab, Episode } from '../types'
 
 interface DatasetPageProps {
@@ -87,11 +89,18 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: Dat
     return () => window.removeEventListener('keydown', handler)
   }, [navigateEpisode, quickGrade])
 
-  if (tab !== 'curate' && tab !== 'ops') {
+  if (tab === 'overview') {
     return (
-      <div style={{ padding: 20, color: 'var(--text-muted)', fontSize: 12 }}>
-        {tab === 'overview' && 'Overview tab — coming in Plan B'}
-        {tab === 'fields' && 'Fields tab — coming in Plan B'}
+      <div className="dataset-page">
+        <OverviewTab datasetPath={datasetPath} />
+      </div>
+    )
+  }
+
+  if (tab === 'fields') {
+    return (
+      <div className="dataset-page">
+        <FieldsTab datasetPath={datasetPath} />
       </div>
     )
   }
