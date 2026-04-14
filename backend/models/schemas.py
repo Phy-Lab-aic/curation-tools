@@ -59,3 +59,20 @@ class DatasetLoadRequest(BaseModel):
 class DatasetExportRequest(BaseModel):
     output_path: str
     exclude_grades: list[str] = ["bad"]
+
+
+class CellInfo(BaseModel):
+    name: str
+    path: str
+    mount_root: str
+    dataset_count: int
+    active: bool
+
+
+class DatasetSummary(BaseModel):
+    name: str
+    path: str
+    total_episodes: int
+    graded_count: int
+    robot_type: str | None = None
+    fps: int

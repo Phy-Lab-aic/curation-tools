@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     annotations_path: str = ""
     enable_rerun: bool = False
     debug: bool = False
+    cell_name_pattern: str = "cell*"
 
     model_config = {"env_prefix": "CURATION_"}
 
