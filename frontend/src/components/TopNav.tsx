@@ -42,13 +42,13 @@ export function TopNav({ state, onNavigateHome, onNavigateCell, onTabChange }: T
         )}
       </div>
 
-      {state.view === 'dataset' && onTabChange && (
+      {state.view === 'dataset' && (
         <div className="top-nav-tabs">
           {TABS.map(tab => (
             <button
               key={tab.id}
               className={`top-nav-tab${state.tab === tab.id ? ' active' : ''}`}
-              onClick={() => onTabChange(tab.id)}
+              onClick={() => onTabChange?.(tab.id)}
             >
               {tab.label}
             </button>
