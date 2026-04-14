@@ -17,9 +17,9 @@ interface ScalarChartProps {
 }
 
 const COLORS = [
-  '#4fc3f7', '#81c784', '#ffb74d', '#e57373', '#ba68c8',
-  '#4dd0e1', '#aed581', '#ffd54f', '#ff8a65', '#9575cd',
-  '#26c6da', '#dce775', '#ffca28', '#ff7043', '#7e57c2',
+  '#5794f2', '#73bf69', '#fade2a', '#f08080', '#b877d9',
+  '#ff9830', '#37aee2', '#7fb77e', '#e8a838', '#e07070',
+  '#9c6ede', '#dd8040', '#4dbfa8', '#9fb04a', '#d06088',
 ]
 
 function MiniChart({ label, series, color, currentFrame, collapsed }: {
@@ -240,73 +240,21 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
 }
 
 const chartStyles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'visible',
-    flexShrink: 0,
-  },
-  loading: {
-    padding: '12px',
-    fontSize: '11px',
-    color: '#555',
-  },
-  error: {
-    padding: '12px',
-    fontSize: '11px',
-    color: '#e57373',
-  },
-  section: {
-    borderBottom: '1px solid #222',
-  },
+  container: { display: 'flex', flexDirection: 'column', overflow: 'visible', flexShrink: 0 },
+  loading: { padding: '12px', fontSize: '11px', color: 'var(--text-muted)' as string },
+  error: { padding: '12px', fontSize: '11px', color: 'var(--c-red)' as string },
+  section: { borderBottom: '1px solid var(--border)' as string },
   sectionHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '6px 12px',
-    cursor: 'pointer',
-    background: '#161616',
-    borderBottom: '1px solid #1e1e1e',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '6px 12px', cursor: 'pointer',
+    background: 'var(--panel)' as string,
+    borderBottom: '1px solid var(--border2)' as string,
   },
-  sectionTitle: {
-    fontSize: '10px',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    color: '#666',
-  },
-  sectionCount: {
-    fontSize: '10px',
-    color: '#444',
-    fontFamily: 'monospace',
-  },
-  chartItem: {
-    padding: '3px 12px',
-    borderBottom: '1px solid #1a1a1a',
-  },
-  chartHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '2px',
-  },
-  chartLabel: {
-    fontSize: '10px',
-    fontFamily: 'monospace',
-    fontWeight: 500,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    maxWidth: '180px',
-  },
-  chartValue: {
-    fontSize: '10px',
-    fontFamily: 'monospace',
-    color: '#888',
-  },
-  canvas: {
-    width: '100%',
-    height: '40px',
-    borderRadius: '2px',
-  },
+  sectionTitle: { fontSize: '10px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: 'var(--text-dim)' as string },
+  sectionCount: { fontSize: '10px', color: 'var(--text-dim)' as string, fontFamily: 'monospace' },
+  chartItem: { padding: '3px 12px', borderBottom: '1px solid #1a1a1a' },
+  chartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' },
+  chartLabel: { fontSize: '10px', fontFamily: 'monospace', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, maxWidth: '180px' },
+  chartValue: { fontSize: '10px', fontFamily: 'monospace', color: 'var(--text-muted)' as string },
+  canvas: { width: '100%', height: '40px', borderRadius: '2px' },
 }
