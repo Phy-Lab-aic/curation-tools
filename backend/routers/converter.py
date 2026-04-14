@@ -1,10 +1,13 @@
 """Converter control API — build/start/stop + status/progress."""
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from backend.services import converter_service
+
+_last_build_result: dict | None = None
 
 logger = logging.getLogger(__name__)
 
@@ -53,24 +56,42 @@ async def get_progress():
     }
 
 
-@router.post("/build")
+@router.post("/build", status_code=202)
 async def build():
-    """Trigger Docker image build. Returns when build completes."""
+    """Trigger Docker image build (async). Returns 202 immediately."""
     docker_ok = await converter_service.check_docker()
     if not docker_ok:
         raise HTTPException(503, "Docker daemon not available")
 
-    lines: list[str] = []
+    if converter_service._build_lock.locked():
+        raise HTTPException(409, "Build already in progress")
 
-    def collect(line: str):
-        lines.append(line)
+    async def _run_build():
+        global _last_build_result
+        lines: list[str] = []
 
-    exit_code = await converter_service.build_image(on_line=collect)
-    return {
-        "success": exit_code == 0,
-        "exit_code": exit_code,
-        "output": "\n".join(lines[-50:]),
-    }
+        def collect(line: str):
+            lines.append(line)
+
+        exit_code = await converter_service.build_image(on_line=collect)
+        _last_build_result = {
+            "success": exit_code == 0,
+            "exit_code": exit_code,
+            "output": "\n".join(lines[-50:]),
+        }
+
+    asyncio.create_task(_run_build())
+    return {"status": "build_started"}
+
+
+@router.get("/build-result")
+async def build_result():
+    """Get the result of the last build."""
+    if converter_service._build_lock.locked():
+        return {"status": "building"}
+    if _last_build_result is None:
+        return {"status": "no_build"}
+    return {"status": "complete", **_last_build_result}
 
 
 @router.post("/start")
@@ -80,13 +101,9 @@ async def start():
     if not docker_ok:
         raise HTTPException(503, "Docker daemon not available")
 
-    state = await converter_service.get_container_state()
-    if state == "running":
-        raise HTTPException(409, "Container already running")
-
     ok, msg = await converter_service.start_converter()
     if not ok:
-        raise HTTPException(500, msg)
+        raise HTTPException(409, msg)
     return {"status": "started", "message": msg}
 
 

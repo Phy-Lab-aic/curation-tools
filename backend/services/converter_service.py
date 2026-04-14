@@ -131,6 +131,10 @@ async def get_status() -> ConverterStatus:
         )
 
     state = await get_container_state()
+    # Map Docker states to our states
+    if state == "exited":
+        state = "stopped"  # container finished or crashed — treat as stopped
+
     tasks: list[TaskProgress] = []
     summary = ""
 
@@ -169,8 +173,15 @@ async def build_image(on_line: Callable[[str], None] | None = None) -> int:
 
 
 async def start_converter() -> tuple[bool, str]:
-    """Clean up old container and start a fresh one. Returns (ok, message)."""
-    # Remove old container if it exists
+    """Check state and start container atomically. Returns (ok, message)."""
+    state = await get_container_state()
+    if state == "running":
+        return False, "Container already running"
+    if state not in ("stopped", "exited"):
+        # Don't force-remove containers in transitional states
+        return False, f"Container in unexpected state: {state}"
+
+    # Remove old container if it exists (safe — not running)
     await _run(["docker", "rm", "-f", CONTAINER_NAME], timeout=10.0)
 
     cmd = _compose_cmd(
