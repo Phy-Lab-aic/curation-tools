@@ -47,7 +47,7 @@ function MiniChart({ label, series, color, currentFrame, collapsed }: {
     ctx.clearRect(0, 0, w, h)
 
     // Background
-    ctx.fillStyle = '#111'
+    ctx.fillStyle = '#0f0f0f'
     ctx.fillRect(0, 0, w, h)
 
     // Grid lines
