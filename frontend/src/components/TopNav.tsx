@@ -22,15 +22,11 @@ export function TopNav({ state, onNavigateHome, onNavigateCell, onTabChange }: T
       </button>
 
       <div className="top-nav-breadcrumb">
-        {state.view !== 'library' && (
+        {(state.view === 'cell' || state.view === 'dataset') && (
           <>
             <span className="sep">/</span>
-            <button onClick={() => {
-              if (state.view === 'cell' || state.view === 'dataset') {
-                onNavigateCell(state.cellName, state.cellPath)
-              }
-            }}>
-              <em>{state.view === 'cell' || state.view === 'dataset' ? state.cellName : ''}</em>
+            <button onClick={() => onNavigateCell(state.cellName, state.cellPath)}>
+              <em>{state.cellName}</em>
             </button>
           </>
         )}
