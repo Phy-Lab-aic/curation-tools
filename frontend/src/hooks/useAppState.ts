@@ -6,6 +6,7 @@ interface UseAppStateReturn {
   navigateHome: () => void
   navigateToCell: (cellName: string, cellPath: string) => void
   navigateToDataset: (cellName: string, cellPath: string, datasetPath: string, datasetName: string) => void
+  navigateToConverter: () => void
   setTab: (tab: DatasetTab) => void
 }
 
@@ -26,7 +27,11 @@ export function useAppState(): UseAppStateReturn {
     datasetPath: string,
     datasetName: string,
   ) => {
-    setState({ view: 'dataset', cellName, cellPath, datasetPath, datasetName, tab: 'curate' })
+    setState({ view: 'dataset', cellName, cellPath, datasetPath, datasetName, tab: 'overview' })
+  }, [])
+
+  const navigateToConverter = useCallback(() => {
+    setState({ view: 'converter' })
   }, [])
 
   const setTab = useCallback((tab: DatasetTab) => {
@@ -35,5 +40,5 @@ export function useAppState(): UseAppStateReturn {
     )
   }, [])
 
-  return { state, navigateHome, navigateToCell, navigateToDataset, setTab }
+  return { state, navigateHome, navigateToCell, navigateToDataset, navigateToConverter, setTab }
 }

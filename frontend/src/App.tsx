@@ -3,12 +3,13 @@ import { TopNav } from './components/TopNav'
 import { LibraryPage } from './components/LibraryPage'
 import { CellPage } from './components/CellPage'
 import { DatasetPage } from './components/DatasetPage'
+import { ConverterPage } from './components/ConverterPage'
 import { useAppState } from './hooks/useAppState'
 import type { CellInfo, DatasetSummary } from './types'
 import './App.css'
 
 export default function App() {
-  const { state, navigateHome, navigateToCell, navigateToDataset, setTab } = useAppState()
+  const { state, navigateHome, navigateToCell, navigateToDataset, navigateToConverter, setTab } = useAppState()
 
   const handleSelectCell = useCallback((cell: CellInfo) => {
     navigateToCell(cell.name, cell.path)
@@ -27,6 +28,7 @@ export default function App() {
         onNavigateHome={navigateHome}
         onNavigateCell={navigateToCell}
         onTabChange={setTab}
+        onNavigateConverter={navigateToConverter}
       />
       <div className="page-content">
         {state.view === 'library' && (
@@ -45,6 +47,9 @@ export default function App() {
             datasetName={state.datasetName}
             tab={state.tab}
           />
+        )}
+        {state.view === 'converter' && (
+          <ConverterPage />
         )}
       </div>
     </div>

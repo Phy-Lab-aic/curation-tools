@@ -24,6 +24,7 @@ export interface Episode {
   dataset_to_index: number
   grade: string | null
   tags: string[]
+  created_at: string | null
 }
 
 export interface Task {
@@ -55,16 +56,40 @@ export interface DatasetSummary {
   path: string
   total_episodes: number
   graded_count: number
+  good_count: number
+  normal_count: number
+  bad_count: number
   robot_type: string | null
   fps: number
 }
 
-export type DatasetTab = 'overview' | 'curate' | 'fields' | 'ops'
+export type DatasetTab = 'overview' | 'curate' | 'fields'
 
 export type AppState =
   | { view: 'library' }
   | { view: 'cell'; cellName: string; cellPath: string }
   | { view: 'dataset'; cellName: string; cellPath: string; datasetPath: string; datasetName: string; tab: DatasetTab }
+  | { view: 'converter' }
+
+// ── Converter types ────────────────────────────
+
+export type ConverterState = 'running' | 'stopped' | 'building' | 'error' | 'unknown'
+
+export interface ConverterTaskProgress {
+  cell_task: string
+  total: number
+  done: number
+  pending: number
+  failed: number
+  retry: number
+}
+
+export interface ConverterStatus {
+  container_state: ConverterState
+  docker_available: boolean
+  tasks: ConverterTaskProgress[]
+  summary: string
+}
 
 // ── Distribution types ──────────────────────────
 

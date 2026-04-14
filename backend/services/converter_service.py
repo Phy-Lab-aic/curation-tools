@@ -145,8 +145,11 @@ def get_status() -> ConverterStatus:
     )
 
 
-async def build_image(on_line: Callable[[str], None] | None = None) -> None:
-    """Run ``docker compose build --no-cache``, streaming output via *on_line*."""
+async def build_image(on_line: Callable[[str], None] | None = None) -> int:
+    """Run ``docker compose build --no-cache``, streaming output via *on_line*.
+
+    Returns the process exit code.
+    """
     global _build_in_progress
     _build_in_progress = True
     try:
@@ -161,6 +164,7 @@ async def build_image(on_line: Callable[[str], None] | None = None) -> None:
             if on_line:
                 on_line(line)
         await proc.wait()
+        return proc.returncode or 0
     finally:
         _build_in_progress = False
 
