@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/converter", tags=["converter"])
 @router.get("/status")
 async def get_status():
     """Get converter container status and progress summary."""
-    status = converter_service.get_status()
+    status = await converter_service.get_status()
     return {
         "container_state": status.container_state,
         "docker_available": status.docker_available,
@@ -36,7 +36,7 @@ async def get_status():
 @router.get("/progress")
 async def get_progress():
     """Get conversion progress (parsed from latest scan table)."""
-    tasks, summary = converter_service.parse_progress()
+    tasks, summary = await converter_service.parse_progress()
     return {
         "tasks": [
             {
@@ -56,7 +56,7 @@ async def get_progress():
 @router.post("/build")
 async def build():
     """Trigger Docker image build. Returns when build completes."""
-    docker_ok = converter_service.check_docker()
+    docker_ok = await converter_service.check_docker()
     if not docker_ok:
         raise HTTPException(503, "Docker daemon not available")
 
@@ -76,15 +76,15 @@ async def build():
 @router.post("/start")
 async def start():
     """Start auto_converter container."""
-    docker_ok = converter_service.check_docker()
+    docker_ok = await converter_service.check_docker()
     if not docker_ok:
         raise HTTPException(503, "Docker daemon not available")
 
-    state = converter_service.get_container_state()
+    state = await converter_service.get_container_state()
     if state == "running":
         raise HTTPException(409, "Container already running")
 
-    ok, msg = converter_service.start_converter()
+    ok, msg = await converter_service.start_converter()
     if not ok:
         raise HTTPException(500, msg)
     return {"status": "started", "message": msg}
@@ -93,7 +93,7 @@ async def start():
 @router.post("/stop")
 async def stop():
     """Stop converter container (idempotent)."""
-    ok, msg = converter_service.stop_converter()
+    ok, msg = await converter_service.stop_converter()
     if not ok:
         raise HTTPException(500, msg)
     return {"status": "stopped", "message": msg}
@@ -104,7 +104,7 @@ async def logs_ws(ws: WebSocket):
     """Stream container logs via WebSocket."""
     await ws.accept()
     try:
-        state = converter_service.get_container_state()
+        state = await converter_service.get_container_state()
         if state != "running":
             await ws.send_text("[converter not running]")
             await ws.close()

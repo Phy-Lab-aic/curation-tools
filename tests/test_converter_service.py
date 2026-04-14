@@ -1,6 +1,6 @@
 """Tests for converter_service — log parsing and status logic."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -47,50 +47,55 @@ NO_OUTPUT = ""
 class TestParseProgress:
     """Test log parsing logic by mocking _run to return canned log output."""
 
-    def test_parses_scan_table_rows(self):
+    @pytest.mark.asyncio
+    async def test_parses_scan_table_rows(self):
         """Should extract 3 task rows from a well-formed scan table."""
-        with patch("backend.services.converter_service._run") as mock_run:
+        with patch("backend.services.converter_service._run", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = (0, SCAN_TABLE_LOG, "")
-            tasks, summary = parse_progress()
+            tasks, summary = await parse_progress()
 
         assert len(tasks) == 3
         assert tasks[0] == TaskProgress("cell_a/task_1", 12, 8, 3, 1, 0)
         assert tasks[1] == TaskProgress("cell_a/task_2", 5, 5, 0, 0, 0)
         assert tasks[2] == TaskProgress("cell_b/pick_place", 8, 3, 4, 1, 2)
 
-    def test_parses_summary_line(self):
+    @pytest.mark.asyncio
+    async def test_parses_summary_line(self):
         """Should extract the Total summary line."""
-        with patch("backend.services.converter_service._run") as mock_run:
+        with patch("backend.services.converter_service._run", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = (0, SCAN_TABLE_LOG, "")
-            tasks, summary = parse_progress()
+            tasks, summary = await parse_progress()
 
         assert "3 tasks" in summary
         assert "25 recordings" in summary
         assert "16 done" in summary
 
-    def test_empty_log_returns_empty(self):
+    @pytest.mark.asyncio
+    async def test_empty_log_returns_empty(self):
         """No scan table in log → empty results."""
-        with patch("backend.services.converter_service._run") as mock_run:
+        with patch("backend.services.converter_service._run", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = (0, EMPTY_LOG, "")
-            tasks, summary = parse_progress()
+            tasks, summary = await parse_progress()
 
         assert tasks == []
         assert summary == ""
 
-    def test_no_output_returns_empty(self):
+    @pytest.mark.asyncio
+    async def test_no_output_returns_empty(self):
         """Empty log output → empty results."""
-        with patch("backend.services.converter_service._run") as mock_run:
+        with patch("backend.services.converter_service._run", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = (0, NO_OUTPUT, "")
-            tasks, summary = parse_progress()
+            tasks, summary = await parse_progress()
 
         assert tasks == []
         assert summary == ""
 
-    def test_docker_error_returns_empty(self):
+    @pytest.mark.asyncio
+    async def test_docker_error_returns_empty(self):
         """docker logs failure → empty results."""
-        with patch("backend.services.converter_service._run") as mock_run:
+        with patch("backend.services.converter_service._run", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = (1, "", "container not found")
-            tasks, summary = parse_progress()
+            tasks, summary = await parse_progress()
 
         assert tasks == []
         assert summary == ""
@@ -130,40 +135,44 @@ class TestRegexPatterns:
 # ---------------------------------------------------------------------------
 
 class TestGetStatus:
-    def test_docker_unavailable(self):
-        with patch("backend.services.converter_service.check_docker", return_value=False):
-            status = get_status()
+    @pytest.mark.asyncio
+    async def test_docker_unavailable(self):
+        with patch("backend.services.converter_service.check_docker", new_callable=AsyncMock, return_value=False):
+            status = await get_status()
 
         assert status.docker_available is False
         assert status.container_state == "unknown"
 
-    def test_stopped_container(self):
-        with patch("backend.services.converter_service.check_docker", return_value=True), \
-             patch("backend.services.converter_service.get_container_state", return_value="stopped"):
-            status = get_status()
+    @pytest.mark.asyncio
+    async def test_stopped_container(self):
+        with patch("backend.services.converter_service.check_docker", new_callable=AsyncMock, return_value=True), \
+             patch("backend.services.converter_service.get_container_state", new_callable=AsyncMock, return_value="stopped"):
+            status = await get_status()
 
         assert status.docker_available is True
         assert status.container_state == "stopped"
         assert status.tasks == []
 
-    def test_running_container_fetches_progress(self):
+    @pytest.mark.asyncio
+    async def test_running_container_fetches_progress(self):
         fake_tasks = [TaskProgress("a/b", 10, 5, 3, 2, 0)]
-        with patch("backend.services.converter_service.check_docker", return_value=True), \
-             patch("backend.services.converter_service.get_container_state", return_value="running"), \
-             patch("backend.services.converter_service.parse_progress", return_value=(fake_tasks, "Total: 1 task")):
-            status = get_status()
+        with patch("backend.services.converter_service.check_docker", new_callable=AsyncMock, return_value=True), \
+             patch("backend.services.converter_service.get_container_state", new_callable=AsyncMock, return_value="running"), \
+             patch("backend.services.converter_service.parse_progress", new_callable=AsyncMock, return_value=(fake_tasks, "Total: 1 task")):
+            status = await get_status()
 
         assert status.container_state == "running"
         assert len(status.tasks) == 1
         assert status.tasks[0].cell_task == "a/b"
 
-    def test_building_state(self):
+    @pytest.mark.asyncio
+    async def test_building_state(self):
         import backend.services.converter_service as svc
-        original = svc._build_in_progress
-        svc._build_in_progress = True
+        # Simulate the lock being held by acquiring it
+        await svc._build_lock.acquire()
         try:
-            with patch("backend.services.converter_service.check_docker", return_value=True):
-                status = get_status()
+            with patch("backend.services.converter_service.check_docker", new_callable=AsyncMock, return_value=True):
+                status = await get_status()
             assert status.container_state == "building"
         finally:
-            svc._build_in_progress = original
+            svc._build_lock.release()

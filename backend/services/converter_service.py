@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import AsyncGenerator, Callable
@@ -22,8 +21,8 @@ COMPOSE_FILE = ROSBAG_PROJECT / "docker" / "docker-compose.yml"
 PROJECT_NAME = "convert-server"
 CONTAINER_NAME = "convert-server"
 
-# Module-level flag set while `build_image` is running
-_build_in_progress: bool = False
+# Module-level lock to guard concurrent build requests
+_build_lock = asyncio.Lock()
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -74,35 +73,38 @@ def _compose_cmd(*args: str) -> list[str]:
     ]
 
 
-def _run(cmd: list[str], timeout: float = 10.0) -> tuple[int, str, str]:
-    """Run *cmd* synchronously and return (returncode, stdout, stderr)."""
+async def _run(cmd: list[str], timeout: float = 10.0) -> tuple[int, str, str]:
+    """Run *cmd* asynchronously and return (returncode, stdout, stderr)."""
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        return result.returncode, result.stdout, result.stderr
-    except subprocess.TimeoutExpired:
-        return -1, "", "timeout"
     except FileNotFoundError:
         return -1, "", "command not found"
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return -1, "", "timeout"
+    return proc.returncode or 0, stdout.decode(), stderr.decode()
 
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
 
 
-def check_docker() -> bool:
+async def check_docker() -> bool:
     """Return ``True`` if the Docker daemon is reachable."""
-    rc, _, _ = _run(["docker", "info"], timeout=5.0)
+    rc, _, _ = await _run(["docker", "info"], timeout=5.0)
     return rc == 0
 
 
-def get_container_state() -> str:
+async def get_container_state() -> str:
     """Return the container state string (e.g. ``running``, ``exited``)."""
-    rc, stdout, _ = _run(
+    rc, stdout, _ = await _run(
         ["docker", "inspect", CONTAINER_NAME, "--format", "{{.State.Status}}"],
         timeout=5.0,
     )
@@ -111,11 +113,9 @@ def get_container_state() -> str:
     return "stopped"
 
 
-def get_status() -> ConverterStatus:
+async def get_status() -> ConverterStatus:
     """Combine docker check, container state, and progress into a status."""
-    global _build_in_progress
-
-    docker_ok = check_docker()
+    docker_ok = await check_docker()
     if not docker_ok:
         return ConverterStatus(
             container_state="unknown",
@@ -123,19 +123,19 @@ def get_status() -> ConverterStatus:
             summary="Docker is not available",
         )
 
-    if _build_in_progress:
+    if _build_lock.locked():
         return ConverterStatus(
             container_state="building",
             docker_available=True,
             summary="Image build in progress",
         )
 
-    state = get_container_state()
+    state = await get_container_state()
     tasks: list[TaskProgress] = []
     summary = ""
 
     if state == "running":
-        tasks, summary = parse_progress()
+        tasks, summary = await parse_progress()
 
     return ConverterStatus(
         container_state=state,
@@ -150,29 +150,28 @@ async def build_image(on_line: Callable[[str], None] | None = None) -> int:
 
     Returns the process exit code.
     """
-    global _build_in_progress
-    _build_in_progress = True
-    try:
+    if _build_lock.locked():
+        raise RuntimeError("Build already in progress")
+    async with _build_lock:
         proc = await asyncio.create_subprocess_exec(
             *_compose_cmd("build", "--no-cache"),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
-        assert proc.stdout is not None
+        if proc.stdout is None:
+            raise RuntimeError("Failed to capture build output")
         async for raw_line in proc.stdout:
             line = raw_line.decode(errors="replace").rstrip("\n")
             if on_line:
                 on_line(line)
         await proc.wait()
         return proc.returncode or 0
-    finally:
-        _build_in_progress = False
 
 
-def start_converter() -> tuple[bool, str]:
+async def start_converter() -> tuple[bool, str]:
     """Clean up old container and start a fresh one. Returns (ok, message)."""
     # Remove old container if it exists
-    _run(["docker", "rm", "-f", CONTAINER_NAME], timeout=10.0)
+    await _run(["docker", "rm", "-f", CONTAINER_NAME], timeout=10.0)
 
     cmd = _compose_cmd(
         "run", "-d",
@@ -180,26 +179,26 @@ def start_converter() -> tuple[bool, str]:
         "convert-server",
         "python3", "/app/auto_converter.py",
     )
-    rc, stdout, stderr = _run(cmd, timeout=30.0)
+    rc, stdout, stderr = await _run(cmd, timeout=30.0)
     if rc == 0:
         return True, stdout.strip() or "started"
     return False, stderr.strip() or "failed to start"
 
 
-def stop_converter() -> tuple[bool, str]:
+async def stop_converter() -> tuple[bool, str]:
     """Stop and remove the converter stack. Returns (ok, message)."""
-    rc, stdout, stderr = _run(_compose_cmd("down"), timeout=30.0)
+    rc, stdout, stderr = await _run(_compose_cmd("down"), timeout=30.0)
     if rc == 0:
         return True, stdout.strip() or "stopped"
     return False, stderr.strip() or "failed to stop"
 
 
-def parse_progress() -> tuple[list[TaskProgress], str]:
+async def parse_progress() -> tuple[list[TaskProgress], str]:
     """Parse the last scan table from container logs.
 
     Returns (list_of_task_progress, summary_line).
     """
-    rc, stdout, stderr = _run(
+    rc, stdout, stderr = await _run(
         ["docker", "logs", "--tail", "100", CONTAINER_NAME],
         timeout=10.0,
     )
@@ -261,7 +260,8 @@ async def stream_logs(tail: int = 200) -> AsyncGenerator[str, None]:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
-    assert proc.stdout is not None
+    if proc.stdout is None:
+        raise RuntimeError("Failed to capture log output")
     try:
         async for raw_line in proc.stdout:
             yield raw_line.decode(errors="replace").rstrip("\n")
