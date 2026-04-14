@@ -65,3 +65,39 @@ export type AppState =
   | { view: 'library' }
   | { view: 'cell'; cellName: string; cellPath: string }
   | { view: 'dataset'; cellName: string; cellPath: string; datasetPath: string; datasetName: string; tab: DatasetTab }
+
+// ── Distribution types ──────────────────────────
+
+export interface FieldInfo {
+  name: string
+  dtype: string
+  is_system: boolean
+}
+
+export interface DistributionBin {
+  label: string
+  count: number
+}
+
+export interface DistributionResult {
+  field: string
+  dtype: string
+  chart_type: 'histogram' | 'bar'
+  bins: DistributionBin[]
+  total: number
+}
+
+// ── Fields tab types ────────────────────────────
+
+export interface InfoField {
+  key: string
+  value: unknown
+  dtype: string
+  is_system: boolean
+}
+
+export interface EpisodeColumn {
+  name: string
+  dtype: string
+  is_system: boolean
+}
