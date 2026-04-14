@@ -1,0 +1,206 @@
+<h2>Dataset Library 페이지</h2>
+<p class="subtitle">섹션 2 / 5 · 홈 화면 — 20개+ 데이터셋 탐색</p>
+
+<style>
+  .mockup-full { background: #11111b; border-radius: 10px; overflow: hidden; border: 1px solid #313244; margin: 16px 0; }
+
+  /* Top bar */
+  .top-bar { background: #181825; border-bottom: 1px solid #313244; padding: 8px 16px; display: flex; align-items: center; gap: 12px; }
+  .app-name { font-weight: 700; font-size: 13px; color: #cdd6f4; letter-spacing: -0.02em; }
+  .app-name span { color: #89b4fa; }
+  .top-spacer { flex: 1; }
+  .search-bar { background: #1e1e2e; border: 1px solid #313244; border-radius: 6px; padding: 5px 10px; font-size: 11px; color: #6c7086; width: 200px; display: flex; align-items: center; gap: 6px; }
+  .search-icon { color: #45475a; }
+  .filter-chip { background: #1e1e2e; border: 1px solid #313244; border-radius: 20px; padding: 3px 10px; font-size: 10px; color: #a6adc8; cursor: default; }
+  .filter-chip.active { border-color: #89b4fa55; color: #89b4fa; background: #89b4fa10; }
+  .mount-badge { background: #a6e3a110; border: 1px solid #a6e3a130; border-radius: 4px; padding: 3px 8px; font-size: 10px; color: #a6e3a1; }
+
+  /* Library body */
+  .library-body { padding: 16px; }
+  .library-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .library-stats { font-size: 11px; color: #6c7086; }
+  .library-stats strong { color: #cdd6f4; }
+  .sort-select { background: #1e1e2e; border: 1px solid #313244; border-radius: 4px; padding: 3px 8px; font-size: 10px; color: #a6adc8; }
+
+  /* Dataset grid */
+  .ds-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .ds-card { background: #1e1e2e; border: 1px solid #313244; border-radius: 8px; padding: 12px; cursor: pointer; transition: border-color 0.15s; position: relative; }
+  .ds-card:hover { border-color: #585b70; }
+  .ds-card.loaded { border-color: #89b4fa55; }
+  .ds-mount-dot { width: 6px; height: 6px; border-radius: 50%; background: #a6e3a1; position: absolute; top: 10px; right: 10px; }
+  .ds-robot { font-size: 9px; color: #6c7086; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+  .ds-name { font-size: 12px; font-weight: 600; color: #cdd6f4; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ds-path { font-size: 9px; color: #45475a; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px; }
+  .ds-stats { display: flex; gap: 8px; margin-bottom: 8px; }
+  .ds-stat { font-size: 9px; color: #6c7086; }
+  .ds-stat strong { color: #a6adc8; }
+  .ds-progress { background: #313244; border-radius: 2px; height: 3px; }
+  .ds-progress-fill { height: 3px; border-radius: 2px; }
+  .ds-grade-row { display: flex; gap: 3px; margin-top: 5px; }
+  .ds-grade-seg { height: 3px; border-radius: 1px; }
+
+  /* Section header for mount paths */
+  .section-header { font-size: 10px; color: #45475a; text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 0; margin: 12px 0 8px; border-bottom: 1px solid #1e1e2e; }
+</style>
+
+<div class="mockup-full">
+  <div class="top-bar">
+    <div class="app-name">robo<span>data</span> studio</div>
+    <div class="search-bar">
+      <span class="search-icon">⌕</span>
+      <span>Search datasets...</span>
+    </div>
+    <div class="top-spacer"></div>
+    <div class="filter-chip active">All</div>
+    <div class="filter-chip">ur5e</div>
+    <div class="filter-chip">so100</div>
+    <div class="filter-chip">panda</div>
+    <div class="mount-badge">● 3 mounts active</div>
+  </div>
+
+  <div class="library-body">
+    <div class="library-header">
+      <div class="library-stats"><strong>24</strong> datasets · <strong>3</strong> mounted paths</div>
+      <select class="sort-select">
+        <option>Sort: Recent</option>
+      </select>
+    </div>
+
+    <div class="section-header">/tmp/hf-mounts/Phy-lab/dataset</div>
+    <div class="ds-grid">
+      <!-- Card 1: loaded -->
+      <div class="ds-card loaded">
+        <div class="ds-mount-dot"></div>
+        <div class="ds-robot">ur5e</div>
+        <div class="ds-name">aic_task_pick_01</div>
+        <div class="ds-path">/tmp/hf-mounts/.../aic_task_pick_01</div>
+        <div class="ds-stats">
+          <div class="ds-stat"><strong>142</strong> eps</div>
+          <div class="ds-stat"><strong>30</strong> fps</div>
+          <div class="ds-stat"><strong>3</strong> tasks</div>
+        </div>
+        <div class="ds-progress">
+          <div class="ds-progress-fill" style="width:65%;background:#89b4fa"></div>
+        </div>
+        <div class="ds-grade-row">
+          <div class="ds-grade-seg" style="flex:7;background:#a6e3a1"></div>
+          <div class="ds-grade-seg" style="flex:2;background:#f9e2af"></div>
+          <div class="ds-grade-seg" style="flex:1;background:#f38ba8"></div>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="ds-card">
+        <div class="ds-mount-dot"></div>
+        <div class="ds-robot">ur5e</div>
+        <div class="ds-name">aic_task_place_02</div>
+        <div class="ds-path">/tmp/hf-mounts/.../aic_task_place_02</div>
+        <div class="ds-stats">
+          <div class="ds-stat"><strong>89</strong> eps</div>
+          <div class="ds-stat"><strong>30</strong> fps</div>
+          <div class="ds-stat"><strong>2</strong> tasks</div>
+        </div>
+        <div class="ds-progress">
+          <div class="ds-progress-fill" style="width:30%;background:#89b4fa"></div>
+        </div>
+        <div class="ds-grade-row">
+          <div class="ds-grade-seg" style="flex:5;background:#a6e3a1"></div>
+          <div class="ds-grade-seg" style="flex:3;background:#f9e2af"></div>
+          <div class="ds-grade-seg" style="flex:2;background:#313244"></div>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="ds-card">
+        <div class="ds-mount-dot"></div>
+        <div class="ds-robot">so100</div>
+        <div class="ds-name">aic_task_grasp_03</div>
+        <div class="ds-path">/tmp/hf-mounts/.../aic_task_grasp_03</div>
+        <div class="ds-stats">
+          <div class="ds-stat"><strong>210</strong> eps</div>
+          <div class="ds-stat"><strong>60</strong> fps</div>
+          <div class="ds-stat"><strong>5</strong> tasks</div>
+        </div>
+        <div class="ds-progress">
+          <div class="ds-progress-fill" style="width:92%;background:#a6e3a1"></div>
+        </div>
+        <div class="ds-grade-row">
+          <div class="ds-grade-seg" style="flex:8;background:#a6e3a1"></div>
+          <div class="ds-grade-seg" style="flex:1;background:#f9e2af"></div>
+          <div class="ds-grade-seg" style="flex:1;background:#f38ba8"></div>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="ds-card">
+        <div class="ds-mount-dot"></div>
+        <div class="ds-robot">panda</div>
+        <div class="ds-name">aic_task_stack_04</div>
+        <div class="ds-path">/tmp/hf-mounts/.../aic_task_stack_04</div>
+        <div class="ds-stats">
+          <div class="ds-stat"><strong>55</strong> eps</div>
+          <div class="ds-stat"><strong>30</strong> fps</div>
+          <div class="ds-stat"><strong>1</strong> tasks</div>
+        </div>
+        <div class="ds-progress">
+          <div class="ds-progress-fill" style="width:0%;background:#89b4fa"></div>
+        </div>
+        <div class="ds-grade-row">
+          <div class="ds-grade-seg" style="flex:1;background:#313244"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-header">/data/datasets</div>
+    <div class="ds-grid">
+      <div class="ds-card">
+        <div class="ds-mount-dot" style="background:#6c7086"></div>
+        <div class="ds-robot">ur5e</div>
+        <div class="ds-name">exp_2025_v1</div>
+        <div class="ds-path">/data/datasets/exp_2025_v1</div>
+        <div class="ds-stats">
+          <div class="ds-stat"><strong>320</strong> eps</div>
+          <div class="ds-stat"><strong>30</strong> fps</div>
+        </div>
+        <div class="ds-progress">
+          <div class="ds-progress-fill" style="width:100%;background:#a6e3a1"></div>
+        </div>
+        <div class="ds-grade-row">
+          <div class="ds-grade-seg" style="flex:6;background:#a6e3a1"></div>
+          <div class="ds-grade-seg" style="flex:3;background:#f9e2af"></div>
+          <div class="ds-grade-seg" style="flex:1;background:#f38ba8"></div>
+        </div>
+      </div>
+
+      <div class="ds-card">
+        <div class="ds-mount-dot" style="background:#6c7086"></div>
+        <div class="ds-robot">so100</div>
+        <div class="ds-name">exp_2025_v2</div>
+        <div class="ds-path">/data/datasets/exp_2025_v2</div>
+        <div class="ds-stats">
+          <div class="ds-stat"><strong>180</strong> eps</div>
+          <div class="ds-stat"><strong>60</strong> fps</div>
+        </div>
+        <div class="ds-progress">
+          <div class="ds-progress-fill" style="width:45%;background:#89b4fa"></div>
+        </div>
+        <div class="ds-grade-row">
+          <div class="ds-grade-seg" style="flex:4;background:#a6e3a1"></div>
+          <div class="ds-grade-seg" style="flex:3;background:#f9e2af"></div>
+          <div class="ds-grade-seg" style="flex:3;background:#313244"></div>
+        </div>
+      </div>
+
+      <div class="ds-card" style="opacity:0.5;border-style:dashed">
+        <div style="font-size:10px;color:#45475a;text-align:center;padding:20px 0">+ 더 많은 데이터셋...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="background:#1e1e2e;border-radius:8px;padding:14px;margin-top:4px;font-size:11px;color:#6c7086;line-height:1.7">
+  <strong style="color:#cdd6f4">카드에 표시되는 정보:</strong><br>
+  로봇 타입 · 데이터셋 이름 · 마운트 경로 · 에피소드 수 / FPS / 태스크 수<br>
+  큐레이션 진행률 바 (파란색=진행중, 초록=완료) · grade 분포 세그먼트 바<br>
+  <span style="color:#a6adc8">마운트 경로별 섹션으로 그룹핑 · 로봇 타입 필터 · 이름 검색</span>
+</div>

@@ -1,0 +1,130 @@
+<h2>수정된 네비게이션 계층</h2>
+<p class="subtitle">3단계 구조 — 셀 선택 → 데이터셋 선택 → 작업</p>
+
+<style>
+  .flow-row { display: flex; align-items: flex-start; gap: 0; margin: 20px 0; }
+  .level { flex: 1; }
+  .level-header { font-size: 10px; color: #6c7086; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 12px; background: #181825; border-bottom: 1px solid #313244; border-radius: 6px 6px 0 0; }
+  .level-body { border: 1px solid #313244; border-top: none; border-radius: 0 0 6px 6px; background: #11111b; padding: 8px; min-height: 160px; }
+  .arrow { display: flex; align-items: center; padding: 0 8px; font-size: 18px; color: #45475a; margin-top: 60px; }
+
+  .cell-card { background: #1e1e2e; border: 1px solid #313244; border-radius: 6px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; }
+  .cell-card.active { border-color: #89b4fa55; background: #89b4fa08; }
+  .cell-name { font-size: 12px; font-weight: 700; color: #cdd6f4; font-family: monospace; }
+  .cell-sub { font-size: 10px; color: #6c7086; margin-top: 2px; }
+  .cell-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #a6e3a1; margin-right: 4px; }
+  .cell-dot.idle { background: #6c7086; }
+
+  .ds-item { background: #1e1e2e; border: 1px solid #313244; border-radius: 6px; padding: 8px 10px; margin-bottom: 5px; cursor: pointer; }
+  .ds-item.active { border-color: #cba6f755; background: #cba6f708; }
+  .ds-item-name { font-size: 11px; font-weight: 600; color: #cdd6f4; }
+  .ds-item-meta { font-size: 10px; color: #6c7086; margin-top: 2px; display: flex; gap: 8px; }
+  .ds-prog { background: #313244; border-radius: 2px; height: 2px; margin-top: 5px; }
+  .ds-prog-fill { height: 2px; border-radius: 2px; }
+
+  .tab-list { display: flex; flex-direction: column; gap: 4px; }
+  .tab-item { background: #1e1e2e; border: 1px solid #313244; border-radius: 6px; padding: 8px 12px; }
+  .tab-item.active { border-color: #cba6f755; }
+  .tab-name { font-size: 11px; font-weight: 600; color: #cdd6f4; margin-bottom: 2px; }
+  .tab-desc { font-size: 10px; color: #6c7086; }
+  .tab-badge { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 10px; margin-left: 6px; }
+  .badge-new { background: #a6e3a110; color: #a6e3a1; border: 1px solid #a6e3a130; }
+  .badge-keep { background: #89b4fa10; color: #89b4fa; border: 1px solid #89b4fa30; }
+
+  /* Breadcrumb */
+  .breadcrumb { background: #181825; border: 1px solid #313244; border-radius: 6px; padding: 6px 12px; font-size: 11px; color: #45475a; margin-bottom: 20px; font-family: monospace; }
+  .breadcrumb span { color: #89b4fa; }
+  .breadcrumb .sep { color: #45475a; margin: 0 6px; }
+</style>
+
+<div class="breadcrumb">
+  Library <span class="sep">/</span> <span>cell002</span> <span class="sep">/</span> <span>aic_task_pick_01</span> <span class="sep">/</span> <span>Overview</span>
+</div>
+
+<div class="flow-row">
+  <!-- Level 1: Cells -->
+  <div class="level">
+    <div class="level-header">Level 1 — Cell</div>
+    <div class="level-body">
+      <div class="cell-card">
+        <div class="cell-name"><span class="cell-dot"></span>cell001</div>
+        <div class="cell-sub">ur5e · 8 datasets · 활성</div>
+      </div>
+      <div class="cell-card active">
+        <div class="cell-name"><span class="cell-dot"></span>cell002</div>
+        <div class="cell-sub">so100 · 6 datasets · 활성</div>
+      </div>
+      <div class="cell-card">
+        <div class="cell-name"><span class="cell-dot idle"></span>cell003</div>
+        <div class="cell-sub">panda · 4 datasets · 유휴</div>
+      </div>
+      <div class="cell-card">
+        <div class="cell-name"><span class="cell-dot idle"></span>cell004</div>
+        <div class="cell-sub">ur5e · 6 datasets · 유휴</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">→</div>
+
+  <!-- Level 2: Datasets in cell -->
+  <div class="level">
+    <div class="level-header">Level 2 — cell002 내 데이터셋</div>
+    <div class="level-body">
+      <div class="ds-item active">
+        <div class="ds-item-name">aic_task_pick_01</div>
+        <div class="ds-item-meta"><span>142 eps</span><span>30fps</span><span>65% graded</span></div>
+        <div class="ds-prog"><div class="ds-prog-fill" style="width:65%;background:#89b4fa"></div></div>
+      </div>
+      <div class="ds-item">
+        <div class="ds-item-name">aic_task_pick_02</div>
+        <div class="ds-item-meta"><span>89 eps</span><span>30fps</span><span>30% graded</span></div>
+        <div class="ds-prog"><div class="ds-prog-fill" style="width:30%;background:#89b4fa"></div></div>
+      </div>
+      <div class="ds-item">
+        <div class="ds-item-name">aic_task_place_01</div>
+        <div class="ds-item-meta"><span>210 eps</span><span>60fps</span><span>100% graded</span></div>
+        <div class="ds-prog"><div class="ds-prog-fill" style="width:100%;background:#a6e3a1"></div></div>
+      </div>
+      <div class="ds-item">
+        <div class="ds-item-name">aic_task_place_02</div>
+        <div class="ds-item-meta"><span>55 eps</span><span>30fps</span><span>미시작</span></div>
+        <div class="ds-prog"><div class="ds-prog-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">→</div>
+
+  <!-- Level 3: Dataset tabs -->
+  <div class="level">
+    <div class="level-header">Level 3 — aic_task_pick_01</div>
+    <div class="level-body">
+      <div class="tab-list">
+        <div class="tab-item active">
+          <div class="tab-name">Overview <span class="tab-badge badge-new">신규</span></div>
+          <div class="tab-desc">필드 선택 → 분포 차트</div>
+        </div>
+        <div class="tab-item">
+          <div class="tab-name">Curate <span class="tab-badge badge-keep">유지</span></div>
+          <div class="tab-desc">에피소드 그레이딩 + 비디오</div>
+        </div>
+        <div class="tab-item">
+          <div class="tab-name">Fields <span class="tab-badge badge-new">신규</span></div>
+          <div class="tab-desc">info.json + parquet 컬럼 추가</div>
+        </div>
+        <div class="tab-item">
+          <div class="tab-name">Ops <span class="tab-badge badge-keep">유지</span></div>
+          <div class="tab-desc">Split / Merge / Export</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="background:#1e1e2e;border-radius:8px;padding:14px;font-size:11px;color:#6c7086;line-height:1.8;margin-top:8px">
+  <strong style="color:#cdd6f4">백엔드 변경사항:</strong><br>
+  • <code style="color:#89b4fa">/api/datasets/list</code> 응답에 <code>cell</code> 필드 추가 — 마운트 경로에서 cell 이름 파싱<br>
+  • 또는 config의 <code>allowed_dataset_roots</code> 에 cell 경로를 명시적으로 설정 가능<br>
+  <strong style="color:#cdd6f4">질문:</strong> cell 이름은 <strong>마운트 경로에서 자동 파싱</strong>되나요, 아니면 <strong>config에 수동 정의</strong>하나요?
+</div>

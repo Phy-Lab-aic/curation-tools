@@ -34,6 +34,8 @@ async def list_cameras(episode_index: int):
                 "key": vkey,
                 "label": vkey.replace("observation.images.", "").replace("observation.image.", ""),
                 "url": f"/api/videos/{episode_index}/stream/{vkey}",
+                "from_timestamp": vid_info.get("from_timestamp", 0.0),
+                "to_timestamp": vid_info.get("to_timestamp"),
             })
     return cameras
 

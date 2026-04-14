@@ -153,12 +153,12 @@
 }
 
 /* Grade colors — source of truth for values is frontend/src/types/index.ts (GRADE_COLORS) */
-.grade-Good { color: #a6e3a1; border-color: #1e3a2e; }
-.grade-Good.active { border-color: #a6e3a1; background: #1a2e22; }
-.grade-Normal { color: #f9e2af; border-color: #3a3420; }
-.grade-Normal.active { border-color: #f9e2af; background: #2e2a14; }
-.grade-Bad { color: #f38ba8; border-color: #3a1e26; }
-.grade-Bad.active { border-color: #f38ba8; background: #2e1420; }
+.grade-good { color: #a6e3a1; border-color: #1e3a2e; }
+.grade-good.active { border-color: #a6e3a1; background: #1a2e22; }
+.grade-normal { color: #f9e2af; border-color: #3a3420; }
+.grade-normal.active { border-color: #f9e2af; background: #2e2a14; }
+.grade-bad { color: #f38ba8; border-color: #3a1e26; }
+.grade-bad.active { border-color: #f38ba8; background: #2e1420; }
 
 .nav-hint {
   margin-left: auto;
@@ -178,6 +178,62 @@
   background: #1e1e1e;
   border: 1px solid #333;
   border-radius: 3px;
+}
+
+/* ===== Terminal Frames Bar ===== */
+.terminal-frames-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: #121212;
+  border-top: 1px solid #2a2a2a;
+  flex-shrink: 0;
+}
+
+.terminal-frames-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #f38ba8;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.terminal-frames-list {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  flex: 1;
+}
+
+.terminal-frame-btn {
+  background: #1e1e1e;
+  border: 1px solid #3a1e26;
+  color: #ccc;
+  font-size: 11px;
+  font-family: monospace;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+
+.terminal-frame-btn:hover {
+  background: #2e1420;
+  border-color: #f38ba8;
+  color: #f38ba8;
+}
+
+.terminal-frame-btn.active {
+  background: #2e1420;
+  border-color: #f38ba8;
+  color: #f38ba8;
+  font-weight: 700;
+  box-shadow: 0 0 6px rgba(243, 139, 168, 0.3);
 }
 
 /* ===== Scrollbar ===== */

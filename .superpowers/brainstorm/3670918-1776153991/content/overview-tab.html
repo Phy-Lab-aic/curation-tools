@@ -1,0 +1,260 @@
+<h2>Overview 탭 — 분포 시각화</h2>
+<p class="subtitle">섹션 3 / 5 · 사용자가 필드를 선택해 차트 생성</p>
+
+<style>
+  .mockup { background: #11111b; border-radius: 10px; border: 1px solid #313244; overflow: hidden; margin: 16px 0; }
+
+  /* Tab bar */
+  .tab-bar { display: flex; background: #181825; border-bottom: 1px solid #313244; }
+  .tab { padding: 8px 16px; font-size: 11px; color: #6c7086; border-right: 1px solid #313244; cursor: default; }
+  .tab.active { color: #89b4fa; border-bottom: 2px solid #89b4fa; background: #11111b; }
+
+  /* Overview layout */
+  .ov-layout { display: flex; height: 340px; }
+
+  /* Left: field picker */
+  .field-picker { width: 200px; background: #181825; border-right: 1px solid #313244; padding: 10px; overflow-y: auto; flex-shrink: 0; }
+  .picker-section { margin-bottom: 12px; }
+  .picker-title { font-size: 9px; color: #45475a; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .field-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 4px; cursor: pointer; margin-bottom: 2px; }
+  .field-item:hover { background: #1e1e2e; }
+  .field-item.checked { background: #1e1e2e; }
+  .field-check { width: 12px; height: 12px; border: 1px solid #45475a; border-radius: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .field-check.on { background: #89b4fa; border-color: #89b4fa; }
+  .field-check.on::after { content: "✓"; font-size: 8px; color: #11111b; }
+  .field-name { font-size: 10px; color: #a6adc8; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .field-type { font-size: 9px; color: #45475a; margin-left: auto; flex-shrink: 0; }
+
+  .add-chart-btn { width: 100%; background: #89b4fa; border: none; border-radius: 4px; color: #11111b; font-size: 10px; font-weight: 700; padding: 6px; cursor: pointer; margin-top: 8px; }
+
+  /* Right: chart area */
+  .chart-area { flex: 1; padding: 12px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start; }
+  .chart-card { background: #1e1e2e; border: 1px solid #313244; border-radius: 8px; padding: 10px; }
+  .chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .chart-title { font-size: 11px; font-weight: 600; color: #cdd6f4; }
+  .chart-field { font-size: 9px; color: #45475a; font-family: monospace; margin-top: 1px; }
+  .chart-type-sel { font-size: 9px; color: #6c7086; background: #11111b; border: 1px solid #313244; border-radius: 3px; padding: 1px 5px; }
+
+  /* Histogram bars */
+  .histogram { display: flex; align-items: flex-end; gap: 3px; height: 60px; padding: 4px 0; }
+  .hbar { border-radius: 2px 2px 0 0; flex: 1; transition: opacity 0.2s; }
+  .hbar:hover { opacity: 0.8; }
+  .x-axis { display: flex; justify-content: space-between; font-size: 8px; color: #45475a; margin-top: 3px; }
+  .chart-stat { display: flex; gap: 10px; margin-top: 6px; font-size: 9px; color: #6c7086; }
+  .chart-stat strong { color: #a6adc8; }
+
+  /* Pie / donut */
+  .donut-wrap { display: flex; align-items: center; gap: 12px; }
+  .donut { width: 64px; height: 64px; border-radius: 50%; background: conic-gradient(#a6e3a1 0deg 189deg, #f9e2af 189deg 261deg, #f38ba8 261deg 306deg, #45475a 306deg 360deg); flex-shrink: 0; }
+  .donut-inner { position: relative; }
+  .donut-hole { width: 30px; height: 30px; background: #1e1e2e; border-radius: 50%; position: absolute; top: 17px; left: 17px; }
+  .legend-list { display: flex; flex-direction: column; gap: 4px; }
+  .legend-row { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #a6adc8; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .legend-pct { margin-left: auto; color: #6c7086; font-family: monospace; font-size: 10px; }
+
+  /* Empty chart slot */
+  .chart-empty { background: #181825; border: 1px dashed #313244; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #45475a; cursor: pointer; min-height: 100px; }
+
+  /* Loading state indicator */
+  .loading-bar { height: 2px; background: linear-gradient(90deg, transparent, #89b4fa, transparent); border-radius: 1px; margin-bottom: 8px; animation: shimmer 1.5s infinite; }
+  @keyframes shimmer { 0%{background-position:-200px} 100%{background-position:200px} }
+</style>
+
+<div class="mockup">
+  <div class="tab-bar">
+    <div class="tab active">Overview</div>
+    <div class="tab">Curate</div>
+    <div class="tab">Fields</div>
+    <div class="tab">Ops</div>
+  </div>
+
+  <div class="ov-layout">
+    <!-- Left: Field picker -->
+    <div class="field-picker">
+      <div class="picker-section">
+        <div class="picker-title">메타데이터</div>
+        <div class="field-item checked">
+          <div class="field-check on"></div>
+          <div class="field-name">episode_length</div>
+          <div class="field-type">int</div>
+        </div>
+        <div class="field-item checked">
+          <div class="field-check on"></div>
+          <div class="field-name">grade</div>
+          <div class="field-type">str</div>
+        </div>
+        <div class="field-item checked">
+          <div class="field-check on"></div>
+          <div class="field-name">task_index</div>
+          <div class="field-type">int</div>
+        </div>
+        <div class="field-item">
+          <div class="field-check"></div>
+          <div class="field-name">tags</div>
+          <div class="field-type">list</div>
+        </div>
+      </div>
+
+      <div class="picker-section">
+        <div class="picker-title">Parquet 데이터</div>
+        <div class="field-item">
+          <div class="field-check"></div>
+          <div class="field-name">action.0</div>
+          <div class="field-type">f32</div>
+        </div>
+        <div class="field-item">
+          <div class="field-check"></div>
+          <div class="field-name">action.1</div>
+          <div class="field-type">f32</div>
+        </div>
+        <div class="field-item">
+          <div class="field-check"></div>
+          <div class="field-name">obs.state.0</div>
+          <div class="field-type">f32</div>
+        </div>
+        <div class="field-item">
+          <div class="field-check"></div>
+          <div class="field-name">obs.state.1</div>
+          <div class="field-type">f32</div>
+        </div>
+        <div class="field-item">
+          <div class="field-check"></div>
+          <div class="field-name">obs.state.2</div>
+          <div class="field-type">f32</div>
+        </div>
+        <div class="field-item">
+          <div class="field-check"></div>
+          <div class="field-name">timestamp</div>
+          <div class="field-type">f64</div>
+        </div>
+      </div>
+
+      <div class="picker-section">
+        <div class="picker-title">커스텀 필드</div>
+        <div class="field-item">
+          <div class="field-check"></div>
+          <div class="field-name">difficulty</div>
+          <div class="field-type">str</div>
+        </div>
+        <div class="field-item">
+          <div class="field-check"></div>
+          <div class="field-name">operator</div>
+          <div class="field-type">str</div>
+        </div>
+      </div>
+
+      <button class="add-chart-btn">+ 차트 추가</button>
+    </div>
+
+    <!-- Right: Charts -->
+    <div class="chart-area">
+
+      <!-- Chart 1: Episode length histogram -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Episode Length</div>
+            <div class="chart-field">episode_length (int)</div>
+          </div>
+          <select class="chart-type-sel"><option>Histogram</option></select>
+        </div>
+        <div class="histogram">
+          <div class="hbar" style="height:20%;background:#89b4fa88"></div>
+          <div class="hbar" style="height:45%;background:#89b4fa"></div>
+          <div class="hbar" style="height:85%;background:#89b4fa"></div>
+          <div class="hbar" style="height:100%;background:#89b4fa"></div>
+          <div class="hbar" style="height:72%;background:#89b4fa"></div>
+          <div class="hbar" style="height:48%;background:#89b4fa88"></div>
+          <div class="hbar" style="height:25%;background:#89b4fa88"></div>
+          <div class="hbar" style="height:10%;background:#89b4fa44"></div>
+        </div>
+        <div class="x-axis">
+          <span>50</span><span>100</span><span>200</span><span>400</span><span>800+</span>
+        </div>
+        <div class="chart-stat">
+          <span>mean <strong>218</strong></span>
+          <span>min <strong>52</strong></span>
+          <span>max <strong>841</strong></span>
+        </div>
+      </div>
+
+      <!-- Chart 2: Grade distribution pie -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Grade Distribution</div>
+            <div class="chart-field">grade (str)</div>
+          </div>
+          <select class="chart-type-sel"><option>Donut</option></select>
+        </div>
+        <div class="donut-wrap">
+          <div class="donut-inner">
+            <div class="donut"></div>
+            <div class="donut-hole"></div>
+          </div>
+          <div class="legend-list">
+            <div class="legend-row">
+              <div class="legend-dot" style="background:#a6e3a1"></div>
+              good
+              <span class="legend-pct">52.5%</span>
+            </div>
+            <div class="legend-row">
+              <div class="legend-dot" style="background:#f9e2af"></div>
+              normal
+              <span class="legend-pct">20.0%</span>
+            </div>
+            <div class="legend-row">
+              <div class="legend-dot" style="background:#f38ba8"></div>
+              bad
+              <span class="legend-pct">12.5%</span>
+            </div>
+            <div class="legend-row">
+              <div class="legend-dot" style="background:#45475a"></div>
+              ungraded
+              <span class="legend-pct">15.0%</span>
+            </div>
+          </div>
+        </div>
+        <div class="chart-stat">
+          <span>total <strong>142</strong></span>
+          <span>graded <strong>120</strong></span>
+        </div>
+      </div>
+
+      <!-- Chart 3: Task distribution bar -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Task Distribution</div>
+            <div class="chart-field">task_index (int)</div>
+          </div>
+          <select class="chart-type-sel"><option>Bar</option></select>
+        </div>
+        <div class="histogram">
+          <div class="hbar" style="height:100%;background:#cba6f7"></div>
+          <div class="hbar" style="height:65%;background:#cba6f7"></div>
+          <div class="hbar" style="height:40%;background:#cba6f7"></div>
+        </div>
+        <div class="x-axis">
+          <span>task_0</span><span>task_1</span><span>task_2</span>
+        </div>
+        <div class="chart-stat">
+          <span>task_0 <strong>72</strong></span>
+          <span>task_1 <strong>46</strong></span>
+          <span>task_2 <strong>24</strong></span>
+        </div>
+      </div>
+
+      <!-- Empty slot -->
+      <div class="chart-empty">+ 필드 선택 후 차트 추가</div>
+    </div>
+  </div>
+</div>
+
+<div style="background:#1e1e2e;border-radius:8px;padding:12px;font-size:11px;color:#6c7086;line-height:1.7;margin-top:4px">
+  <strong style="color:#cdd6f4">동작 방식:</strong>
+  왼쪽 패널에서 필드 체크 → "차트 추가" 클릭 → 백엔드가 해당 컬럼만 집계해서 반환<br>
+  <strong style="color:#cdd6f4">차트 유형:</strong> 필드 타입 따라 자동 추천 (int/float → histogram, str/category → donut/bar)<br>
+  <strong style="color:#cdd6f4">성능:</strong> 전체 parquet 로드 없이 선택된 컬럼만 읽음 (pyarrow column projection)
+</div>

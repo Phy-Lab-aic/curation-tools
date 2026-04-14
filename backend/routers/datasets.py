@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from backend.config import settings
 from backend.models.schemas import DatasetExportRequest, DatasetInfo, DatasetLoadRequest
@@ -10,15 +10,28 @@ from backend.services.export_service import export_dataset
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 
 
+def _default_scan_root() -> Path:
+    configured = Path(settings.dataset_path)
+    if configured.exists() and configured.is_dir():
+        return configured
+
+    for root in settings.allowed_dataset_roots:
+        candidate = Path(root)
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+
+    return configured
+
+
 @router.get("/list")
-async def list_datasets():
-    """Scan the configured dataset_path for valid LeRobot datasets (dirs with meta/info.json)."""
-    root = Path(settings.dataset_path)
-    if not root.exists() or not root.is_dir():
+async def list_datasets(root: str | None = Query(None, description="Root directory to scan for LeRobot datasets")):
+    """Scan the configured dataset root for valid LeRobot datasets (dirs with meta/info.json)."""
+    root_path = Path(root) if root else _default_scan_root()
+    if not root_path.exists() or not root_path.is_dir():
         return []
 
     datasets = []
-    for child in sorted(root.iterdir()):
+    for child in sorted(root_path.iterdir()):
         if child.is_dir() and (child / "meta" / "info.json").exists():
             datasets.append({"name": child.name, "path": str(child.resolve())})
     return datasets

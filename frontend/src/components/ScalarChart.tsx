@@ -6,11 +6,14 @@ interface ScalarData {
   num_frames: number
   observations: Record<string, number[]>
   actions: Record<string, number[]>
+  terminal_frames?: number[]
+  terminal_timestamps?: number[]
 }
 
 interface ScalarChartProps {
   episodeIndex: number | null
   currentFrame: number
+  onTerminalFrames?: (frames: number[], timestamps: number[]) => void
 }
 
 const COLORS = [
@@ -113,7 +116,7 @@ function MiniChart({ label, series, color, currentFrame, collapsed }: {
   )
 }
 
-export function ScalarChart({ episodeIndex, currentFrame }: ScalarChartProps) {
+export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: ScalarChartProps) {
   const [data, setData] = useState<ScalarData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -124,15 +127,23 @@ export function ScalarChart({ episodeIndex, currentFrame }: ScalarChartProps) {
     if (episodeIndex === null) {
       setData(null)
       setError(null)
+      onTerminalFrames?.([], [])
       return
     }
     setLoading(true)
     setError(null)
     client.get<ScalarData>(`/scalars/${episodeIndex}`)
-      .then(res => setData(res.data))
-      .catch(err => { setData(null); setError(err?.message || 'Failed to load scalar data') })
+      .then(res => {
+        setData(res.data)
+        onTerminalFrames?.(res.data.terminal_frames ?? [], res.data.terminal_timestamps ?? [])
+      })
+      .catch(err => {
+        setData(null)
+        setError(err?.message || 'Failed to load scalar data')
+        onTerminalFrames?.([], [])
+      })
       .finally(() => setLoading(false))
-  }, [episodeIndex])
+  }, [episodeIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (episodeIndex === null) return null
 

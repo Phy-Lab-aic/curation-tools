@@ -1,0 +1,116 @@
+<h2>Grade UI — D 방향 개선안</h2>
+<p class="subtitle">미니멀 텍스트 기반 · 3가지 변형</p>
+
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --panel: #161616;
+    --panel2: #1c1c1c;
+    --border: #222;
+    --border2: #2a2a2a;
+    --text: #d9d9d9;
+    --text-muted: #555;
+    --text-dim: #333;
+    --accent: #ff9830;
+  }
+
+  .variants { display: flex; flex-direction: column; gap: 12px; margin: 20px 0; }
+
+  .variant { background: var(--panel); border: 2px solid var(--border); border-radius: 10px; overflow: hidden; cursor: pointer; transition: border-color 0.15s; }
+  .variant:hover { border-color: #444; }
+  .variant.selected { border-color: var(--accent); }
+  .variant-label { padding: 7px 14px; border-bottom: 1px solid var(--border); font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; background: #111; display: flex; justify-content: space-between; }
+  .variant-body { padding: 0; }
+
+  /* Simulate video bottom area */
+  .video-stub { background: #0a0a0a; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--text-dim); }
+  .scrub { height: 2px; background: var(--border2); margin: 0; position: relative; }
+  .scrub-fill { height: 2px; background: var(--accent); width: 35%; }
+
+  /* D1: 언더라인 탭 */
+  .d1-bar { background: #111; padding: 10px 16px; display: flex; align-items: center; gap: 0; border-top: 1px solid var(--border); }
+  .d1-btn { padding: 6px 20px; font-size: 12px; font-weight: 500; color: var(--text-dim); cursor: default; border-bottom: 2px solid transparent; letter-spacing: 0.02em; }
+  .d1-btn.active { color: var(--text); border-bottom-color: var(--text); }
+  .d1-hint { margin-left: auto; font-size: 9px; color: var(--text-dim); display: flex; gap: 3px; }
+  kbd { background: #1c1c1c; border: 1px solid #2a2a2a; border-radius: 2px; padding: 1px 5px; font-size: 9px; color: var(--text-muted); font-family: monospace; }
+
+  /* D2: 상태 디스플레이 */
+  .d2-bar { background: #111; padding: 10px 16px; display: flex; align-items: center; gap: 16px; border-top: 1px solid var(--border); }
+  .d2-current { display: flex; align-items: baseline; gap: 8px; }
+  .d2-label { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+  .d2-value { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+  .d2-sep { width: 1px; height: 24px; background: var(--border2); }
+  .d2-options { display: flex; gap: 2px; }
+  .d2-opt { font-size: 11px; color: var(--text-dim); padding: 4px 10px; border-radius: 3px; cursor: default; }
+  .d2-opt:hover { color: var(--text-muted); }
+  .d2-opt.active { color: var(--text); background: var(--panel2); }
+  .d2-kbd { margin-left: auto; display: flex; gap: 3px; }
+
+  /* D3: 슬래시 구분자 */
+  .d3-bar { background: #111; padding: 10px 16px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border); }
+  .d3-row { display: flex; align-items: center; gap: 0; font-size: 12px; }
+  .d3-item { color: var(--text-dim); cursor: default; padding: 4px 12px; font-weight: 500; }
+  .d3-item.active { color: var(--text); font-weight: 700; }
+  .d3-sep-char { color: var(--text-dim); font-size: 10px; }
+  .d3-hint { margin-left: auto; font-size: 9px; color: var(--text-dim); display: flex; gap: 3px; align-items: center; }
+</style>
+
+<div class="variants">
+
+  <!-- D1: 언더라인 탭 -->
+  <div class="option variant" data-choice="d1" onclick="toggleSelect(this)">
+    <div class="variant-label">D1 — 언더라인 탭 <span>활성 상태 = 흰색 밑줄만</span></div>
+    <div class="variant-body">
+      <div class="video-stub">▶ video</div>
+      <div class="scrub"><div class="scrub-fill"></div></div>
+      <div class="d1-bar">
+        <div class="d1-btn active">good</div>
+        <div class="d1-btn">normal</div>
+        <div class="d1-btn">bad</div>
+        <div class="d1-hint"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D2: 상태 디스플레이 -->
+  <div class="option variant" data-choice="d2" onclick="toggleSelect(this)">
+    <div class="variant-label">D2 — 상태 디스플레이 <span>현재 등급을 크게, 변경은 옆 옵션 클릭</span></div>
+    <div class="variant-body">
+      <div class="video-stub">▶ video</div>
+      <div class="scrub"><div class="scrub-fill"></div></div>
+      <div class="d2-bar">
+        <div class="d2-current">
+          <span class="d2-label">grade</span>
+          <span class="d2-value">good</span>
+        </div>
+        <div class="d2-sep"></div>
+        <div class="d2-options">
+          <div class="d2-opt active">good</div>
+          <div class="d2-opt">normal</div>
+          <div class="d2-opt">bad</div>
+        </div>
+        <div class="d2-kbd"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D3: 슬래시 구분자 -->
+  <div class="option variant" data-choice="d3" onclick="toggleSelect(this)">
+    <div class="variant-label">D3 — 슬래시 구분 <span>활성 = 굵고 밝게, 나머지는 어둡게</span></div>
+    <div class="variant-body">
+      <div class="video-stub">▶ video</div>
+      <div class="scrub"><div class="scrub-fill"></div></div>
+      <div class="d3-bar">
+        <div class="d3-row">
+          <div class="d3-item active">good</div>
+          <span class="d3-sep-char">/</span>
+          <div class="d3-item">normal</div>
+          <span class="d3-sep-char">/</span>
+          <div class="d3-item">bad</div>
+        </div>
+        <div class="d3-hint"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> · <kbd>↑↓</kbd> nav</div>
+      </div>
+    </div>
+  </div>
+
+</div>

@@ -32,6 +32,9 @@ markers = [
 ]
 addopts = "-m 'not e2e'"
 
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
 [build-system]
 requires = ["hatchling"]
-build-backend = "hatchling.backends"
+build-backend = "hatchling.build"

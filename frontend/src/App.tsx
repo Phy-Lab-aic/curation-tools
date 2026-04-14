@@ -5,27 +5,25 @@ import { EpisodeEditor } from './components/EpisodeEditor'
 import { TaskEditor } from './components/TaskEditor'
 import { VideoPlayer, type VideoPlayerHandle } from './components/VideoPlayer'
 import { ScalarChart } from './components/ScalarChart'
-import { HubSync } from './components/HubSync'
 import { SplitMergePanel } from './components/SplitMergePanel'
-import { ConversionPage } from './components/ConversionPage'
 import { useEpisodes } from './hooks/useEpisodes'
 import { GRADES } from './types'
 import type { DatasetInfo, Episode } from './types'
 import './App.css'
 
 const GRADE_KEYS: Record<string, string> = {
-  '1': 'Good', '2': 'Normal', '3': 'Bad',
+  '1': 'good', '2': 'normal', '3': 'bad',
 }
 
 type RightTab = 'details' | 'splitmerge'
-type PageType = 'conversion' | 'curation'
 
 export default function App() {
   const [dataset, setDataset] = useState<DatasetInfo | null>(null)
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null)
   const [currentFrame, setCurrentFrame] = useState(0)
+  const [terminalFrames, setTerminalFrames] = useState<number[]>([])
+  const [terminalTimestamps, setTerminalTimestamps] = useState<number[]>([])
   const [rightTab, setRightTab] = useState<RightTab>('details')
-  const [activePage, setActivePage] = useState<PageType>('conversion')
   const videoRef = useRef<VideoPlayerHandle>(null)
   const { episodes, loading: episodesLoading, error: episodesError, fetchEpisodes, updateEpisode } = useEpisodes()
 
@@ -37,6 +35,8 @@ export default function App() {
 
   const handleEpisodeSelect = useCallback((episode: Episode) => {
     setSelectedEpisode(episode)
+    setTerminalFrames([])
+    setTerminalTimestamps([])
   }, [])
 
   const handleSaveEpisode = useCallback(async (index: number, grade: string | null, tags: string[]) => {
@@ -122,50 +122,31 @@ export default function App() {
 
   return (
     <div className="app-root">
-      <nav className="page-tab-bar">
-        <button
-          className={`page-tab ${activePage === 'conversion' ? 'active' : ''}`}
-          onClick={() => setActivePage('conversion')}
-        >
-          Conversion
-        </button>
-        <button
-          className={`page-tab ${activePage === 'curation' ? 'active' : ''}`}
-          onClick={() => setActivePage('curation')}
-        >
-          Curation
-        </button>
-      </nav>
+      <div className="app-layout">
+        {/* Left sidebar */}
+        <aside className="sidebar">
+          <DatasetLoader onDatasetLoaded={handleDatasetLoaded} />
 
-      {activePage === 'conversion' ? (
-        <ConversionPage />
-      ) : (
-        <div className="app-layout">
-          {/* Left sidebar */}
-          <aside className="sidebar">
-            <DatasetLoader onDatasetLoaded={handleDatasetLoaded} />
-            <HubSync />
-
-            {dataset && (
-              <div className="progress-bar-container">
-                <div className="progress-info">
-                  <span className="progress-label">Progress</span>
-                  <span className="progress-count">{gradedCount} / {totalEpisodes}</span>
-                </div>
-                <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${progressPct}%` }} />
-                </div>
+          {dataset && (
+            <div className="progress-bar-container">
+              <div className="progress-info">
+                <span className="progress-label">Progress</span>
+                <span className="progress-count">{gradedCount} / {totalEpisodes}</span>
               </div>
-            )}
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${progressPct}%` }} />
+              </div>
+            </div>
+          )}
 
-            <EpisodeList
-              episodes={episodes}
-              loading={episodesLoading}
-              error={episodesError}
-              onEpisodeSelect={handleEpisodeSelect}
-              selectedIndex={selectedEpisode?.episode_index ?? null}
-            />
-          </aside>
+          <EpisodeList
+            episodes={episodes}
+            loading={episodesLoading}
+            error={episodesError}
+            onEpisodeSelect={handleEpisodeSelect}
+            selectedIndex={selectedEpisode?.episode_index ?? null}
+          />
+        </aside>
 
           {/* Center: video + grading overlay */}
           <main className="center-panel">
@@ -174,6 +155,7 @@ export default function App() {
               episodeIndex={selectedEpisode?.episode_index ?? null}
               fps={dataset?.fps ?? 30}
               onFrameChange={setCurrentFrame}
+              terminalFrames={terminalFrames}
             />
 
             {/* Quick grade bar below video */}
@@ -194,6 +176,32 @@ export default function App() {
                 <div className="nav-hint">
                   <kbd>&uarr;</kbd><kbd>&darr;</kbd> episode
                   <kbd>&larr;</kbd><kbd>&rarr;</kbd> frame
+                </div>
+              </div>
+            )}
+
+            {/* Terminal frames bar */}
+            {selectedEpisode && terminalFrames.length > 0 && (
+              <div className="terminal-frames-bar">
+                <span className="terminal-frames-label">Terminal ({terminalFrames.length}):</span>
+                <div className="terminal-frames-list">
+                  {terminalFrames.map((f, i) => {
+                    const ts = terminalTimestamps[i]
+                    const label = ts != null ? `${ts.toFixed(2)}s` : `f${f}`
+                    return (
+                      <button
+                        key={i}
+                        className={`terminal-frame-btn${currentFrame === f ? ' active' : ''}`}
+                        onClick={() => ts != null
+                          ? videoRef.current?.seekToTimestamp(ts)
+                          : videoRef.current?.seekToFrame(f)
+                        }
+                        title={`Frame ${f} @ ${ts?.toFixed(3) ?? '?'}s`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -231,6 +239,10 @@ export default function App() {
                 <ScalarChart
                   episodeIndex={selectedEpisode?.episode_index ?? null}
                   currentFrame={currentFrame}
+                  onTerminalFrames={(frames, timestamps) => {
+                    setTerminalFrames(frames)
+                    setTerminalTimestamps(timestamps)
+                  }}
                 />
               </>
             )}
@@ -241,8 +253,7 @@ export default function App() {
               </div>
             )}
           </aside>
-        </div>
-      )}
+      </div>
     </div>
   )
 }

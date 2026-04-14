@@ -3,15 +3,9 @@ import { useDataset } from '../hooks/useDataset'
 import client from '../api/client'
 import type { DatasetInfo } from '../types'
 
-interface MountDetail {
-  repo_id: string
-  mount_point: string
-  mounted_at: string
-}
-
-interface HubSyncStatus {
-  mount_details: Record<string, { mount_point: string; mounted_at: string }>
-  initialized: boolean
+interface ListedDataset {
+  name: string
+  path: string
 }
 
 interface DatasetLoaderProps {
@@ -19,29 +13,24 @@ interface DatasetLoaderProps {
 }
 
 export function DatasetLoader({ onDatasetLoaded }: DatasetLoaderProps) {
-  const [mountDetails, setMountDetails] = useState<MountDetail[]>([])
+  const [datasets, setDatasets] = useState<ListedDataset[]>([])
   const [listError, setListError] = useState<string | null>(null)
   const [manualPath, setManualPath] = useState('')
   const { dataset, loading, error, loadDataset } = useDataset()
 
-  const fetchMountedRepos = useCallback(async () => {
+  const fetchDatasets = useCallback(async () => {
     try {
-      const resp = await client.get<HubSyncStatus>('/hf-sync/status')
-      const details = Object.entries(resp.data.mount_details).map(([repo_id, d]) => ({
-        repo_id,
-        mount_point: d.mount_point,
-        mounted_at: d.mounted_at,
-      }))
-      setMountDetails(details)
+      const resp = await client.get<ListedDataset[]>('/datasets/list')
+      setDatasets(resp.data)
       setListError(null)
     } catch {
-      setListError('Failed to fetch mounted repos')
+      setListError('Failed to fetch datasets')
     }
   }, [])
 
   useEffect(() => {
-    void fetchMountedRepos()
-  }, [fetchMountedRepos])
+    void fetchDatasets()
+  }, [fetchDatasets])
 
   // Notify parent when dataset changes
   useEffect(() => {
@@ -50,14 +39,14 @@ export function DatasetLoader({ onDatasetLoaded }: DatasetLoaderProps) {
     }
   }, [dataset, onDatasetLoaded])
 
-  const handleSelect = async (detail: MountDetail) => {
-    await loadDataset(detail.mount_point)
+  const handleSelect = async (item: ListedDataset) => {
+    await loadDataset(item.path)
   }
 
   const handleManualLoad = async () => {
     if (!manualPath.trim()) return
     await loadDataset(manualPath.trim())
-    await fetchMountedRepos()
+    await fetchDatasets()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -72,7 +61,7 @@ export function DatasetLoader({ onDatasetLoaded }: DatasetLoaderProps) {
         <input
           style={styles.input}
           type="text"
-          placeholder="Dataset path or HF repo..."
+          placeholder="Local dataset path..."
           value={manualPath}
           onChange={e => setManualPath(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -90,32 +79,32 @@ export function DatasetLoader({ onDatasetLoaded }: DatasetLoaderProps) {
       {listError && <div style={styles.error}>{listError}</div>}
 
       <div className="conversion-repo-list">
-        {mountDetails.map(detail => {
-          const isSelected = dataset?.path === detail.mount_point
+        {datasets.map(item => {
+          const isSelected = dataset?.path === item.path
           return (
             <div
-              key={detail.repo_id}
+              key={item.path}
               className={`conversion-repo-item${isSelected ? ' selected' : ''}`}
               style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}
-              onClick={() => handleSelect(detail)}
+              onClick={() => handleSelect(item)}
             >
               <span className="conversion-repo-dot mounted" />
               <div>
-                <div className="conversion-repo-name">{detail.repo_id}</div>
-                <div className="conversion-repo-mount">{detail.mount_point}</div>
+                <div className="conversion-repo-name">{item.name}</div>
+                <div className="conversion-repo-mount">{item.path}</div>
               </div>
               {isSelected && <span className="conversion-repo-check">✓</span>}
             </div>
           )
         })}
-        {mountDetails.length === 0 && (
-          <div style={styles.message}>No mounted repos. Sync HF Hub below.</div>
+        {datasets.length === 0 && (
+          <div style={styles.message}>No datasets found in the configured root.</div>
         )}
         <div className="conversion-repo-create" onClick={() => {
-          const id = prompt('New repo_id (e.g. org/name):')
-          if (id?.trim()) setManualPath(id.trim())
+          const path = prompt('Dataset path:')
+          if (path?.trim()) setManualPath(path.trim())
         }}>
-          <span>+</span> Create new repository
+          <span>+</span> Enter dataset path
         </div>
       </div>
 

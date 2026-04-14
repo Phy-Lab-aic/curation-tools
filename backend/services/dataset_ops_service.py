@@ -1,8 +1,8 @@
 """Service for dataset split and merge operations using LeRobot dataset_tools.
 
-Wraps LeRobot's split_dataset and merge_datasets with async job tracking
-and provenance metadata. All blocking LeRobot operations run in a thread
-executor to avoid blocking the async event loop.
+Wraps LeRobot's split_dataset and merge_datasets with async job tracking.
+All blocking LeRobot operations run in a thread executor to avoid blocking
+the async event loop. Results are written to local paths only.
 """
 
 from __future__ import annotations
@@ -27,12 +27,11 @@ def _set_writable_cache() -> None:
 
 
 def _make_writable_mirror(source: Path) -> Path:
-    """Create a writable mirror of a read-only dataset using symlinks.
+    """Create a writable mirror of a dataset using symlinks.
 
     The datasets library creates .cache dirs next to parquet files.
-    FUSE mounts are read-only so this fails. We create a temp directory
-    that mirrors the structure with symlinks to actual files, allowing
-    .cache creation while reading the original data.
+    If the source is read-only this fails. We create a temp directory
+    that mirrors the structure with symlinks to actual files.
 
     Returns path to the writable mirror. Caller must clean up with shutil.rmtree().
     """
@@ -46,6 +45,7 @@ def _make_writable_mirror(source: Path) -> Path:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.symlink_to(item)
     return mirror
+
 
 logger = logging.getLogger(__name__)
 
@@ -80,24 +80,52 @@ class DatasetOpsService:
     # Public API
     # ------------------------------------------------------------------
 
+    async def delete_episodes(
+        self,
+        source_path: str | Path,
+        episode_ids: list[int],
+        output_dir: str | Path | None = None,
+    ) -> str:
+        """Queue a delete-episodes job. Returns the job ID."""
+        job = self._create_job("delete")
+        job_id = job["id"]
+
+        source = Path(source_path)
+        out_dir = Path(output_dir) if output_dir else None
+
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(
+            None,
+            self._run_delete,
+            job_id,
+            source,
+            episode_ids,
+            out_dir,
+        )
+        return job_id
+
     async def split_dataset(
         self,
         source_path: str | Path,
         episode_ids: list[int],
         target_name: str,
+        output_dir: str | Path | None = None,
     ) -> str:
         """Queue a split job. Returns the job ID."""
         job = self._create_job("split")
         job_id = job["id"]
+
+        source = Path(source_path)
+        out_dir = Path(output_dir) if output_dir else source.parent / target_name
 
         loop = asyncio.get_running_loop()
         loop.run_in_executor(
             None,
             self._run_split,
             job_id,
-            Path(source_path),
+            source,
             episode_ids,
-            target_name,
+            out_dir,
         )
         return job_id
 
@@ -128,19 +156,22 @@ class DatasetOpsService:
         self,
         source_paths: list[str | Path],
         target_name: str,
+        output_dir: str | Path | None = None,
     ) -> str:
         """Queue a merge job. Returns the job ID."""
         job = self._create_job("merge")
         job_id = job["id"]
 
-        resolved = [(Path(p)) for p in source_paths]
+        sources = [Path(p) for p in source_paths]
+        out_dir = Path(output_dir) if output_dir else sources[0].parent / target_name
+
         loop = asyncio.get_running_loop()
         loop.run_in_executor(
             None,
             self._run_merge,
             job_id,
-            resolved,
-            target_name,
+            sources,
+            out_dir,
         )
         return job_id
 
@@ -148,15 +179,71 @@ class DatasetOpsService:
     # Blocking workers (run in thread executor)
     # ------------------------------------------------------------------
 
+    def _run_delete(
+        self,
+        job_id: str,
+        source_path: Path,
+        episode_ids: list[int],
+        output_dir: Path | None,
+    ) -> None:
+        job = self._jobs[job_id]
+        job["status"] = "running"
+
+        try:
+            _set_writable_cache()
+            from lerobot.datasets.lerobot_dataset import LeRobotDataset
+            from lerobot.datasets.dataset_tools import delete_episodes
+
+            mirror = _make_writable_mirror(source_path)
+            try:
+                dataset = LeRobotDataset(repo_id=f"local/{source_path.name}", root=mirror)
+
+                if output_dir is not None:
+                    # Write to a separate output directory
+                    result_ds = delete_episodes(
+                        dataset,
+                        episode_indices=episode_ids,
+                        output_dir=output_dir,
+                        repo_id=f"local/{output_dir.name}",
+                    )
+                    result_path = output_dir
+                else:
+                    # Overwrite source in-place: write to temp, then replace
+                    tmp_parent = Path(tempfile.mkdtemp(prefix="delete-parent-"))
+                    tmp = tmp_parent / source_path.name
+                    # tmp doesn't exist yet — LeRobot will create it
+                    result_ds = delete_episodes(
+                        dataset,
+                        episode_indices=episode_ids,
+                        output_dir=tmp,
+                        repo_id=f"local/{source_path.name}",
+                    )
+                    # Replace source with result
+                    shutil.rmtree(source_path)
+                    shutil.copytree(str(tmp), str(source_path))
+                    shutil.rmtree(tmp_parent, ignore_errors=True)
+                    result_path = source_path
+            finally:
+                shutil.rmtree(mirror, ignore_errors=True)
+
+            job["status"] = "complete"
+            job["completed_at"] = datetime.now(timezone.utc).isoformat()
+            job["result_path"] = str(result_path)
+            logger.info("Delete job %s complete: %s", job_id, result_path)
+
+        except Exception as exc:
+            job["status"] = "failed"
+            job["completed_at"] = datetime.now(timezone.utc).isoformat()
+            job["error"] = str(exc)
+            logger.exception("Delete job %s failed", job_id)
+
     def _run_split(
         self,
         job_id: str,
         source_path: Path,
         episode_ids: list[int],
-        target_name: str,
+        output_path: Path,
     ) -> None:
-        from backend.config import settings
-
         job = self._jobs[job_id]
         job["status"] = "running"
         temp_dir: Path | None = None
@@ -166,36 +253,28 @@ class DatasetOpsService:
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
             from lerobot.datasets.dataset_tools import split_dataset
 
-            derived_root = Path(settings.derived_dataset_path).expanduser()
-            derived_root.mkdir(parents=True, exist_ok=True)
+            output_path.mkdir(parents=True, exist_ok=True)
+            temp_dir = Path(tempfile.mkdtemp(prefix="split-tmp-"))
 
-            temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-"))
-
-            # Build HF repo_id: {org}/{target_name}
-            repo_id = f"{settings.hf_org}/{target_name}"
-
-            source_repo_id = f"{settings.hf_org}/{source_path.name}"
             mirror = _make_writable_mirror(source_path)
             try:
-                dataset = LeRobotDataset(repo_id=source_repo_id, root=mirror)
+                dataset = LeRobotDataset(repo_id=f"local/{source_path.name}", root=mirror)
                 result = split_dataset(dataset, splits={"selected": episode_ids}, output_dir=temp_dir)
                 split_ds = result["selected"]
 
-                # Push to HF Hub — sync service will auto-detect and mount
-                split_ds.repo_id = repo_id
-                split_ds.push_to_hub(private=False)
-                logger.info("Pushed split result to HF Hub: %s", repo_id)
+                # Move result to output_path
+                shutil.copytree(str(temp_dir / "selected"), str(output_path), dirs_exist_ok=True)
+                logger.info("Split result written to: %s", output_path)
             finally:
                 shutil.rmtree(mirror, ignore_errors=True)
 
-            # Clean up temp dir
             shutil.rmtree(temp_dir, ignore_errors=True)
             temp_dir = None
 
             job["status"] = "complete"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
-            job["result_path"] = f"https://huggingface.co/datasets/{repo_id}"
-            logger.info("Split job %s complete: %s", job_id, repo_id)
+            job["result_path"] = str(output_path)
+            logger.info("Split job %s complete: %s", job_id, output_path)
 
         except Exception as exc:
             job["status"] = "failed"
@@ -209,10 +288,8 @@ class DatasetOpsService:
         self,
         job_id: str,
         source_paths: list[Path],
-        target_name: str,
+        output_path: Path,
     ) -> None:
-        from backend.config import settings
-
         job = self._jobs[job_id]
         job["status"] = "running"
         temp_dir: Path | None = None
@@ -222,12 +299,8 @@ class DatasetOpsService:
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
             from lerobot.datasets.dataset_tools import merge_datasets
 
-            derived_root = Path(settings.derived_dataset_path).expanduser()
-            derived_root.mkdir(parents=True, exist_ok=True)
-
-            repo_id = f"{settings.hf_org}/{target_name}"
-
-            temp_dir = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-"))
+            output_path.mkdir(parents=True, exist_ok=True)
+            temp_dir = Path(tempfile.mkdtemp(prefix="merge-tmp-"))
 
             mirrors = []
             try:
@@ -235,13 +308,13 @@ class DatasetOpsService:
                 for p in source_paths:
                     m = _make_writable_mirror(p)
                     mirrors.append(m)
-                    ds_list.append(LeRobotDataset(repo_id=f"{settings.hf_org}/{p.name}", root=m))
+                    ds_list.append(LeRobotDataset(repo_id=f"local/{p.name}", root=m))
 
+                repo_id = f"local/{output_path.name}"
                 merged_ds = merge_datasets(ds_list, output_repo_id=repo_id, output_dir=temp_dir)
 
-                # Push to HF Hub
-                merged_ds.push_to_hub(private=False)
-                logger.info("Pushed merged result to HF Hub: %s", repo_id)
+                shutil.copytree(str(temp_dir / output_path.name), str(output_path), dirs_exist_ok=True)
+                logger.info("Merge result written to: %s", output_path)
             finally:
                 for m in mirrors:
                     shutil.rmtree(m, ignore_errors=True)
@@ -251,8 +324,8 @@ class DatasetOpsService:
 
             job["status"] = "complete"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
-            job["result_path"] = f"https://huggingface.co/datasets/{repo_id}"
-            logger.info("Merge job %s complete: %s", job_id, repo_id)
+            job["result_path"] = str(output_path)
+            logger.info("Merge job %s complete: %s", job_id, output_path)
 
         except Exception as exc:
             job["status"] = "failed"
@@ -270,8 +343,6 @@ class DatasetOpsService:
         target_path: Path,
         target_name: str,
     ) -> None:
-        from backend.config import settings
-
         job = self._jobs[job_id]
         job["status"] = "running"
         split_tmp: Path | None = None
@@ -282,35 +353,29 @@ class DatasetOpsService:
             from lerobot.datasets.lerobot_dataset import LeRobotDataset
             from lerobot.datasets.dataset_tools import split_dataset, merge_datasets
 
-            derived_root = Path(settings.derived_dataset_path).expanduser()
-            derived_root.mkdir(parents=True, exist_ok=True)
-
-            # target_name should be the HF repo_id of the existing target (e.g. Phy-lab/changyong)
-            repo_id = target_name
-
-            # Step 1: Mirror read-only sources
             source_mirror = _make_writable_mirror(source_path)
             target_mirror = _make_writable_mirror(target_path)
             try:
-                # Step 2: Split selected episodes
-                split_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="split-tmp-"))
-                source_ds = LeRobotDataset(repo_id=f"{settings.hf_org}/{source_path.name}", root=source_mirror)
+                # Step 1: Split selected episodes
+                split_tmp = Path(tempfile.mkdtemp(prefix="split-tmp-"))
+                source_ds = LeRobotDataset(repo_id=f"local/{source_path.name}", root=source_mirror)
                 split_result = split_dataset(source_ds, splits={"selected": episode_ids}, output_dir=split_tmp)
                 split_ds = split_result["selected"]
 
-                # Step 3: Merge split result with existing target
-                merge_tmp = Path(tempfile.mkdtemp(dir=derived_root, prefix="merge-tmp-"))
-                target_ds = LeRobotDataset(repo_id=f"{settings.hf_org}/{target_path.name}", root=target_mirror)
+                # Step 2: Merge split result with existing target
+                merge_tmp = Path(tempfile.mkdtemp(prefix="merge-tmp-"))
+                target_ds = LeRobotDataset(repo_id=f"local/{target_path.name}", root=target_mirror)
+                repo_id = f"local/{target_name}"
                 merged_ds = merge_datasets([target_ds, split_ds], output_repo_id=repo_id, output_dir=merge_tmp)
 
-                # Step 4: Push merged result to HF Hub
-                merged_ds.push_to_hub(private=False)
-                logger.info("Pushed split-and-merge result to HF Hub: %s", repo_id)
+                # Step 3: Replace target in-place with merged result
+                merged_src = merge_tmp / target_name
+                shutil.copytree(str(merged_src), str(target_path), dirs_exist_ok=True)
+                logger.info("Split-and-merge result written to: %s", target_path)
             finally:
                 shutil.rmtree(source_mirror, ignore_errors=True)
                 shutil.rmtree(target_mirror, ignore_errors=True)
 
-            # Clean up temp dirs
             if split_tmp is not None and split_tmp.exists():
                 shutil.rmtree(split_tmp, ignore_errors=True)
             shutil.rmtree(merge_tmp, ignore_errors=True)
@@ -318,8 +383,8 @@ class DatasetOpsService:
 
             job["status"] = "complete"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
-            job["result_path"] = f"https://huggingface.co/datasets/{repo_id}"
-            logger.info("Split-and-merge job %s complete: %s", job_id, repo_id)
+            job["result_path"] = str(target_path)
+            logger.info("Split-and-merge job %s complete: %s", job_id, target_path)
 
         except Exception as exc:
             job["status"] = "failed"

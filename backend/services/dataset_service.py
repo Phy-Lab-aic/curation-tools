@@ -5,6 +5,8 @@ from glob import glob
 import pyarrow.parquet as pq
 import pyarrow as pa
 
+from backend.config import settings
+
 
 class DatasetService:
     """Singleton service for loading and caching a LeRobot v3.0 dataset."""
@@ -105,12 +107,16 @@ class DatasetService:
             for cam_key in camera_keys:
                 chunk_col = f"videos/{cam_key}/chunk_index"
                 file_col = f"videos/{cam_key}/file_index"
+                from_ts_col = f"videos/{cam_key}/from_timestamp"
+                to_ts_col = f"videos/{cam_key}/to_timestamp"
                 chunk_val = ep.get(chunk_col)
                 file_val = ep.get(file_col)
                 if chunk_val is not None or file_val is not None:
                     entry["videos"][cam_key] = {
                         "chunk_index": chunk_val,
                         "file_index": file_val,
+                        "from_timestamp": ep.get(from_ts_col),
+                        "to_timestamp": ep.get(to_ts_col),
                     }
             index[ep_idx] = entry
 
@@ -120,22 +126,19 @@ class DatasetService:
     # Public API
     # ------------------------------------------------------------------
 
+    def _is_path_allowed(self, root: Path) -> bool:
+        allowed_roots = [Path(p).resolve() for p in settings.allowed_dataset_roots]
+        return any(root.is_relative_to(allowed_root) for allowed_root in allowed_roots)
+
     def load_dataset(self, path: str | Path) -> None:
-        from backend.config import settings
-
         root = Path(path).resolve()
-
-        # Validate path is under an allowed root directory
-        allowed = [Path(r).resolve() for r in settings.allowed_dataset_roots]
-        if not any(root == base or base in root.parents for base in allowed):
-            raise ValueError(
-                f"Dataset path {root} is not under any allowed root: {allowed}"
-            )
 
         if not root.exists():
             raise FileNotFoundError(f"Dataset path does not exist: {root}")
         if not root.is_dir():
             raise ValueError(f"Dataset path is not a directory: {root}")
+        if not self._is_path_allowed(root):
+            raise ValueError(f"Dataset path is not under any allowed root: {root}")
 
         self._clear()
         self._info = self._load_info(root)

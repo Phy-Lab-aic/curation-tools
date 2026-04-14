@@ -6,20 +6,12 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
-from backend.config import settings
 from backend.services.dataset_ops_service import dataset_ops_service
 
 
 def _validate_path(path_str: str) -> Path:
-    """Validate that a path is under an allowed dataset root."""
-    resolved = Path(path_str).resolve()
-    allowed = [Path(r).resolve() for r in settings.allowed_dataset_roots]
-    if not any(resolved == root or root in resolved.parents for root in allowed):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Path not under allowed roots: {path_str}",
-        )
-    return resolved
+    """Resolve and return the path."""
+    return Path(path_str).resolve()
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +27,7 @@ class SplitRequest(BaseModel):
     source_path: str
     episode_ids: list[int]
     target_name: str
+    output_dir: str | None = None  # If omitted, sibling of source_path
 
     @field_validator("episode_ids")
     @classmethod
@@ -49,6 +42,20 @@ class SplitIntoRequest(BaseModel):
     episode_ids: list[int]
     target_name: str
     target_path: str | None = None  # If set, merge into this existing dataset
+    output_dir: str | None = None  # Used when target_path is None
+
+    @field_validator("episode_ids")
+    @classmethod
+    def episode_ids_nonempty(cls, v: list[int]) -> list[int]:
+        if not v:
+            raise ValueError("episode_ids must not be empty")
+        return v
+
+
+class DeleteRequest(BaseModel):
+    source_path: str
+    episode_ids: list[int]
+    output_dir: str | None = None  # If omitted, overwrites source in-place
 
     @field_validator("episode_ids")
     @classmethod
@@ -61,6 +68,7 @@ class SplitIntoRequest(BaseModel):
 class MergeRequest(BaseModel):
     source_paths: list[str]
     target_name: str
+    output_dir: str | None = None  # If omitted, sibling of first source_path
 
 
 class JobResponse(BaseModel):
@@ -95,6 +103,7 @@ async def split_dataset(req: SplitRequest):
         source_path=req.source_path,
         episode_ids=req.episode_ids,
         target_name=req.target_name,
+        output_dir=req.output_dir,
     )
     return JobResponse(job_id=job_id, operation="split", status="queued")
 
@@ -107,11 +116,12 @@ async def split_into_dataset(req: SplitIntoRequest):
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
 
     if req.target_path is None:
-        # New dataset mode — push directly to HF Hub
+        # New dataset mode — create new derived dataset
         job_id = await dataset_ops_service.split_dataset(
             source_path=req.source_path,
             episode_ids=req.episode_ids,
             target_name=req.target_name,
+            output_dir=req.output_dir,
         )
         return JobResponse(job_id=job_id, operation="split", status="queued")
     else:
@@ -139,8 +149,24 @@ async def merge_datasets(req: MergeRequest):
     job_id = await dataset_ops_service.merge_datasets(
         source_paths=req.source_paths,
         target_name=req.target_name,
+        output_dir=req.output_dir,
     )
     return JobResponse(job_id=job_id, operation="merge", status="queued")
+
+
+@router.post("/delete", response_model=JobResponse, status_code=202)
+async def delete_episodes(req: DeleteRequest):
+    """Delete specified episodes from a dataset, producing a new dataset."""
+    source = _validate_path(req.source_path)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
+
+    job_id = await dataset_ops_service.delete_episodes(
+        source_path=req.source_path,
+        episode_ids=req.episode_ids,
+        output_dir=req.output_dir,
+    )
+    return JobResponse(job_id=job_id, operation="delete", status="queued")
 
 
 @router.get("/ops/status/{job_id}", response_model=JobStatusResponse)

@@ -50,18 +50,40 @@ async def get_scalars(episode_index: int):
             action_columns.append(col)
 
     needed_columns = state_columns + action_columns
-    if not needed_columns:
+
+    # Find the first available terminal-frame flag column
+    _TERMINAL_FLAG_COLS = ["is_terminal", "is_last"]
+    flag_col = next((c for c in _TERMINAL_FLAG_COLS if c in all_columns), None)
+    ts_col = "timestamp" if "timestamp" in all_columns else None
+
+    if not needed_columns and not flag_col:
         return {
             "episode_index": episode_index,
             "num_frames": to_idx - from_idx,
             "observations": {},
             "actions": {},
+            "terminal_frames": [],
+            "terminal_timestamps": [],
         }
 
+    extra_cols = [c for c in [flag_col, ts_col] if c]
+    read_columns = needed_columns + extra_cols
+
     # Read only the scalar columns we need, then slice to the episode's frame range
-    table = await asyncio.to_thread(pq.read_table, data_path, columns=needed_columns)
+    table = await asyncio.to_thread(pq.read_table, data_path, columns=read_columns)
     table = table.slice(from_idx, to_idx - from_idx)
     df = table.to_pydict()
+
+    # Extract 0-based frame indices within the episode where the terminal flag is True
+    terminal_frames: list[int] = []
+    if flag_col and flag_col in df:
+        terminal_frames = [i for i, v in enumerate(df[flag_col]) if v]
+
+    # Map terminal frames to their actual timestamps
+    terminal_timestamps: list[float] = []
+    if terminal_frames and ts_col and ts_col in df:
+        timestamps = df[ts_col]
+        terminal_timestamps = [float(timestamps[i]) for i in terminal_frames]
 
     def extract_series(columns: list[str]) -> dict[str, list[float]]:
         result: dict[str, list[float]] = {}
@@ -92,4 +114,6 @@ async def get_scalars(episode_index: int):
         "num_frames": to_idx - from_idx,
         "observations": observations,
         "actions": actions,
+        "terminal_frames": terminal_frames,
+        "terminal_timestamps": terminal_timestamps,
     }

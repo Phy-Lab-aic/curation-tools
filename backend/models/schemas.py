@@ -36,7 +36,7 @@ class EpisodeUpdate(BaseModel):
     @field_validator("grade")
     @classmethod
     def validate_grade(cls, v: str | None) -> str | None:
-        if v is not None and v not in ("Good", "Normal", "Bad"):
+        if v is not None and v not in ("good", "normal", "bad"):
             raise ValueError("Grade must be one of: Good, Normal, Bad")
         return v
 
@@ -58,4 +58,4 @@ class DatasetLoadRequest(BaseModel):
 
 class DatasetExportRequest(BaseModel):
     output_path: str
-    exclude_grades: list[str] = ["Bad"]
+    exclude_grades: list[str] = ["bad"]

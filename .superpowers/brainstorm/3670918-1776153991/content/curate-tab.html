@@ -1,0 +1,308 @@
+<h2>Curate 탭 — 기존 큐레이션 페이지 리디자인</h2>
+<p class="subtitle">섹션 추가 · 순수 블랙 + 비비드 데이터 컬러 통일</p>
+
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --panel: #161616;
+    --panel2: #1c1c1c;
+    --border: #222;
+    --border2: #2a2a2a;
+    --text: #d9d9d9;
+    --text-muted: #555;
+    --text-dim: #333;
+    --accent: #ff9830;
+    --accent-dim: #ff983015;
+    --c-green: #73bf69;
+    --c-yellow: #fade2a;
+    --c-red: #f08080;
+    --c-blue: #5794f2;
+    --c-purple: #b877d9;
+  }
+
+  .mockup { background: var(--bg); border-radius: 10px; border: 1px solid var(--border); overflow: hidden; margin: 16px 0; font-size: 11px; }
+
+  /* Top nav - same as overview */
+  .top-nav { background: #111; border-bottom: 1px solid var(--border); padding: 0 16px; display: flex; align-items: stretch; height: 40px; }
+  .nav-logo { font-size: 13px; font-weight: 800; color: var(--text); letter-spacing: -0.04em; display: flex; align-items: center; margin-right: 20px; }
+  .nav-logo span { color: var(--accent); }
+  .nav-breadcrumb { display: flex; align-items: center; font-size: 11px; color: var(--text-muted); gap: 6px; flex: 1; }
+  .nav-breadcrumb em { color: #888; }
+  .nav-breadcrumb .sep { color: var(--text-dim); }
+  .nav-tabs { display: flex; }
+  .nav-tab { padding: 0 14px; font-size: 11px; color: var(--text-muted); display: flex; align-items: center; border-bottom: 2px solid transparent; }
+  .nav-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  /* 3-column layout */
+  .curate-body { display: flex; height: 380px; }
+
+  /* Left: episode list */
+  .ep-list { width: 200px; background: #111; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .ep-list-header { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .ep-list-title { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .ep-progress { font-size: 10px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .ep-search { background: var(--panel2); border: 1px solid var(--border2); border-radius: 3px; padding: 4px 8px; font-size: 10px; color: var(--text-muted); margin: 6px 8px; }
+  .ep-scroll { flex: 1; overflow-y: auto; }
+  .ep-item { padding: 6px 10px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid #1a1a1a; cursor: default; }
+  .ep-item:hover { background: var(--panel2); }
+  .ep-item.active { background: var(--accent-dim); border-left: 2px solid var(--accent); }
+  .ep-idx { font-size: 10px; color: var(--text-dim); font-variant-numeric: tabular-nums; width: 28px; flex-shrink: 0; font-family: monospace; }
+  .ep-len { font-size: 9px; color: var(--text-dim); margin-left: auto; font-family: monospace; }
+  .grade-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Center: video + grading */
+  .center { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
+  .video-area { flex: 1; background: #0a0a0a; display: flex; align-items: center; justify-content: center; position: relative; }
+  .video-placeholder { width: 100%; height: 100%; background: #0a0a0a; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 10px; }
+  .video-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 8px 12px; background: linear-gradient(transparent, #000000cc); display: flex; align-items: center; gap: 8px; }
+  .v-btn { background: none; border: 1px solid #333; border-radius: 3px; color: #888; font-size: 10px; padding: 2px 8px; cursor: default; }
+  .v-btn.primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700; }
+  .v-time { font-size: 10px; color: #555; font-family: monospace; margin-left: auto; }
+  .v-scrubber { height: 3px; background: #222; border-radius: 1px; margin: 0 12px; position: relative; }
+  .v-scrubber-fill { height: 3px; background: var(--accent); border-radius: 1px; width: 35%; }
+  .v-scrubber-head { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); position: absolute; top: -2.5px; left: 35%; }
+
+  /* Grade bar */
+  .grade-bar { background: #111; border-top: 1px solid var(--border); padding: 8px 12px; display: flex; align-items: center; gap: 8px; }
+  .grade-label { font-size: 10px; color: var(--text-muted); margin-right: 4px; }
+  .grade-btn { border-radius: 4px; padding: 5px 14px; font-size: 11px; font-weight: 700; cursor: default; border: 1px solid transparent; }
+  .grade-btn.good { background: #73bf6922; border-color: #73bf6944; color: var(--c-green); }
+  .grade-btn.good.active { background: var(--c-green); color: #000; }
+  .grade-btn.normal { background: #fade2a22; border-color: #fade2a44; color: var(--c-yellow); }
+  .grade-btn.bad { background: #f0808022; border-color: #f0808044; color: var(--c-red); }
+  .kbd-hint { margin-left: auto; font-size: 9px; color: var(--text-dim); }
+  kbd { background: var(--panel2); border: 1px solid var(--border2); border-radius: 2px; padding: 1px 4px; font-size: 9px; color: var(--text-muted); }
+
+  /* Right: scalar charts + episode info */
+  .right-panel { width: 220px; background: #111; border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+  .right-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .rtab { flex: 1; text-align: center; padding: 7px 0; font-size: 10px; color: var(--text-muted); border-bottom: 2px solid transparent; }
+  .rtab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  /* Episode info */
+  .ep-info { padding: 10px; border-bottom: 1px solid var(--border); }
+  .ep-info-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .ep-info-key { font-size: 10px; color: var(--text-muted); }
+  .ep-info-val { font-size: 10px; color: var(--text); font-family: monospace; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .tag { background: var(--panel2); border: 1px solid var(--border2); border-radius: 3px; padding: 2px 6px; font-size: 9px; color: var(--text-muted); }
+  .tag-add { color: var(--text-dim); border-style: dashed; }
+
+  /* Scalar charts */
+  .scalar-section { flex: 1; overflow-y: auto; }
+  .scalar-header { padding: 6px 10px; font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #1a1a1a; display: flex; justify-content: space-between; }
+  .scalar-item { padding: 4px 10px; border-bottom: 1px solid #1a1a1a; }
+  .scalar-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+  .scalar-name { font-size: 9px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
+  .scalar-val { font-size: 9px; color: var(--text-muted); font-family: monospace; }
+  .mini-chart { height: 22px; background: #0f0f0f; border-radius: 2px; position: relative; overflow: hidden; }
+  .mini-line { position: absolute; bottom: 3px; left: 0; right: 0; height: 1.5px; border-radius: 1px; }
+
+  /* Terminal frames */
+  .terminal-bar { background: var(--panel); border-top: 1px solid var(--border); padding: 5px 10px; display: flex; align-items: center; gap: 5px; }
+  .terminal-label { font-size: 9px; color: var(--text-dim); }
+  .terminal-chip { background: var(--panel2); border: 1px solid var(--border2); border-radius: 3px; padding: 2px 7px; font-size: 9px; color: #888; font-family: monospace; }
+  .terminal-chip.active { border-color: var(--accent); color: var(--accent); }
+</style>
+
+<div class="mockup">
+  <!-- Top nav (same as Overview) -->
+  <div class="top-nav">
+    <div class="nav-logo">robo<span>data</span></div>
+    <div class="nav-breadcrumb">
+      <span>Library</span><span class="sep">/</span>
+      <em>cell002</em><span class="sep">/</span>
+      <em>aic_task_pick_01</em>
+    </div>
+    <div class="nav-tabs">
+      <div class="nav-tab">Overview</div>
+      <div class="nav-tab active">Curate</div>
+      <div class="nav-tab">Fields</div>
+      <div class="nav-tab">Ops</div>
+    </div>
+  </div>
+
+  <div class="curate-body">
+    <!-- Left: episode list -->
+    <div class="ep-list">
+      <div class="ep-list-header">
+        <span class="ep-list-title">Episodes</span>
+        <span class="ep-progress">92 / 142</span>
+      </div>
+      <div class="ep-search">Filter episodes...</div>
+      <div class="ep-scroll">
+        <div class="ep-item">
+          <div class="grade-dot" style="background:var(--c-green)"></div>
+          <span class="ep-idx">ep_000</span>
+          <span class="ep-len">218f</span>
+        </div>
+        <div class="ep-item active">
+          <div class="grade-dot" style="background:var(--c-green)"></div>
+          <span class="ep-idx" style="color:var(--accent)">ep_001</span>
+          <span class="ep-len" style="color:var(--text-muted)">342f</span>
+        </div>
+        <div class="ep-item">
+          <div class="grade-dot" style="background:var(--c-yellow)"></div>
+          <span class="ep-idx">ep_002</span>
+          <span class="ep-len">156f</span>
+        </div>
+        <div class="ep-item">
+          <div class="grade-dot" style="background:var(--text-dim)"></div>
+          <span class="ep-idx">ep_003</span>
+          <span class="ep-len">291f</span>
+        </div>
+        <div class="ep-item">
+          <div class="grade-dot" style="background:var(--c-red)"></div>
+          <span class="ep-idx">ep_004</span>
+          <span class="ep-len">88f</span>
+        </div>
+        <div class="ep-item">
+          <div class="grade-dot" style="background:var(--text-dim)"></div>
+          <span class="ep-idx">ep_005</span>
+          <span class="ep-len">415f</span>
+        </div>
+        <div class="ep-item">
+          <div class="grade-dot" style="background:var(--c-green)"></div>
+          <span class="ep-idx">ep_006</span>
+          <span class="ep-len">203f</span>
+        </div>
+        <div class="ep-item">
+          <div class="grade-dot" style="background:var(--text-dim)"></div>
+          <span class="ep-idx">ep_007</span>
+          <span class="ep-len">177f</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center: video + grade -->
+    <div class="center">
+      <div class="video-area">
+        <div class="video-placeholder">▶ video stream (ep_001)</div>
+        <div class="video-overlay">
+          <button class="v-btn">⏮</button>
+          <button class="v-btn primary">▶</button>
+          <button class="v-btn">⏭</button>
+          <span class="v-time">00:03.42 / 00:11.40</span>
+        </div>
+      </div>
+      <div class="v-scrubber" style="margin:6px 12px">
+        <div class="v-scrubber-fill"></div>
+        <div class="v-scrubber-head"></div>
+      </div>
+      <!-- Terminal frames -->
+      <div class="terminal-bar">
+        <span class="terminal-label">Terminal frames:</span>
+        <div class="terminal-chip active">2.14s</div>
+        <div class="terminal-chip">5.82s</div>
+        <div class="terminal-chip">9.30s</div>
+      </div>
+      <!-- Grade bar -->
+      <div class="grade-bar">
+        <span class="grade-label">Grade</span>
+        <button class="grade-btn good active">good</button>
+        <button class="grade-btn normal">normal</button>
+        <button class="grade-btn bad">bad</button>
+        <span class="kbd-hint"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> · <kbd>↑↓</kbd> nav</span>
+      </div>
+    </div>
+
+    <!-- Right: info + scalar -->
+    <div class="right-panel">
+      <div class="right-tabs">
+        <div class="rtab active">Details</div>
+        <div class="rtab">Split/Merge</div>
+      </div>
+
+      <!-- Episode info -->
+      <div class="ep-info">
+        <div class="ep-info-row">
+          <span class="ep-info-key">episode</span>
+          <span class="ep-info-val" style="color:var(--accent)">ep_001</span>
+        </div>
+        <div class="ep-info-row">
+          <span class="ep-info-key">length</span>
+          <span class="ep-info-val">342 frames</span>
+        </div>
+        <div class="ep-info-row">
+          <span class="ep-info-key">task</span>
+          <span class="ep-info-val">pick_red</span>
+        </div>
+        <div class="ep-info-row">
+          <span class="ep-info-key">grade</span>
+          <span class="ep-info-val" style="color:var(--c-green)">good</span>
+        </div>
+        <div class="tag-row">
+          <div class="tag">smooth</div>
+          <div class="tag">fast</div>
+          <div class="tag tag-add">+ tag</div>
+        </div>
+      </div>
+
+      <!-- Scalar charts -->
+      <div class="scalar-section">
+        <div class="scalar-header">
+          <span>Observations</span><span>3</span>
+        </div>
+        <div class="scalar-item">
+          <div class="scalar-row">
+            <span class="scalar-name" style="color:var(--c-green)">state.joint_0</span>
+            <span class="scalar-val">-0.412</span>
+          </div>
+          <div class="mini-chart">
+            <div class="mini-line" style="background:var(--c-green);left:0;right:40%;bottom:8px"></div>
+            <div class="mini-line" style="background:var(--c-green);left:60%;right:0;bottom:5px"></div>
+          </div>
+        </div>
+        <div class="scalar-item">
+          <div class="scalar-row">
+            <span class="scalar-name" style="color:var(--c-blue)">state.joint_1</span>
+            <span class="scalar-val">0.831</span>
+          </div>
+          <div class="mini-chart">
+            <div class="mini-line" style="background:var(--c-blue);bottom:12px"></div>
+          </div>
+        </div>
+        <div class="scalar-item">
+          <div class="scalar-row">
+            <span class="scalar-name" style="color:var(--c-purple)">state.joint_2</span>
+            <span class="scalar-val">1.204</span>
+          </div>
+          <div class="mini-chart">
+            <div class="mini-line" style="background:var(--c-purple);bottom:15px"></div>
+          </div>
+        </div>
+
+        <div class="scalar-header">
+          <span>Actions</span><span>3</span>
+        </div>
+        <div class="scalar-item">
+          <div class="scalar-row">
+            <span class="scalar-name" style="color:var(--accent)">action.0</span>
+            <span class="scalar-val">0.023</span>
+          </div>
+          <div class="mini-chart">
+            <div class="mini-line" style="background:var(--accent);bottom:6px"></div>
+          </div>
+        </div>
+        <div class="scalar-item">
+          <div class="scalar-row">
+            <span class="scalar-name" style="color:var(--c-yellow)">action.1</span>
+            <span class="scalar-val">-0.155</span>
+          </div>
+          <div class="mini-chart">
+            <div class="mini-line" style="background:var(--c-yellow);bottom:10px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="background:#161616;border:1px solid #222;border-radius:8px;padding:12px;margin-top:4px;font-size:11px;color:#555;line-height:1.8">
+  <strong style="color:#999">기존 큐레이션 페이지와 달라지는 점:</strong><br>
+  • 배경/패널 모두 순수 블랙 계열로 통일 — 기존 Catppuccin 파란빛 제거<br>
+  • 에피소드 목록 grade 표시: 색상 점(●)으로 한눈에 파악<br>
+  • 스칼라 차트 컬러: 시리즈마다 비비드 컬러 구분 (기존과 동일 역할, 색상만 통일)<br>
+  • Grade 버튼: 활성 시 해당 색(그린/옐로/레드)으로 fill — AI-generated 느낌 없는 직관적 상태 표시<br>
+  • 탭바/네비게이션: Overview 탭과 완전히 동일한 컴포넌트 공유
+</div>
