@@ -76,3 +76,40 @@ class DatasetSummary(BaseModel):
     graded_count: int
     robot_type: str | None = None
     fps: int
+
+
+class DistributionRequest(BaseModel):
+    dataset_path: str
+    field: str
+    chart_type: str = "auto"  # "auto", "histogram", "bar"
+
+
+class FieldInfo(BaseModel):
+    name: str
+    dtype: str  # "int64", "float64", "string", "bool", etc.
+    is_system: bool  # True = read-only system column
+
+
+class DistributionBin(BaseModel):
+    label: str
+    count: int
+
+
+class DistributionResponse(BaseModel):
+    field: str
+    dtype: str
+    chart_type: str  # "histogram" or "bar"
+    bins: list[DistributionBin]
+    total: int
+
+
+class InfoFieldUpdate(BaseModel):
+    key: str
+    value: str | int | float | bool | None  # None = delete
+
+
+class EpisodeColumnAdd(BaseModel):
+    dataset_path: str
+    column_name: str
+    dtype: str  # "string", "int64", "float64", "bool"
+    default_value: str | int | float | bool = ""
