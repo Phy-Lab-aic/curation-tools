@@ -255,6 +255,37 @@ function GradeSummary({ chart, fps, episodes, onNavigateCurate }: {
   )
 }
 
+/* ── Wrapped axis tick ────────────────────────── */
+
+function WrappedTick({ x, y, payload, formatter }: {
+  x?: number; y?: number; payload?: { value: string }
+  formatter?: (label: string) => string
+}) {
+  if (!payload) return null
+  const label = formatter ? formatter(payload.value) : payload.value
+  const MAX_CHARS = 10
+  if (label.length <= MAX_CHARS) {
+    return (
+      <text x={x} y={y} dy={12} textAnchor="middle" fontSize={11} fill="#999">
+        {label}
+      </text>
+    )
+  }
+  // Split near the middle at a word boundary or hyphen
+  const mid = Math.ceil(label.length / 2)
+  let splitIdx = label.lastIndexOf(' ', mid)
+  if (splitIdx <= 0) splitIdx = label.lastIndexOf('-', mid)
+  if (splitIdx <= 0) splitIdx = mid
+  const line1 = label.slice(0, splitIdx).trim()
+  const line2 = label.slice(splitIdx).replace(/^[-\s]/, '').trim()
+  return (
+    <text x={x} y={y} textAnchor="middle" fontSize={10} fill="#999">
+      <tspan x={x} dy={10}>{line1}</tspan>
+      <tspan x={x} dy={13}>{line2}</tspan>
+    </text>
+  )
+}
+
 /* ── Chart panel ──────────────────────────────── */
 
 function ChartPanel({ chart, color, fps, onBarClick, intensity = 1 }: {
@@ -290,10 +321,10 @@ function ChartPanel({ chart, color, fps, onBarClick, intensity = 1 }: {
             </defs>
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 11, fill: '#999' }}
+              tick={<WrappedTick formatter={formatLabel} />}
               axisLine={{ stroke: '#222' }}
               tickLine={false}
-              tickFormatter={formatLabel}
+              height={40}
             />
             <YAxis
               tick={{ fontSize: 11, fill: '#999' }}
