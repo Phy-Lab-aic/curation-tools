@@ -1,7 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useDistribution } from '../hooks/useDistribution'
+import client from '../api/client'
 import type { CurateFilter, DistributionResult, Episode } from '../types'
+
+interface ContextMenuState {
+  x: number
+  y: number
+  label: string
+  field: string
+}
 
 interface OverviewTabProps {
   datasetPath: string
@@ -25,7 +33,38 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
   const { fields, charts, loading, error, fetchFields, addChart, removeChart } = useDistribution()
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
   const [chartIntensity, setChartIntensity] = useState(1)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const initializedRef = useRef(false)
+
+  // Close context menu on click anywhere
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [contextMenu])
+
+  const handleBulkBad = useCallback(async (menu: ContextMenuState) => {
+    const indices: number[] = []
+    if (menu.field === 'length') {
+      const parts = menu.label.split('-').map(Number)
+      if (parts.length === 2 && parts.every(n => !isNaN(n))) {
+        for (const ep of episodes) {
+          if (ep.length >= parts[0] && ep.length < parts[1]) indices.push(ep.episode_index)
+        }
+      }
+    } else if (menu.field === 'tags') {
+      for (const ep of episodes) {
+        if (ep.tags.includes(menu.label)) indices.push(ep.episode_index)
+      }
+    }
+    if (indices.length === 0) return
+    await client.post('/episodes/bulk-grade', { episode_indices: indices, grade: 'bad' })
+    // Refresh charts
+    void addChart(datasetPath, menu.field, menu.field === 'length' ? 'histogram' : 'auto')
+    void addChart(datasetPath, 'grade', 'auto')
+    setContextMenu(null)
+  }, [episodes, datasetPath, addChart])
 
   useEffect(() => {
     initializedRef.current = false
@@ -127,6 +166,9 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
               color={CHART_COLORS[idx % CHART_COLORS.length]}
               fps={chart.field === 'length' ? fps : undefined}
               onBarClick={onBarClick}
+              onBarContextMenu={(chart.field === 'length' || chart.field === 'tags')
+                ? (label, x, y) => setContextMenu({ label, field: chart.field, x, y })
+                : undefined}
               intensity={chartIntensity}
               episodes={(chart.field === 'length' || chart.field === 'tags') ? episodes : undefined}
             />
@@ -139,6 +181,43 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
           </div>
         )}
       </div>
+
+      {contextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            background: 'var(--panel2)',
+            border: '1px solid var(--border2)',
+            borderRadius: 6,
+            padding: '4px 0',
+            zIndex: 1000,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+            minWidth: 140,
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '6px 12px',
+              background: 'none',
+              border: 'none',
+              color: 'var(--c-red)',
+              fontSize: 12,
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(243,139,168,0.1)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            onClick={() => void handleBulkBad(contextMenu)}
+          >
+            Mark as Bad
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -356,15 +435,17 @@ function GradeTooltip({ active, payload, label, field, episodes, fps, formatLabe
 
 /* ── Chart panel ──────────────────────────────── */
 
-function ChartPanel({ chart, color, fps, onBarClick, intensity = 1, episodes }: {
+function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity = 1, episodes }: {
   chart: DistributionResult
   color: string
   fps?: number
   onBarClick?: (label: string) => void
+  onBarContextMenu?: (label: string, x: number, y: number) => void
   intensity?: number
   episodes?: Episode[]
 }) {
   const gradientId = `gradient-${chart.field}`
+  const hoveredLabelRef = useRef<string | null>(null)
 
   const formatLabel = (label: string) => {
     if (!fps || chart.field !== 'length') return label
@@ -379,7 +460,12 @@ function ChartPanel({ chart, color, fps, onBarClick, intensity = 1, episodes }: 
         <span className="chart-panel-title">{FIELD_LABELS[chart.field] ?? chart.field}</span>
         <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{chart.total}</span>
       </div>
-      <div className="chart-panel-body">
+      <div className="chart-panel-body" onContextMenu={onBarContextMenu ? (e) => {
+        if (hoveredLabelRef.current) {
+          e.preventDefault()
+          onBarContextMenu(hoveredLabelRef.current, e.clientX, e.clientY)
+        }
+      } : undefined}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chart.bins} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
             <defs>
@@ -415,6 +501,8 @@ function ChartPanel({ chart, color, fps, onBarClick, intensity = 1, episodes }: 
                 if (data.label) onBarClick(data.label)
               } : undefined}
               activeBar={onBarClick ? { strokeOpacity: 0.8 } : undefined}
+              onMouseEnter={(data: { label?: string }) => { hoveredLabelRef.current = data.label ?? null }}
+              onMouseLeave={() => { hoveredLabelRef.current = null }}
             />
           </BarChart>
         </ResponsiveContainer>

@@ -150,6 +150,12 @@ class EpisodeService:
             sidecar[str(episode_index)] = {"grade": grade, "tags": tags}
             await asyncio.to_thread(_save_sidecar, dataset_service.dataset_path, sidecar)
 
+        # Invalidate distribution cache for annotation fields
+        dataset_service.distribution_cache.pop("grade:auto", None)
+        dataset_service.distribution_cache.pop("grade:bar", None)
+        dataset_service.distribution_cache.pop("tags:auto", None)
+        dataset_service.distribution_cache.pop("tags:bar", None)
+
         # Update cache
         if dataset_service.episodes_cache is not None:
             ep = dataset_service.episodes_cache.get(episode_index)
@@ -160,6 +166,38 @@ class EpisodeService:
 
         # Fallback: re-read the episode
         return await self.get_episode(episode_index)
+
+    async def bulk_grade(
+        self,
+        episode_indices: list[int],
+        grade: str,
+    ) -> int:
+        """Set grade for multiple episodes at once. Returns count updated."""
+        lock = dataset_service.get_file_lock(_sidecar_file(dataset_service.dataset_path))
+        async with lock:
+            sidecar = await asyncio.to_thread(_load_sidecar, dataset_service.dataset_path)
+            for idx in episode_indices:
+                entry = sidecar.get(str(idx), {})
+                entry["grade"] = grade
+                if "tags" not in entry:
+                    entry["tags"] = []
+                sidecar[str(idx)] = entry
+            await asyncio.to_thread(_save_sidecar, dataset_service.dataset_path, sidecar)
+
+        # Invalidate distribution cache
+        dataset_service.distribution_cache.pop("grade:auto", None)
+        dataset_service.distribution_cache.pop("grade:bar", None)
+        dataset_service.distribution_cache.pop("tags:auto", None)
+        dataset_service.distribution_cache.pop("tags:bar", None)
+
+        # Update cache
+        if dataset_service.episodes_cache is not None:
+            for idx in episode_indices:
+                ep = dataset_service.episodes_cache.get(idx)
+                if ep:
+                    ep["grade"] = grade
+
+        return len(episode_indices)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +213,16 @@ def _iter_rows(table: pa.Table):
         n = batch.num_rows
         for i in range(n):
             yield {name: col_arrays[name][i] for name in col_names}
+
+
+def _parse_created_at(serial_number: Any) -> str | None:
+    """Extract YYYY-MM-DD date from serial_number like '20260115_...'."""
+    if serial_number is None:
+        return None
+    import re
+    s = str(serial_number).strip().replace("-", "").replace("_", " ")
+    m = re.match(r"^(\d{4})(\d{2})(\d{2})", s)
+    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
 
 
 def _row_to_episode(
@@ -199,6 +247,7 @@ def _row_to_episode(
         dataset_to_index=int(row.get("dataset_to_index", 0)),
         grade=row.get("grade"),
         tags=tags,
+        created_at=_parse_created_at(row.get("serial_number")),
     ).model_dump()
 
 

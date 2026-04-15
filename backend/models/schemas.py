@@ -49,6 +49,18 @@ class EpisodeUpdate(BaseModel):
         return v
 
 
+class BulkGradeRequest(BaseModel):
+    episode_indices: list[int]
+    grade: str
+
+    @field_validator("grade")
+    @classmethod
+    def validate_grade(cls, v: str) -> str:
+        if v not in ("good", "normal", "bad"):
+            raise ValueError("Grade must be one of: good, normal, bad")
+        return v
+
+
 class TaskUpdate(BaseModel):
     task_instruction: str
 

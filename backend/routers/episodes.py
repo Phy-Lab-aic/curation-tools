@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from backend.models.schemas import Episode, EpisodeUpdate
+from backend.models.schemas import BulkGradeRequest, Episode, EpisodeUpdate
 from backend.services.episode_service import episode_service, EpisodeNotFoundError
 
 router = APIRouter(prefix="/api/episodes", tags=["episodes"])
@@ -40,5 +40,14 @@ async def update_episode(episode_index: int, update: EpisodeUpdate):
         )
     except EpisodeNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/bulk-grade")
+async def bulk_grade_episodes(req: BulkGradeRequest):
+    try:
+        count = await episode_service.bulk_grade(req.episode_indices, req.grade)
+        return {"updated": count}
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
