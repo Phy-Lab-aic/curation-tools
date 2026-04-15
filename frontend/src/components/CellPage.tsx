@@ -8,6 +8,15 @@ interface CellPageProps {
   onSelectDataset: (dataset: DatasetSummary) => void
 }
 
+function formatDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const secs = Math.floor(totalSeconds % 60)
+  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`
+  if (minutes > 0) return `${minutes}m ${secs}s`
+  return `${secs}s`
+}
+
 export function CellPage({ cellName, cellPath, onSelectDataset }: CellPageProps) {
   const { datasets, loading, error, fetchDatasets } = useDatasets()
 
@@ -19,15 +28,16 @@ export function CellPage({ cellName, cellPath, onSelectDataset }: CellPageProps)
         {datasets.length} dataset{datasets.length !== 1 ? 's' : ''} in {cellName}
       </div>
 
-      {loading && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading...</div>}
+      {loading && <div className="loading-pulse" style={{ color: 'var(--text-muted)', fontSize: 12 }}>Loading datasets...</div>}
       {error && <div style={{ color: 'var(--c-red)', fontSize: 12 }}>{error}</div>}
 
       <div className="dataset-grid">
         {datasets.map(ds => {
-          const pct = ds.total_episodes > 0
-            ? Math.round((ds.graded_count / ds.total_episodes) * 100)
-            : 0
-          const fillColor = pct === 100 ? 'var(--c-green)' : 'var(--accent)'
+          const total = ds.total_episodes || 1
+          const goodPct = (ds.good_count / total) * 100
+          const normalPct = (ds.normal_count / total) * 100
+          const badPct = (ds.bad_count / total) * 100
+          const ungradedPct = ((total - ds.good_count - ds.normal_count - ds.bad_count) / total) * 100
 
           return (
             <div
@@ -42,14 +52,21 @@ export function CellPage({ cellName, cellPath, onSelectDataset }: CellPageProps)
               )}
               <div className="dataset-card-name">{ds.name}</div>
               <div className="dataset-card-meta">
-                <span>{ds.total_episodes} eps</span>
-                <span>{ds.fps} fps</span>
+                <span>{ds.total_episodes} episodes</span>
+                <span>{formatDuration(ds.total_duration_sec)}</span>
               </div>
-              <div className="dataset-card-progress">
-                <div
-                  className="dataset-card-progress-fill"
-                  style={{ width: `${pct}%`, background: fillColor }}
-                />
+              {(ds.good_duration_sec > 0 || ds.normal_duration_sec > 0 || ds.bad_duration_sec > 0) && (
+                <div className="dataset-card-meta" style={{ marginTop: 2 }}>
+                  {ds.good_duration_sec > 0 && <span style={{ color: 'var(--c-green)' }}>Good {formatDuration(ds.good_duration_sec)}</span>}
+                  {ds.normal_duration_sec > 0 && <span style={{ color: 'var(--c-yellow)' }}>Normal {formatDuration(ds.normal_duration_sec)}</span>}
+                  {ds.bad_duration_sec > 0 && <span style={{ color: 'var(--c-red)' }}>Bad {formatDuration(ds.bad_duration_sec)}</span>}
+                </div>
+              )}
+              <div className="dataset-card-grade-bar">
+                {goodPct > 0 && <div className="grade-seg" style={{ width: `${goodPct}%`, background: 'var(--c-green)' }} />}
+                {normalPct > 0 && <div className="grade-seg" style={{ width: `${normalPct}%`, background: 'var(--c-yellow)' }} />}
+                {badPct > 0 && <div className="grade-seg" style={{ width: `${badPct}%`, background: 'var(--c-red)' }} />}
+                {ungradedPct > 0 && <div className="grade-seg" style={{ width: `${ungradedPct}%`, background: 'var(--border2)' }} />}
               </div>
             </div>
           )

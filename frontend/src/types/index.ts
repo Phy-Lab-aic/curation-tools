@@ -61,6 +61,10 @@ export interface DatasetSummary {
   bad_count: number
   robot_type: string | null
   fps: number
+  total_duration_sec: number
+  good_duration_sec: number
+  normal_duration_sec: number
+  bad_duration_sec: number
 }
 
 export type DatasetTab = 'overview' | 'curate' | 'fields'

@@ -22,6 +22,7 @@ class Episode(BaseModel):
     dataset_to_index: int = 0
     grade: str | None = None
     tags: list[str] = []
+    created_at: str | None = None
 
 
 class Task(BaseModel):
@@ -74,8 +75,15 @@ class DatasetSummary(BaseModel):
     path: str
     total_episodes: int
     graded_count: int
+    good_count: int = 0
+    normal_count: int = 0
+    bad_count: int = 0
     robot_type: str | None = None
     fps: int
+    total_duration_sec: float = 0
+    good_duration_sec: float = 0
+    normal_duration_sec: float = 0
+    bad_duration_sec: float = 0
 
 
 class DistributionRequest(BaseModel):
