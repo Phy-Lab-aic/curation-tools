@@ -89,8 +89,8 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
           <div style={{ padding: '6px 12px 10px' }}>
             <input
               type="range"
-              min={0.2}
-              max={1}
+              min={0.1}
+              max={2}
               step={0.05}
               value={chartIntensity}
               onChange={e => setChartIntensity(Number(e.target.value))}
