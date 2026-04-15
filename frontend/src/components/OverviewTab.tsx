@@ -1,21 +1,52 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useDistribution } from '../hooks/useDistribution'
-import type { DistributionResult } from '../types'
+import type { DistributionResult, Episode } from '../types'
 
 interface OverviewTabProps {
   datasetPath: string
+  fps: number
+  episodes: Episode[]
 }
 
-const CHART_COLORS = ['#5794f2', '#73bf69', '#fade2a', '#f08080', '#b877d9', '#ff9830']
+const CHART_COLORS = ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#ff9830']
+const AUTO_FIELDS = new Set(['grade', 'tags', 'length', 'task_instruction', 'collection_date'])
 
-export function OverviewTab({ datasetPath }: OverviewTabProps) {
+const FIELD_LABELS: Record<string, string> = {
+  grade: 'Grade',
+  tags: 'Tags',
+  length: 'Episode Length',
+  task_instruction: 'Task Instruction',
+  collection_date: 'Collection Date',
+}
+
+export function OverviewTab({ datasetPath, fps, episodes }: OverviewTabProps) {
   const { fields, charts, loading, error, fetchFields, addChart, removeChart } = useDistribution()
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
+  const initializedRef = useRef(false)
+
+  useEffect(() => {
+    initializedRef.current = false
+    setSelectedFields(new Set())
+  }, [datasetPath])
 
   useEffect(() => {
     void fetchFields(datasetPath)
   }, [datasetPath, fetchFields])
+
+  useEffect(() => {
+    if (fields.length > 0 && !initializedRef.current) {
+      initializedRef.current = true
+      const autoFields = fields.filter(f => AUTO_FIELDS.has(f.name))
+      if (autoFields.length > 0) {
+        const names = new Set(autoFields.map(f => f.name))
+        setSelectedFields(names)
+        autoFields.forEach(f => {
+          void addChart(datasetPath, f.name, f.name === 'length' ? 'histogram' : 'auto')
+        })
+      }
+    }
+  }, [fields, datasetPath, addChart])
 
   const toggleField = (fieldName: string) => {
     setSelectedFields(prev => {
@@ -31,55 +62,43 @@ export function OverviewTab({ datasetPath }: OverviewTabProps) {
     })
   }
 
-  const systemFields = fields.filter(f => f.is_system)
-  const customFields = fields.filter(f => !f.is_system)
+  const gradeChart = charts.find(c => c.field === 'grade')
+  const otherCharts = charts.filter(c => c.field !== 'grade')
 
   return (
     <div className="overview-layout">
       <div className="overview-fields-panel">
-        <FieldSection title="System columns" fields={systemFields} selected={selectedFields} onToggle={toggleField} />
-        <FieldSection title="Custom columns" fields={customFields} selected={selectedFields} onToggle={toggleField} />
+        <div className="fields-panel-section">
+          <div className="fields-panel-section-header">
+            <span>Fields</span>
+            <span style={{ color: 'var(--text-dim)', fontSize: 9 }}>{fields.length}</span>
+          </div>
+          {fields.map(f => (
+            <label key={f.name} className={`field-checkbox${selectedFields.has(f.name) ? ' checked' : ''}`}>
+              <input type="checkbox" checked={selectedFields.has(f.name)} onChange={() => toggleField(f.name)} />
+              <span>{FIELD_LABELS[f.name] ?? f.name}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="overview-charts">
-        <div className="stats-bar">
-          <div className="stat-card">
-            <div className="stat-card-n">{charts.length > 0 ? charts[0].total : '—'}</div>
-            <div className="stat-card-l">Episodes</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-n">{charts.length}</div>
-            <div className="stat-card-l">Charts</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-n">{fields.length}</div>
-            <div className="stat-card-l">Fields</div>
-          </div>
-        </div>
+        {gradeChart && <GradeSummary chart={gradeChart} fps={fps} episodes={episodes} />}
 
-        {loading && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Computing...</div>}
+        {loading && <div className="loading-pulse" style={{ fontSize: 11, color: 'var(--text-muted)' }}>Computing...</div>}
         {error && <div style={{ fontSize: 11, color: 'var(--c-red)' }}>{error}</div>}
 
-        {charts.map((chart, idx) => (
+        {otherCharts.map((chart, idx) => (
           <ChartPanel
             key={chart.field}
             chart={chart}
             color={CHART_COLORS[idx % CHART_COLORS.length]}
-            onRemove={() => {
-              removeChart(chart.field)
-              setSelectedFields(prev => {
-                const next = new Set(prev)
-                next.delete(chart.field)
-                return next
-              })
-            }}
-            onChangeType={(newType) => void addChart(datasetPath, chart.field, newType)}
           />
         ))}
 
         {charts.length === 0 && !loading && (
           <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-            Select fields from the left panel to visualize distributions
+            Select fields from the left panel
           </div>
         )}
       </div>
@@ -87,68 +106,121 @@ export function OverviewTab({ datasetPath }: OverviewTabProps) {
   )
 }
 
-function FieldSection({
-  title, fields, selected, onToggle,
-}: {
-  title: string
-  fields: { name: string; dtype: string }[]
-  selected: Set<string>
-  onToggle: (name: string) => void
-}) {
-  if (fields.length === 0) return null
+/* ── Grade summary ────────────────────────────── */
+
+function formatDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const secs = Math.floor(totalSeconds % 60)
+  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`
+  if (minutes > 0) return `${minutes}m ${secs}s`
+  return `${secs}s`
+}
+
+function GradeSummary({ chart, fps, episodes }: { chart: DistributionResult; fps: number; episodes: Episode[] }) {
+  const total = chart.total
+  const gradeMap: Record<string, number> = {}
+  for (const bin of chart.bins) {
+    gradeMap[bin.label] = bin.count
+  }
+
+  // Calculate per-grade duration from actual episodes
+  const gradeDurations = useMemo(() => {
+    const durations: Record<string, number> = { good: 0, normal: 0, bad: 0, '(ungraded)': 0, total: 0 }
+    for (const ep of episodes) {
+      const seconds = fps > 0 ? ep.length / fps : 0
+      const key = ep.grade && ep.grade in durations ? ep.grade : '(ungraded)'
+      durations[key] += seconds
+      durations.total += seconds
+    }
+    return durations
+  }, [episodes, fps])
+
+  const items = [
+    { label: 'Good', key: 'good', color: 'var(--c-green)', bg: 'rgba(166, 227, 161, 0.08)' },
+    { label: 'Normal', key: 'normal', color: 'var(--c-yellow)', bg: 'rgba(249, 226, 175, 0.08)' },
+    { label: 'Bad', key: 'bad', color: 'var(--c-red)', bg: 'rgba(243, 139, 168, 0.08)' },
+    { label: 'Ungraded', key: '(ungraded)', color: 'var(--text-dim)', bg: 'rgba(85, 85, 85, 0.08)' },
+  ]
+
   return (
-    <div className="fields-panel-section">
-      <div className="fields-panel-section-header">
-        <span>{title}</span>
-        <span style={{ color: 'var(--text-dim)', fontSize: 9 }}>{fields.length}</span>
+    <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8 }}>
+      <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '12px 14px 6px' }}>
+        Grade Summary
       </div>
-      {fields.map(f => (
-        <label key={f.name} className={`field-checkbox${selected.has(f.name) ? ' checked' : ''}`}>
-          <input type="checkbox" checked={selected.has(f.name)} onChange={() => onToggle(f.name)} />
-          <span>{f.name}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-dim)' }}>{f.dtype}</span>
-        </label>
-      ))}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '0 14px 10px' }}>
+        {items.map(item => {
+          const count = gradeMap[item.key] ?? 0
+          const pct = total > 0 ? Math.round((count / total) * 100) : 0
+          const dur = gradeDurations[item.key] ?? 0
+          return (
+            <div key={item.key} style={{
+              background: item.bg,
+              border: `1px solid ${count > 0 ? item.color : 'var(--border)'}`,
+              borderRadius: 8,
+              padding: '12px 10px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 24, fontWeight: 700, color: item.color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                {count}
+              </div>
+              <div style={{ fontSize: 10, color: item.color, marginTop: 4, fontWeight: 600 }}>
+                {item.label}
+              </div>
+              <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2 }}>
+                {pct}%
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                <span style={{ fontWeight: 600, color: item.color }}>{formatDuration(dur)}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ display: 'flex', height: 4, margin: '0 14px 12px', borderRadius: 2, overflow: 'hidden', gap: 1 }}>
+        {items.map(item => {
+          const count = gradeMap[item.key] ?? 0
+          const pct = total > 0 ? (count / total) * 100 : 0
+          if (pct === 0) return null
+          return <div key={item.key} style={{ width: `${pct}%`, background: item.color, borderRadius: 1 }} />
+        })}
+      </div>
+      {/* Total summary */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 14px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
+        <span>Total: <strong style={{ color: 'var(--text)' }}>{formatDuration(gradeDurations.total)}</strong></span>
+      </div>
     </div>
   )
 }
 
-function ChartPanel({
-  chart, color, onRemove, onChangeType,
-}: {
-  chart: DistributionResult
-  color: string
-  onRemove: () => void
-  onChangeType: (type: string) => void
-}) {
+/* ── Chart panel ──────────────────────────────── */
+
+function ChartPanel({ chart, color }: { chart: DistributionResult; color: string }) {
+  const gradientId = `gradient-${chart.field}`
+
   return (
     <div className="chart-panel">
       <div className="chart-panel-header">
-        <span className="chart-panel-title">{chart.field}</span>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <select
-            className="chart-type-select"
-            value={chart.chart_type}
-            onChange={e => onChangeType(e.target.value)}
-          >
-            <option value="histogram">Histogram</option>
-            <option value="bar">Bar</option>
-          </select>
-          <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>n={chart.total}</span>
-          <button className="chart-panel-close" onClick={onRemove}>×</button>
-        </div>
+        <span className="chart-panel-title">{FIELD_LABELS[chart.field] ?? chart.field}</span>
+        <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{chart.total}</span>
       </div>
       <div className="chart-panel-body">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chart.bins} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+                <stop offset="100%" stopColor={color} stopOpacity={0.08} />
+              </linearGradient>
+            </defs>
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 9, fill: '#555' }}
+              tick={{ fontSize: 11, fill: '#999' }}
               axisLine={{ stroke: '#222' }}
               tickLine={false}
             />
             <YAxis
-              tick={{ fontSize: 9, fill: '#555' }}
+              tick={{ fontSize: 11, fill: '#999' }}
               axisLine={false}
               tickLine={false}
               width={30}
@@ -162,7 +234,13 @@ function ChartPanel({
                 color: '#d9d9d9',
               }}
             />
-            <Bar dataKey="count" fill={color} radius={[2, 2, 0, 0]} />
+            <Bar
+              dataKey="count"
+              fill={`url(#${gradientId})`}
+              stroke={color}
+              strokeOpacity={0.4}
+              radius={[2, 2, 0, 0]}
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>
