@@ -209,7 +209,6 @@ code, .mono { font-family: var(--font-mono); }
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
-  font-family: var(--font-mono);
   margin-bottom: 4px;
   display: flex;
   align-items: center;
