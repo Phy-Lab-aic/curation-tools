@@ -128,6 +128,7 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
               fps={chart.field === 'length' ? fps : undefined}
               onBarClick={onBarClick}
               intensity={chartIntensity}
+              episodes={(chart.field === 'length' || chart.field === 'tags') ? episodes : undefined}
             />
           )
         })}
@@ -286,14 +287,82 @@ function WrappedTick({ x, y, payload, formatter }: {
   )
 }
 
+/* ── Grade tooltip ───────────────────────────── */
+
+const GRADE_DOTS: { key: string; label: string; color: string }[] = [
+  { key: 'good', label: 'Good', color: 'var(--c-green)' },
+  { key: 'normal', label: 'Normal', color: 'var(--c-yellow)' },
+  { key: 'bad', label: 'Bad', color: 'var(--c-red)' },
+]
+
+function GradeTooltip({ active, payload, label, field, episodes, fps, formatLabel }: {
+  active?: boolean
+  payload?: { value: number }[]
+  label?: string
+  field: string
+  episodes?: Episode[]
+  fps?: number
+  formatLabel: (label: string) => string
+}) {
+  if (!active || !payload?.length || label == null) return null
+  const count = payload[0].value
+  const displayLabel = formatLabel(String(label))
+
+  // Compute grade breakdown if episodes available
+  let grades: { key: string; label: string; color: string; count: number }[] | null = null
+  if (episodes && (field === 'length' || field === 'tags')) {
+    let matched: Episode[]
+    if (field === 'length') {
+      const parts = String(label).split('-').map(Number)
+      if (parts.length === 2 && parts.every(n => !isNaN(n))) {
+        matched = episodes.filter(e => e.length >= parts[0] && e.length < parts[1])
+      } else {
+        matched = []
+      }
+    } else {
+      matched = episodes.filter(e => e.tags.includes(String(label)))
+    }
+    grades = GRADE_DOTS.map(g => ({
+      ...g,
+      count: matched.filter(e => e.grade === g.key).length,
+    }))
+  }
+
+  return (
+    <div style={{
+      background: '#161616',
+      border: '1px solid #2a2a2a',
+      borderRadius: 4,
+      padding: '6px 10px',
+      fontSize: 11,
+      color: '#d9d9d9',
+    }}>
+      <div style={{ marginBottom: grades ? 4 : 0 }}>
+        <span style={{ color: '#999' }}>{displayLabel}</span>
+        <span style={{ marginLeft: 8, fontWeight: 600 }}>{count}</span>
+      </div>
+      {grades && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          {grades.map(g => g.count > 0 && (
+            <span key={g.key} style={{ color: g.color, fontSize: 10 }}>
+              {g.label} {g.count}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Chart panel ──────────────────────────────── */
 
-function ChartPanel({ chart, color, fps, onBarClick, intensity = 1 }: {
+function ChartPanel({ chart, color, fps, onBarClick, intensity = 1, episodes }: {
   chart: DistributionResult
   color: string
   fps?: number
   onBarClick?: (label: string) => void
   intensity?: number
+  episodes?: Episode[]
 }) {
   const gradientId = `gradient-${chart.field}`
 
@@ -333,13 +402,7 @@ function ChartPanel({ chart, color, fps, onBarClick, intensity = 1 }: {
               width={30}
             />
             <Tooltip
-              contentStyle={{
-                background: '#161616',
-                border: '1px solid #2a2a2a',
-                borderRadius: 4,
-                fontSize: 11,
-                color: '#d9d9d9',
-              }}
+              content={<GradeTooltip field={chart.field} episodes={episodes} fps={fps} formatLabel={formatLabel} />}
             />
             <Bar
               dataKey="count"
