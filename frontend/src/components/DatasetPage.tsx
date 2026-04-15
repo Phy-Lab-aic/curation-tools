@@ -110,7 +110,12 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
   if (tab === 'overview') {
     return (
       <div className="dataset-page">
-        <OverviewTab datasetPath={datasetPath} fps={dataset?.fps ?? 30} episodes={episodes} />
+        <OverviewTab
+          datasetPath={datasetPath}
+          fps={dataset?.fps ?? 30}
+          episodes={episodes}
+          onNavigateCurate={(f) => onSetTab('curate', f)}
+        />
       </div>
     )
   }

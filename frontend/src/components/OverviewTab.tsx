@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useDistribution } from '../hooks/useDistribution'
-import type { DistributionResult, Episode } from '../types'
+import type { CurateFilter, DistributionResult, Episode } from '../types'
 
 interface OverviewTabProps {
   datasetPath: string
   fps: number
   episodes: Episode[]
+  onNavigateCurate: (filter: CurateFilter) => void
 }
 
 const CHART_COLORS = ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#ff9830']
@@ -20,7 +21,7 @@ const FIELD_LABELS: Record<string, string> = {
   collection_date: 'Collection Date',
 }
 
-export function OverviewTab({ datasetPath, fps, episodes }: OverviewTabProps) {
+export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: OverviewTabProps) {
   const { fields, charts, loading, error, fetchFields, addChart, removeChart } = useDistribution()
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
   const initializedRef = useRef(false)
@@ -83,19 +84,35 @@ export function OverviewTab({ datasetPath, fps, episodes }: OverviewTabProps) {
       </div>
 
       <div className="overview-charts">
-        {gradeChart && <GradeSummary chart={gradeChart} fps={fps} episodes={episodes} />}
+        {gradeChart && <GradeSummary chart={gradeChart} fps={fps} episodes={episodes} onNavigateCurate={onNavigateCurate} />}
 
         {loading && <div className="loading-pulse" style={{ fontSize: 11, color: 'var(--text-muted)' }}>Computing...</div>}
         {error && <div style={{ fontSize: 11, color: 'var(--c-red)' }}>{error}</div>}
 
-        {otherCharts.map((chart, idx) => (
-          <ChartPanel
-            key={chart.field}
-            chart={chart}
-            color={CHART_COLORS[idx % CHART_COLORS.length]}
-            fps={chart.field === 'length' ? fps : undefined}
-          />
-        ))}
+        {otherCharts.map((chart, idx) => {
+          let onBarClick: ((label: string) => void) | undefined
+          if (chart.field === 'length') {
+            onBarClick = (label: string) => {
+              const parts = label.split('-').map(Number)
+              if (parts.length === 2 && parts.every(n => !isNaN(n))) {
+                onNavigateCurate({ lengthRange: [parts[0], parts[1]] })
+              }
+            }
+          } else if (chart.field === 'tags') {
+            onBarClick = (label: string) => {
+              if (label !== '(no tags)') onNavigateCurate({ tag: label })
+            }
+          }
+          return (
+            <ChartPanel
+              key={chart.field}
+              chart={chart}
+              color={CHART_COLORS[idx % CHART_COLORS.length]}
+              fps={chart.field === 'length' ? fps : undefined}
+              onBarClick={onBarClick}
+            />
+          )
+        })}
 
         {charts.length === 0 && !loading && (
           <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
@@ -127,7 +144,12 @@ function formatCompactDuration(totalSeconds: number): string {
   return `${secs}s`
 }
 
-function GradeSummary({ chart, fps, episodes }: { chart: DistributionResult; fps: number; episodes: Episode[] }) {
+function GradeSummary({ chart, fps, episodes, onNavigateCurate }: {
+  chart: DistributionResult
+  fps: number
+  episodes: Episode[]
+  onNavigateCurate: (filter: CurateFilter) => void
+}) {
   const total = chart.total
   const gradeMap: Record<string, number> = {}
   for (const bin of chart.bins) {
@@ -170,7 +192,19 @@ function GradeSummary({ chart, fps, episodes }: { chart: DistributionResult; fps
               borderRadius: 8,
               padding: '12px 10px',
               textAlign: 'center',
-            }}>
+              cursor: 'pointer',
+              transition: 'transform 0.15s, border-color 0.15s',
+            }}
+              onClick={() => onNavigateCurate({ grade: item.key === '(ungraded)' ? 'ungraded' : item.key })}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.transform = 'scale(1.02)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = item.color
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.transform = 'scale(1)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = count > 0 ? item.color : 'var(--border)'
+              }}
+            >
               <div style={{ fontSize: 24, fontWeight: 700, color: item.color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
                 {count}
               </div>
@@ -205,7 +239,12 @@ function GradeSummary({ chart, fps, episodes }: { chart: DistributionResult; fps
 
 /* ── Chart panel ──────────────────────────────── */
 
-function ChartPanel({ chart, color, fps }: { chart: DistributionResult; color: string; fps?: number }) {
+function ChartPanel({ chart, color, fps, onBarClick }: {
+  chart: DistributionResult
+  color: string
+  fps?: number
+  onBarClick?: (label: string) => void
+}) {
   const gradientId = `gradient-${chart.field}`
 
   const formatLabel = (label: string) => {
@@ -258,6 +297,11 @@ function ChartPanel({ chart, color, fps }: { chart: DistributionResult; color: s
               stroke={color}
               strokeOpacity={0.4}
               radius={[2, 2, 0, 0]}
+              cursor={onBarClick ? 'pointer' : undefined}
+              onClick={onBarClick ? (data: { label?: string }) => {
+                if (data.label) onBarClick(data.label)
+              } : undefined}
+              activeBar={onBarClick ? { strokeOpacity: 0.8 } : undefined}
             />
           </BarChart>
         </ResponsiveContainer>
