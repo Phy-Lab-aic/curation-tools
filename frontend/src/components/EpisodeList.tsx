@@ -1,4 +1,7 @@
+import { useMemo, useEffect, useRef, memo, useState } from 'react'
 import type { Episode } from '../types'
+
+type GradeFilter = 'all' | 'good' | 'normal' | 'bad' | 'ungraded'
 
 interface EpisodeListProps {
   episodes: Episode[]
@@ -6,6 +9,8 @@ interface EpisodeListProps {
   error: string | null
   onEpisodeSelect: (episode: Episode) => void
   selectedIndex: number | null
+  initialGradeFilter?: GradeFilter
+  filterChip?: { label: string; onClear: () => void } | null
 }
 
 function gradeDotClass(grade: string | null): string {
@@ -15,10 +20,24 @@ function gradeDotClass(grade: string | null): string {
   return 'none'
 }
 
-export function EpisodeList({
+export const EpisodeList = memo(function EpisodeList({
   episodes, loading, error, onEpisodeSelect, selectedIndex,
+  initialGradeFilter, filterChip,
 }: EpisodeListProps) {
-  const gradedCount = episodes.filter(e => e.grade).length
+  const [gradeFilter, setGradeFilter] = useState<GradeFilter>(initialGradeFilter ?? 'all')
+  const gradedCount = useMemo(() => episodes.filter(e => e.grade).length, [episodes])
+
+  const filteredEpisodes = useMemo(() => {
+    if (gradeFilter === 'all') return episodes
+    if (gradeFilter === 'ungraded') return episodes.filter(e => !e.grade)
+    return episodes.filter(e => e.grade === gradeFilter)
+  }, [episodes, gradeFilter])
+
+  const selectedItemRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    selectedItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selectedIndex])
 
   return (
     <>
@@ -27,8 +46,40 @@ export function EpisodeList({
         <span className="episode-progress-count">{gradedCount} / {episodes.length}</span>
       </div>
 
+      {filterChip && (
+        <div className="filter-chip-bar">
+          <span className="filter-chip">
+            {filterChip.label}
+            <button className="filter-chip-clear" onClick={filterChip.onClear}>&times;</button>
+          </span>
+        </div>
+      )}
+
+      <div className="grade-filter-bar">
+        {([
+          ['all', 'All'],
+          ['good', 'Good'],
+          ['normal', 'Normal'],
+          ['bad', 'Bad'],
+          ['ungraded', 'Ungraded'],
+        ] as [GradeFilter, string][]).map(([value, label]) => (
+          <button
+            key={value}
+            className={`grade-filter-btn${gradeFilter === value ? ` active ${value}` : ''}`}
+            onClick={() => setGradeFilter(value)}
+          >
+            {label}
+            <span className="grade-filter-count">
+              {value === 'all' ? episodes.length
+                : value === 'ungraded' ? episodes.filter(e => !e.grade).length
+                : episodes.filter(e => e.grade === value).length}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {loading && (
-        <div style={{ padding: '10px', fontSize: 11, color: 'var(--text-muted)' }}>
+        <div className="loading-pulse" style={{ padding: '10px', fontSize: 11, color: 'var(--text-muted)' }}>
           Loading...
         </div>
       )}
@@ -39,23 +90,26 @@ export function EpisodeList({
       )}
 
       <div className="episode-list">
-        {episodes.map(ep => (
-          <div
-            key={ep.episode_index}
-            className={`episode-item${ep.episode_index === selectedIndex ? ' active' : ''}`}
-            onClick={() => onEpisodeSelect(ep)}
-          >
-            <span className={`episode-grade-dot ${gradeDotClass(ep.grade)}`} />
-            <span className="episode-item-idx">ep_{String(ep.episode_index).padStart(3, '0')}</span>
-            <span className="episode-item-len">{ep.length}f</span>
-          </div>
-        ))}
-        {!loading && episodes.length === 0 && (
+        {filteredEpisodes.map(ep => {
+          const isSelected = ep.episode_index === selectedIndex
+          return (
+            <div
+              key={ep.episode_index}
+              ref={isSelected ? selectedItemRef : null}
+              className={`episode-item${isSelected ? ' active' : ''}`}
+              onClick={() => onEpisodeSelect(ep)}
+            >
+              <span className={`episode-grade-dot ${gradeDotClass(ep.grade)}`} />
+              <span className="episode-item-idx">ep_{String(ep.episode_index).padStart(3, '0')}</span>
+            </div>
+          )
+        })}
+        {!loading && filteredEpisodes.length === 0 && (
           <div style={{ padding: '10px', fontSize: 11, color: 'var(--text-muted)' }}>
-            No episodes found.
+            {episodes.length === 0 ? 'No episodes found.' : 'No matching episodes.'}
           </div>
         )}
       </div>
     </>
   )
-}
+})

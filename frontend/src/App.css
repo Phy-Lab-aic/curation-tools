@@ -399,6 +399,39 @@ code, .mono { font-family: var(--font-mono); }
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Filter chip ─────────────────────────────── */
+.filter-chip-bar {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--interactive-dim);
+  border: 1px solid rgba(137, 180, 250, 0.3);
+  border-radius: 12px;
+  padding: 2px 6px 2px 8px;
+  font-size: 10px;
+  color: var(--interactive);
+}
+.filter-chip-clear {
+  background: none;
+  border: none;
+  color: var(--interactive);
+  opacity: 0.6;
+  font-size: 12px;
+  padding: 0 2px;
+  cursor: pointer;
+  line-height: 1;
+}
+.filter-chip-clear:hover {
+  opacity: 1;
+}
+
 .episode-list {
   flex: 1;
   overflow-y: auto;

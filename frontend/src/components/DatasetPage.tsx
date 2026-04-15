@@ -20,6 +20,15 @@ interface DatasetPageProps {
 
 const GRADE_KEYS: Record<string, string> = { '1': 'good', '2': 'normal', '3': 'bad' }
 
+function formatDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const secs = Math.floor(totalSeconds % 60)
+  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`
+  if (minutes > 0) return `${minutes}m ${secs}s`
+  return `${secs}s`
+}
+
 export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filter, onSetTab }: DatasetPageProps) {
   const { dataset, loadDataset } = useDataset()
   const { episodes, loading: epLoading, error: epError, fetchEpisodes, updateEpisode } = useEpisodes()
@@ -43,17 +52,49 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
     return () => { cancelled = true }
   }, [datasetPath, loadDataset, fetchEpisodes])
 
-  const ungradedEpisodes = useMemo(() => episodes.filter(e => !e.grade), [episodes])
+  const fps = dataset?.fps ?? 30
+
+  const curateEpisodes = useMemo(() => {
+    let result = episodes
+    if (filter?.lengthRange) {
+      const [min, max] = filter.lengthRange
+      result = result.filter(e => e.length >= min && e.length < max)
+    }
+    if (filter?.tag) {
+      result = result.filter(e => e.tags.includes(filter.tag!))
+    }
+    return result
+  }, [episodes, filter])
+
+  const filterChip = useMemo(() => {
+    if (filter?.lengthRange) {
+      const [min, max] = filter.lengthRange
+      return {
+        label: `Length: ${formatDuration(min / fps)} ~ ${formatDuration(max / fps)}`,
+        onClear: () => onSetTab('curate'),
+      }
+    }
+    if (filter?.tag) {
+      return {
+        label: `Tag: ${filter.tag}`,
+        onClear: () => onSetTab('curate'),
+      }
+    }
+    return null
+  }, [filter, fps, onSetTab])
+
+  const ungradedEpisodes = useMemo(() => curateEpisodes.filter(e => !e.grade), [curateEpisodes])
 
   const handleSaveEpisode = useCallback(async (index: number, grade: string | null, tags: string[]) => {
     await updateEpisode(index, grade, tags)
     if (grade) {
-      const currentIdx = episodes.findIndex(e => e.episode_index === index)
-      const nextUngraded = ungradedEpisodes.find(e => {
-        const i = episodes.indexOf(e)
+      const currentIdx = curateEpisodes.findIndex(e => e.episode_index === index)
+      const ungradedInView = curateEpisodes.filter(e => !e.grade)
+      const nextUngraded = ungradedInView.find(e => {
+        const i = curateEpisodes.indexOf(e)
         return i > currentIdx
-      }) ?? ungradedEpisodes.find(e => {
-        const i = episodes.indexOf(e)
+      }) ?? ungradedInView.find(e => {
+        const i = curateEpisodes.indexOf(e)
         return i < currentIdx
       })
       if (nextUngraded) {
@@ -64,14 +105,14 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
     setSelectedEpisode(prev =>
       prev?.episode_index === index ? { ...prev, grade, tags } : prev
     )
-  }, [updateEpisode, episodes, ungradedEpisodes])
+  }, [updateEpisode, curateEpisodes])
 
   const navigateEpisode = useCallback((direction: -1 | 1) => {
-    if (!selectedEpisode || episodes.length === 0) return
-    const idx = episodes.findIndex(e => e.episode_index === selectedEpisode.episode_index)
-    const next = episodes[idx + direction]
+    if (!selectedEpisode || curateEpisodes.length === 0) return
+    const idx = curateEpisodes.findIndex(e => e.episode_index === selectedEpisode.episode_index)
+    const next = curateEpisodes[idx + direction]
     if (next) setSelectedEpisode(next)
-  }, [selectedEpisode, episodes])
+  }, [selectedEpisode, curateEpisodes])
 
   const quickGrade = useCallback(async (key: string) => {
     if (!selectedEpisode) return
@@ -134,11 +175,13 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
         {/* Left: episode list */}
         <div className="episode-sidebar">
           <EpisodeList
-            episodes={episodes}
+            episodes={curateEpisodes}
             loading={epLoading}
             error={epError}
             onEpisodeSelect={setSelectedEpisode}
             selectedIndex={selectedEpisode?.episode_index ?? null}
+            initialGradeFilter={filter?.grade ?? undefined}
+            filterChip={filterChip}
           />
         </div>
 
