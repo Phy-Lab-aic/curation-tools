@@ -5,15 +5,15 @@ import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 from backend.main import app
-from backend.services.dataset_service import DatasetService
-import backend.services.dataset_service as ds_mod
-import backend.services.episode_service as ep_mod
-import backend.services.task_service as ts_mod
+from backend.datasets.services.dataset_service import DatasetService
+import backend.datasets.services.dataset_service as ds_mod
+import backend.datasets.services.episode_service as ep_mod
+import backend.datasets.services.task_service as ts_mod
 
 
 @pytest.fixture(autouse=True)
 def reset_singleton():
-    from backend.routers import datasets as datasets_router
+    from backend.datasets.routers import datasets as datasets_router
 
     orig_ds = ds_mod.dataset_service
     orig_ep = ep_mod.dataset_service

@@ -5,9 +5,14 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.config import settings
-from backend.routers import datasets, episodes, tasks, rerun, videos, scalars, dataset_ops, cells, distribution, fields, converter
-from backend.services import rerun_service
+from backend.core.config import settings
+from backend.core.db import init_db, close_db
+from backend.datasets.routers import (
+    datasets, episodes, tasks, rerun, videos, scalars,
+    dataset_ops, cells, distribution, fields,
+)
+from backend.converter import router as converter_mod
+from backend.datasets.services import rerun_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await init_db()
+
     if settings.enable_rerun:
         try:
             rerun_service.init_rerun(
@@ -28,6 +35,8 @@ async def lifespan(app: FastAPI):
         logger.info("Rerun disabled — using native video player")
 
     yield
+
+    await close_db()
 
 
 app = FastAPI(
@@ -55,7 +64,7 @@ app.include_router(dataset_ops.router)
 app.include_router(cells.router)
 app.include_router(distribution.router)
 app.include_router(fields.router)
-app.include_router(converter.router)
+app.include_router(converter_mod.router)
 
 
 @app.get("/api/health")
