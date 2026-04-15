@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import type { AppState, DatasetTab } from '../types'
+import type { AppState, CurateFilter, DatasetTab } from '../types'
 
 interface UseAppStateReturn {
   state: AppState
@@ -7,7 +7,7 @@ interface UseAppStateReturn {
   navigateToCell: (cellName: string, cellPath: string) => void
   navigateToDataset: (cellName: string, cellPath: string, datasetPath: string, datasetName: string) => void
   navigateToConverter: () => void
-  setTab: (tab: DatasetTab) => void
+  setTab: (tab: DatasetTab, filter?: CurateFilter) => void
 }
 
 export function useAppState(): UseAppStateReturn {
@@ -34,9 +34,9 @@ export function useAppState(): UseAppStateReturn {
     setState({ view: 'converter' })
   }, [])
 
-  const setTab = useCallback((tab: DatasetTab) => {
+  const setTab = useCallback((tab: DatasetTab, filter?: CurateFilter) => {
     setState(prev =>
-      prev.view === 'dataset' ? { ...prev, tab } : prev
+      prev.view === 'dataset' ? { ...prev, tab, filter } : prev
     )
   }, [])
 

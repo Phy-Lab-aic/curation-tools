@@ -1,32 +1,33 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { EpisodeList } from './EpisodeList'
 import { EpisodeEditor } from './EpisodeEditor'
-import { TaskEditor } from './TaskEditor'
 import { VideoPlayer, type VideoPlayerHandle } from './VideoPlayer'
 import { ScalarChart } from './ScalarChart'
-import { SplitMergePanel } from './SplitMergePanel'
+import { TrimPanel } from './TrimPanel'
 import { useDataset } from '../hooks/useDataset'
 import { useEpisodes } from '../hooks/useEpisodes'
 import { OverviewTab } from './OverviewTab'
 import { FieldsTab } from './FieldsTab'
-import type { DatasetTab, Episode } from '../types'
+import type { CurateFilter, DatasetTab, Episode } from '../types'
 
 interface DatasetPageProps {
   datasetPath: string
   datasetName: string
   tab: DatasetTab
+  filter?: CurateFilter
+  onSetTab: (tab: DatasetTab, filter?: CurateFilter) => void
 }
 
 const GRADE_KEYS: Record<string, string> = { '1': 'good', '2': 'normal', '3': 'bad' }
 
-export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: DatasetPageProps) {
+export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filter, onSetTab }: DatasetPageProps) {
   const { dataset, loadDataset } = useDataset()
   const { episodes, loading: epLoading, error: epError, fetchEpisodes, updateEpisode } = useEpisodes()
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null)
   const [currentFrame, setCurrentFrame] = useState(0)
   const [terminalFrames, setTerminalFrames] = useState<number[]>([])
   const [terminalTimestamps, setTerminalTimestamps] = useState<number[]>([])
-  const [rightTab, setRightTab] = useState<'details' | 'splitmerge'>('details')
+  const [rightTab, setRightTab] = useState<'details' | 'trim'>('details')
   const videoRef = useRef<VideoPlayerHandle>(null)
 
   // Load dataset when path changes
@@ -42,12 +43,19 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: Dat
     return () => { cancelled = true }
   }, [datasetPath, loadDataset, fetchEpisodes])
 
+  const ungradedEpisodes = useMemo(() => episodes.filter(e => !e.grade), [episodes])
+
   const handleSaveEpisode = useCallback(async (index: number, grade: string | null, tags: string[]) => {
     await updateEpisode(index, grade, tags)
     if (grade) {
       const currentIdx = episodes.findIndex(e => e.episode_index === index)
-      const nextUngraded = episodes.find((e, i) => i > currentIdx && !e.grade)
-        ?? episodes.find((e, i) => i < currentIdx && !e.grade)
+      const nextUngraded = ungradedEpisodes.find(e => {
+        const i = episodes.indexOf(e)
+        return i > currentIdx
+      }) ?? ungradedEpisodes.find(e => {
+        const i = episodes.indexOf(e)
+        return i < currentIdx
+      })
       if (nextUngraded) {
         setSelectedEpisode(nextUngraded)
         return
@@ -56,7 +64,7 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: Dat
     setSelectedEpisode(prev =>
       prev?.episode_index === index ? { ...prev, grade, tags } : prev
     )
-  }, [updateEpisode, episodes])
+  }, [updateEpisode, episodes, ungradedEpisodes])
 
   const navigateEpisode = useCallback((direction: -1 | 1) => {
     if (!selectedEpisode || episodes.length === 0) return
@@ -87,6 +95,8 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: Dat
           e.preventDefault(); videoRef.current?.stepFrame(-1); break
         case 'ArrowRight':
           e.preventDefault(); videoRef.current?.stepFrame(1); break
+        case ' ':
+          e.preventDefault(); videoRef.current?.togglePlay(); break
         case '1':
         case '2':
         case '3':
@@ -100,7 +110,7 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: Dat
   if (tab === 'overview') {
     return (
       <div className="dataset-page">
-        <OverviewTab datasetPath={datasetPath} />
+        <OverviewTab datasetPath={datasetPath} fps={dataset?.fps ?? 30} episodes={episodes} />
       </div>
     )
   }
@@ -168,6 +178,10 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: Dat
                   key={g}
                   className={`grade-btn${selectedEpisode.grade === g ? ' active' : ''}`}
                   onClick={() => handleSaveEpisode(selectedEpisode.episode_index, g, selectedEpisode.tags)}
+                  style={{
+                    color: selectedEpisode.grade === g ? (g === 'good' ? 'var(--c-green)' : g === 'normal' ? 'var(--c-yellow)' : 'var(--c-red)') : undefined,
+                    borderBottomColor: selectedEpisode.grade === g ? (g === 'good' ? 'var(--c-green)' : g === 'normal' ? 'var(--c-yellow)' : 'var(--c-red)') : undefined,
+                  }}
                 >
                   {g}
                 </button>
@@ -189,17 +203,16 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: Dat
               Details
             </button>
             <button
-              className={`right-tab${rightTab === 'splitmerge' ? ' active' : ''}`}
-              onClick={() => setRightTab('splitmerge')}
+              className={`right-tab${rightTab === 'trim' ? ' active' : ''}`}
+              onClick={() => setRightTab('trim')}
             >
-              Split/Merge
+              Trim
             </button>
           </div>
 
           {rightTab === 'details' && (
-            <>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
               <EpisodeEditor episode={selectedEpisode} onSave={handleSaveEpisode} />
-              <TaskEditor episode={selectedEpisode} />
               <ScalarChart
                 episodeIndex={selectedEpisode?.episode_index ?? null}
                 currentFrame={currentFrame}
@@ -208,10 +221,10 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab }: Dat
                   setTerminalTimestamps(timestamps)
                 }}
               />
-            </>
+            </div>
           )}
-          {rightTab === 'splitmerge' && (
-            <SplitMergePanel
+          {rightTab === 'trim' && (
+            <TrimPanel
               datasetPath={dataset?.path ?? null}
               episodes={episodes}
             />

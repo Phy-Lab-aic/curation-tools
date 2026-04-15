@@ -65,10 +65,16 @@ export interface DatasetSummary {
 
 export type DatasetTab = 'overview' | 'curate' | 'fields'
 
+export interface CurateFilter {
+  grade?: string
+  lengthRange?: [number, number]
+  tag?: string
+}
+
 export type AppState =
   | { view: 'library' }
   | { view: 'cell'; cellName: string; cellPath: string }
-  | { view: 'dataset'; cellName: string; cellPath: string; datasetPath: string; datasetName: string; tab: DatasetTab }
+  | { view: 'dataset'; cellName: string; cellPath: string; datasetPath: string; datasetName: string; tab: DatasetTab; filter?: CurateFilter }
   | { view: 'converter' }
 
 // ── Converter types ────────────────────────────
