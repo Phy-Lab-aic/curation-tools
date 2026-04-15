@@ -24,7 +24,7 @@ const FIELD_LABELS: Record<string, string> = {
 export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: OverviewTabProps) {
   const { fields, charts, loading, error, fetchFields, addChart, removeChart } = useDistribution()
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
-  const [chartIntensity, setChartIntensity] = useState(0.5)
+  const [chartIntensity, setChartIntensity] = useState(1)
   const initializedRef = useRef(false)
 
   useEffect(() => {
@@ -257,7 +257,7 @@ function GradeSummary({ chart, fps, episodes, onNavigateCurate }: {
 
 /* ── Chart panel ──────────────────────────────── */
 
-function ChartPanel({ chart, color, fps, onBarClick, intensity = 0.5 }: {
+function ChartPanel({ chart, color, fps, onBarClick, intensity = 1 }: {
   chart: DistributionResult
   color: string
   fps?: number
