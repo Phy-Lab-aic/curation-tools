@@ -93,6 +93,7 @@ export function OverviewTab({ datasetPath, fps, episodes }: OverviewTabProps) {
             key={chart.field}
             chart={chart}
             color={CHART_COLORS[idx % CHART_COLORS.length]}
+            fps={chart.field === 'length' ? fps : undefined}
           />
         ))}
 
@@ -114,6 +115,15 @@ function formatDuration(totalSeconds: number): string {
   const secs = Math.floor(totalSeconds % 60)
   if (hours > 0) return `${hours}h ${minutes}m ${secs}s`
   if (minutes > 0) return `${minutes}m ${secs}s`
+  return `${secs}s`
+}
+
+function formatCompactDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const secs = Math.floor(totalSeconds % 60)
+  if (hours > 0) return `${hours}h${minutes}m`
+  if (minutes > 0) return `${minutes}m${secs}s`
   return `${secs}s`
 }
 
@@ -195,8 +205,15 @@ function GradeSummary({ chart, fps, episodes }: { chart: DistributionResult; fps
 
 /* ── Chart panel ──────────────────────────────── */
 
-function ChartPanel({ chart, color }: { chart: DistributionResult; color: string }) {
+function ChartPanel({ chart, color, fps }: { chart: DistributionResult; color: string; fps?: number }) {
   const gradientId = `gradient-${chart.field}`
+
+  const formatLabel = (label: string) => {
+    if (!fps || chart.field !== 'length') return label
+    const parts = label.split('-').map(Number)
+    if (parts.length !== 2 || parts.some(isNaN)) return label
+    return `${formatCompactDuration(parts[0] / fps)}-${formatCompactDuration(parts[1] / fps)}`
+  }
 
   return (
     <div className="chart-panel">
@@ -218,6 +235,7 @@ function ChartPanel({ chart, color }: { chart: DistributionResult; color: string
               tick={{ fontSize: 11, fill: '#999' }}
               axisLine={{ stroke: '#222' }}
               tickLine={false}
+              tickFormatter={formatLabel}
             />
             <YAxis
               tick={{ fontSize: 11, fill: '#999' }}
