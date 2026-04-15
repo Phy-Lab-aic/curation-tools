@@ -24,6 +24,7 @@ const FIELD_LABELS: Record<string, string> = {
 export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: OverviewTabProps) {
   const { fields, charts, loading, error, fetchFields, addChart, removeChart } = useDistribution()
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
+  const [chartIntensity, setChartIntensity] = useState(0.5)
   const initializedRef = useRef(false)
 
   useEffect(() => {
@@ -81,6 +82,22 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
             </label>
           ))}
         </div>
+        <div className="fields-panel-section">
+          <div className="fields-panel-section-header">
+            <span>Chart Intensity</span>
+          </div>
+          <div style={{ padding: '6px 12px 10px' }}>
+            <input
+              type="range"
+              min={0.2}
+              max={1}
+              step={0.05}
+              value={chartIntensity}
+              onChange={e => setChartIntensity(Number(e.target.value))}
+              style={{ width: '100%', accentColor: 'var(--accent)' }}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="overview-charts">
@@ -110,6 +127,7 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
               color={CHART_COLORS[idx % CHART_COLORS.length]}
               fps={chart.field === 'length' ? fps : undefined}
               onBarClick={onBarClick}
+              intensity={chartIntensity}
             />
           )
         })}
@@ -239,11 +257,12 @@ function GradeSummary({ chart, fps, episodes, onNavigateCurate }: {
 
 /* ── Chart panel ──────────────────────────────── */
 
-function ChartPanel({ chart, color, fps, onBarClick }: {
+function ChartPanel({ chart, color, fps, onBarClick, intensity = 0.5 }: {
   chart: DistributionResult
   color: string
   fps?: number
   onBarClick?: (label: string) => void
+  intensity?: number
 }) {
   const gradientId = `gradient-${chart.field}`
 
@@ -265,8 +284,8 @@ function ChartPanel({ chart, color, fps, onBarClick }: {
           <BarChart data={chart.bins} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="1" x2="0" y2="0">
-                <stop offset="0%" stopColor={color} stopOpacity={0.25} />
-                <stop offset="100%" stopColor={color} stopOpacity={0.08} />
+                <stop offset="0%" stopColor={color} stopOpacity={intensity * 0.5} />
+                <stop offset="100%" stopColor={color} stopOpacity={intensity * 0.16} />
               </linearGradient>
             </defs>
             <XAxis
@@ -295,7 +314,7 @@ function ChartPanel({ chart, color, fps, onBarClick }: {
               dataKey="count"
               fill={`url(#${gradientId})`}
               stroke={color}
-              strokeOpacity={0.4}
+              strokeOpacity={intensity * 0.8}
               radius={[2, 2, 0, 0]}
               cursor={onBarClick ? 'pointer' : undefined}
               onClick={onBarClick ? (data: { label?: string }) => {
