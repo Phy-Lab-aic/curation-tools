@@ -101,6 +101,23 @@ export interface ConverterStatus {
   summary: string
 }
 
+export type LogEventType = 'converted' | 'failed' | 'converting' | 'scan' | 'warning' | 'info' | 'error'
+
+export interface LogEvent {
+  type: LogEventType
+  ts: string
+  recording?: string
+  frames?: number
+  duration?: number
+  error_code?: string
+  reason?: string
+  task?: string
+  count?: number
+  tasks?: number
+  pending?: number
+  message?: string
+}
+
 // ── Distribution types ──────────────────────────
 
 export interface FieldInfo {

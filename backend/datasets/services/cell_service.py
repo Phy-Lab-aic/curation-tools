@@ -49,7 +49,7 @@ def scan_cells(roots: list[str], pattern: str = "cell*") -> list[CellInfo]:
     return cells
 
 
-def get_datasets_in_cell(cell_path: str) -> list[DatasetSummary]:
+async def get_datasets_in_cell(cell_path: str) -> list[DatasetSummary]:
     """Return all datasets inside a cell directory.
 
     A dataset is a subdirectory containing meta/info.json.
@@ -89,7 +89,7 @@ def get_datasets_in_cell(cell_path: str) -> list[DatasetSummary]:
             normal_duration_sec=float(grade_stats["normal_duration_sec"]),
             bad_duration_sec=float(grade_stats["bad_duration_sec"]),
         ))
-    _fire_upsert(root.name, datasets)
+    await _upsert_datasets_to_db(root.name, datasets)
     return datasets
 
 
@@ -145,15 +145,6 @@ async def _upsert_datasets_to_db(cell_name: str, datasets: list[DatasetSummary])
     await db.commit()
 
 
-def _fire_upsert(cell_name: str, datasets: list[DatasetSummary]) -> None:
-    """Schedule _upsert_datasets_to_db, adapting to whether a loop is running."""
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(_upsert_datasets_to_db(cell_name, datasets))
-    except RuntimeError:
-        # No running event loop — e.g. called from a sync test or CLI
-        asyncio.run(_upsert_datasets_to_db(cell_name, datasets))
-
 
 def _count_grades(dataset_dir: Path, fps: int = 0) -> dict[str, int | float]:
     """Count grades and durations from parquet files and sidecar JSON (sidecar wins).
@@ -163,6 +154,7 @@ def _count_grades(dataset_dir: Path, fps: int = 0) -> dict[str, int | float]:
     # --- DB-first path ---
     try:
         from backend.core.db import get_db
+        import concurrent.futures
 
         async def _from_db():
             db = await get_db()
@@ -179,8 +171,9 @@ def _count_grades(dataset_dir: Path, fps: int = 0) -> dict[str, int | float]:
 
         try:
             asyncio.get_running_loop()
-            # Can't run_until_complete inside running loop, skip DB
-            row = None
+            # Running inside async context — use a thread with its own event loop
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                row = pool.submit(lambda: asyncio.run(_from_db())).result()
         except RuntimeError:
             row = asyncio.run(_from_db())
 

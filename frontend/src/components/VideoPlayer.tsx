@@ -13,6 +13,7 @@ export interface VideoPlayerHandle {
   stepFrame: (direction: 1 | -1) => void
   seekToFrame: (frame: number) => void
   seekToTimestamp: (ts: number) => void
+  togglePlay: () => void
 }
 
 interface VideoPlayerProps {
@@ -74,19 +75,20 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       .finally(() => setLoading(false))
   }, [episodeIndex])
 
-  // Animation frame loop for time display
+  // Animation frame loop for time display - only runs when playing
   const updateTime = useCallback(() => {
     const primary = primaryKeyRef.current ? videoRefs.current.get(primaryKeyRef.current) : null
-    if (primary && !primary.paused) {
+    if (primary) {
       setCurrentTime(primary.currentTime)
     }
     animFrameRef.current = requestAnimationFrame(updateTime)
   }, [])
 
   useEffect(() => {
+    if (!playing) return
     animFrameRef.current = requestAnimationFrame(updateTime)
     return () => cancelAnimationFrame(animFrameRef.current)
-  }, [updateTime])
+  }, [playing, updateTime])
 
   // Register a video element
   const registerVideo = useCallback((el: HTMLVideoElement | null, key: string) => {
@@ -172,21 +174,15 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     stepFrame,
     seekToFrame,
     seekToTimestamp,
-  }), [stepFrame, seekToFrame, seekToTimestamp])
+    togglePlay,
+  }), [stepFrame, seekToFrame, seekToTimestamp, togglePlay])
 
   const changeSpeed = useCallback((rate: number) => {
     setPlaybackRate(rate)
     videoRefs.current.forEach(v => {
       v.playbackRate = rate
-      // If paused, start playing at new speed immediately
-      if (v.paused && ready) {
-        v.play()
-      }
     })
-    if (!playing && ready) {
-      setPlaying(true)
-    }
-  }, [playing, ready])
+  }, [])
 
   const handleVideoEnd = useCallback(() => {
     setPlaying(false)
@@ -291,7 +287,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
 
           {terminalFrames.length > 0 && (
             <button
-              style={{ ...styles.ctrlBtn, color: '#f38ba8', borderColor: '#4a2a2a' }}
+              style={{ ...styles.ctrlBtn, color: 'var(--c-red)', borderColor: '#4a2a2a' }}
               onClick={() => {
                 // Jump to next terminal frame after current position; wrap around
                 const next = terminalFrames.find(f => f > currentFrame) ?? terminalFrames[0]
@@ -335,7 +331,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
                 <div style={{
                   width: '2px',
                   height: '10px',
-                  background: '#f38ba8',
+                  background: 'var(--c-red)',
                   opacity: 0.7,
                   borderRadius: '1px',
                   pointerEvents: 'none',
@@ -355,7 +351,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
                 style={{
                   ...styles.speedBtn,
                   ...(playbackRate === rate ? styles.speedActive : {}),
-                  ...(defaultRate === rate ? { borderBottom: '2px solid #89b4fa' } : {}),
+                  ...(defaultRate === rate ? { borderBottom: '2px solid var(--interactive)' } : {}),
                 }}
                 onClick={() => changeSpeed(rate)}
                 onDoubleClick={() => setAsDefault(rate)}
@@ -377,7 +373,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     flex: 1,
     overflow: 'hidden',
-    background: '#0a0a0a',
+    background: 'var(--bg-deep)',
   },
   grid: {
     display: 'grid',
@@ -386,24 +382,27 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2px',
     overflow: 'hidden',
     alignItems: 'center',
-    background: '#0a0a0a',
+    background: 'var(--bg-deep)',
+    minHeight: 0,
   },
   videoCell: {
     position: 'relative',
     overflow: 'hidden',
     borderRadius: '4px',
-    background: '#111',
+    background: 'var(--panel3)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 0,
+    minHeight: 0,
   },
   cameraLabel: {
     position: 'absolute',
     top: '6px',
     left: '8px',
-    fontSize: '11px',
+    fontSize: '12px',
     fontWeight: 600,
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.8)',
     background: 'rgba(0,0,0,0.5)',
     padding: '2px 8px',
     borderRadius: '3px',
@@ -417,8 +416,8 @@ const styles: Record<string, React.CSSProperties> = {
     objectFit: 'contain',
   },
   controls: {
-    background: '#151515',
-    borderTop: '1px solid #2a2a2a',
+    background: 'var(--panel)',
+    borderTop: '1px solid var(--border2)',
     padding: '8px 16px',
     flexShrink: 0,
   },
@@ -429,16 +428,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   ctrlBtn: {
     background: 'none',
-    border: '1px solid #333',
+    border: '1px solid var(--border3)',
     borderRadius: '4px',
-    color: '#aaa',
+    color: 'var(--text-muted)',
     padding: '4px 8px',
-    fontSize: '11px',
+    fontSize: '12px',
     cursor: 'pointer',
     lineHeight: 1,
   },
   playBtn: {
-    background: '#89b4fa',
+    background: 'var(--interactive)',
     border: 'none',
     borderRadius: '50%',
     color: '#fff',
@@ -455,12 +454,12 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     height: '4px',
     cursor: 'pointer',
-    accentColor: '#89b4fa',
+    accentColor: 'var(--interactive)',
   },
   timeLabel: {
-    fontSize: '11px',
-    color: '#888',
-    fontFamily: 'monospace',
+    fontSize: '12px',
+    color: 'var(--text-muted)',
+    fontFamily: 'var(--font-mono)',
     whiteSpace: 'nowrap',
     minWidth: '100px',
     textAlign: 'right',
@@ -471,19 +470,19 @@ const styles: Record<string, React.CSSProperties> = {
     marginLeft: '8px',
   },
   speedBtn: {
-    background: '#1e1e1e',
-    border: '1px solid #333',
+    background: 'var(--panel2)',
+    border: '1px solid var(--border3)',
     borderRadius: '3px',
-    color: '#777',
-    fontSize: '10px',
-    padding: '2px 6px',
+    color: 'var(--text-dim)',
+    fontSize: '11px',
+    padding: '3px 7px',
     cursor: 'pointer',
-    fontFamily: 'monospace',
+    fontFamily: 'var(--font-mono)',
   },
   speedActive: {
     background: '#2a3a4a',
-    borderColor: '#89b4fa',
-    color: '#89b4fa',
+    borderColor: 'var(--interactive)',
+    color: 'var(--interactive)',
   },
   empty: {
     display: 'flex',
@@ -491,20 +490,27 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    background: '#0a0a0a',
-    color: '#555',
+    background: 'var(--bg-deep)',
+    color: 'var(--text-dim)',
     gap: '8px',
   },
   emptyIcon: {
-    fontSize: '48px',
-    opacity: 0.3,
+    fontSize: '36px',
+    opacity: 0.5,
+    width: '56px',
+    height: '56px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid var(--border2)',
+    borderRadius: '50%',
   },
   emptyText: {
     fontSize: '14px',
-    color: '#666',
+    color: 'var(--text-muted)',
   },
   emptyHint: {
     fontSize: '12px',
-    color: '#444',
+    color: 'var(--text-dim)',
   },
 }

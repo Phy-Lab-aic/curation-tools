@@ -21,3 +21,11 @@ Key routing rules:
 - Design system, brand → invoke design-consultation
 - Visual audit, design polish → invoke design-review
 - Architecture review → invoke plan-eng-review
+
+## UI Design Rules
+
+- **Font**: sans-serif(기본) for UI labels/text, `var(--font-mono)` for data values/identifiers only. Inline style: `fontFamily: 'var(--font-mono)'`
+- **Colors**: CSS custom properties only (`var(--text)`, `var(--c-green)` 등). 하드코딩 금지
+- **No noise**: 경로, n=count, fps 같은 기술 메타데이터는 UI에 노출하지 않음. 사용자가 실제 읽는 정보만 표시
+- **No redundancy**: 같은 정보를 두 곳에 표시하지 않음
+- **No unnecessary toggles**: 탭으로 이미 진입했으면 내부에 접기/펼치기 추가 금지
