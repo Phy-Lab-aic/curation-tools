@@ -33,15 +33,24 @@ def make_services() -> tuple[DatasetService, EpisodeService]:
     ds.load_dataset(MOCK_DATASET)
 
     # Patch the module-level singleton used by episode_service and task_service
+    # Patch both shim modules and canonical modules
     import backend.services.dataset_service as ds_mod
     import backend.services.episode_service as ep_mod
     import backend.services.task_service as ts_mod
     import backend.services.export_service as ex_mod
+    import backend.datasets.services.dataset_service as ds_canon
+    import backend.datasets.services.episode_service as ep_canon
+    import backend.datasets.services.task_service as ts_canon
+    import backend.datasets.services.export_service as ex_canon
 
     ds_mod.dataset_service = ds
     ep_mod.dataset_service = ds
     ts_mod.dataset_service = ds
     ex_mod.dataset_service = ds
+    ds_canon.dataset_service = ds
+    ep_canon.dataset_service = ds
+    ts_canon.dataset_service = ds
+    ex_canon.dataset_service = ds
 
     es = EpisodeService()
     return ds, es
@@ -49,6 +58,14 @@ def make_services() -> tuple[DatasetService, EpisodeService]:
 
 async def run_tests() -> None:
     reset_mock_dataset()
+
+    # Initialise the SQLite DB (episode annotations now live in DB)
+    import tempfile as _tmpmod
+    from backend.core.db import init_db, close_db, _reset as _db_reset
+    import backend.core.db as _db_mod
+    _db_mod._db_path_override = str(Path(_tmpmod.mkdtemp()) / "test_mockup.db")
+    await init_db()
+
     ds, es = make_services()
 
     # --- get_info ---
@@ -74,20 +91,24 @@ async def run_tests() -> None:
     assert task_instructions[1] == "Place the cube on the plate", f"Unexpected task 1: {task_instructions[1]}"
     print("PASS: get_tasks() returns 2 tasks with correct instructions")
 
-    # --- update_episode 0 with grade="Good" and tags=["good", "clean"] ---
-    updated = await es.update_episode(episode_index=0, grade="Good", tags=["good", "clean"])
-    assert updated["grade"] == "Good", f"Expected grade='Good', got {updated['grade']}"
+    # --- update_episode 0 with grade="good" and tags=["good", "clean"] ---
+    updated = await es.update_episode(episode_index=0, grade="good", tags=["good", "clean"])
+    assert updated["grade"] == "good", f"Expected grade='good', got {updated['grade']}"
     assert updated["tags"] == ["good", "clean"], f"Unexpected tags: {updated['tags']}"
     print("PASS: update_episode() returns updated record with grade and tags")
 
-    # Verify persistence: re-read from sidecar JSON
-    from backend.services.episode_service import _load_sidecar
-    sidecar = _load_sidecar(MOCK_DATASET)
-    ann = sidecar.get("0")
-    assert ann is not None, "Episode 0 annotation not found in sidecar"
-    assert ann["grade"] == "Good", f"Persisted grade mismatch: {ann['grade']}"
-    assert ann["tags"] == ["good", "clean"], f"Persisted tags mismatch: {ann['tags']}"
-    print("PASS: Episode update persisted correctly to sidecar JSON")
+    # Verify persistence: re-read from DB
+    import json as json_verify
+    from backend.core.db import get_db
+    db = await get_db()
+    async with db.execute(
+        "SELECT grade, tags FROM episode_annotations WHERE episode_index = 0"
+    ) as cursor:
+        row = await cursor.fetchone()
+    assert row is not None, "Episode 0 annotation not found in DB"
+    assert row[0] == "good", f"Persisted grade mismatch: {row[0]}"
+    assert json_verify.loads(row[1]) == ["good", "clean"], f"Persisted tags mismatch: {row[1]}"
+    print("PASS: Episode update persisted correctly to DB")
 
     # --- update_task 0 instruction ---
     new_instruction = "Pick up the blue cube"
@@ -107,9 +128,9 @@ async def run_tests() -> None:
 
     # --- export_dataset: mark episode 1 as Bad, export excluding Bad ---
     import tempfile, shutil, json as json_mod
-    await es.update_episode(episode_index=1, grade="Bad", tags=["collision"])
+    await es.update_episode(episode_index=1, grade="bad", tags=["collision"])
     export_dir = Path(tempfile.mkdtemp(prefix="curation_export_")) / "exported"
-    result = export_dataset(str(export_dir), exclude_grades=["Bad"])
+    result = export_dataset(str(export_dir), exclude_grades=["bad"])
     assert result["total_episodes"] == 4, f"Expected 4 exported episodes, got {result['total_episodes']}"
     assert result["excluded_count"] == 1, f"Expected 1 excluded, got {result['excluded_count']}"
     # Verify info.json
@@ -135,7 +156,7 @@ async def run_tests() -> None:
     assert (export_dir / "data" / "chunk-000" / "file-000.parquet").exists(), "Data parquet not exported"
     # Verify exporting to existing path raises ValueError
     try:
-        export_dataset(str(export_dir), exclude_grades=["Bad"])
+        export_dataset(str(export_dir), exclude_grades=["bad"])
         assert False, "Should have raised ValueError for existing output path"
     except ValueError:
         pass

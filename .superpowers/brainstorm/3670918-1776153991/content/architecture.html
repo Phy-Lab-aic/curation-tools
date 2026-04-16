@@ -1,0 +1,167 @@
+<h2>전체 아키텍처 — 페이지 구조</h2>
+<p class="subtitle">섹션 1 / 5 · 검토 후 OK 또는 수정사항을 알려주세요</p>
+
+<style>
+  body { font-family: 'JetBrains Mono', monospace, sans-serif; }
+
+  .arch-wrap { display: flex; gap: 32px; align-items: flex-start; margin: 20px 0; }
+
+  /* Flow diagram */
+  .flow { flex: 1; }
+  .flow-title { font-size: 11px; color: #6c7086; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  .flow-node { border: 1px solid #45475a; border-radius: 8px; padding: 10px 14px; background: #1e1e2e; margin-bottom: 6px; }
+  .flow-node.root { border-color: #89b4fa; background: #1e1e2e; }
+  .flow-node.page { border-color: #cba6f7; }
+  .flow-node.tab { border-color: #313244; background: #181825; margin-left: 20px; }
+  .flow-label { font-size: 12px; font-weight: 600; color: #cdd6f4; }
+  .flow-sub { font-size: 10px; color: #6c7086; margin-top: 2px; }
+  .flow-arrow { color: #45475a; font-size: 11px; margin: 2px 0 2px 8px; }
+  .flow-tabs-row { display: flex; gap: 6px; margin: 6px 0 6px 20px; flex-wrap: wrap; }
+  .flow-tab-chip { border: 1px solid #313244; background: #181825; border-radius: 20px; padding: 3px 10px; font-size: 10px; color: #a6adc8; }
+  .flow-tab-chip.new { border-color: #a6e3a144; color: #a6e3a1; background: #a6e3a108; }
+  .flow-tab-chip.keep { border-color: #89b4fa44; color: #89b4fa; background: #89b4fa08; }
+  .flow-tab-chip.remove { border-color: #f38ba844; color: #f38ba8; background: #f38ba808; text-decoration: line-through; }
+
+  /* Legend */
+  .legend { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #6c7086; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* Right: change summary */
+  .change-summary { width: 260px; }
+  .change-title { font-size: 11px; color: #6c7086; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  .change-section { margin-bottom: 14px; }
+  .change-section-label { font-size: 10px; font-weight: 700; margin-bottom: 6px; }
+  .change-item { font-size: 11px; color: #a6adc8; margin-bottom: 4px; display: flex; align-items: flex-start; gap: 6px; }
+  .change-item::before { content: "·"; color: #45475a; flex-shrink: 0; }
+  .change-item.add::before { content: "+"; color: #a6e3a1; }
+  .change-item.remove::before { content: "−"; color: #f38ba8; }
+  .change-item.keep::before { content: "~"; color: #89b4fa; }
+
+  /* Repo name box */
+  .repo-box { border: 1px solid #45475a; border-radius: 8px; padding: 12px; background: #1e1e2e; }
+  .repo-box-title { font-size: 10px; color: #6c7086; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .repo-option { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #313244; }
+  .repo-option:last-child { border-bottom: none; }
+  .repo-name { font-family: monospace; font-size: 12px; color: #cdd6f4; }
+  .repo-desc { font-size: 10px; color: #6c7086; }
+  .repo-option.rec .repo-name { color: #a6e3a1; }
+  .repo-option.rec::after { content: "추천"; font-size: 9px; color: #a6e3a1; background: #a6e3a110; padding: 1px 6px; border-radius: 10px; }
+</style>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#a6e3a1"></div> 신규 추가</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#89b4fa"></div> 기존 유지</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f38ba8"></div> 제거</div>
+</div>
+
+<div class="arch-wrap">
+  <div class="flow">
+    <div class="flow-title">화면 흐름</div>
+
+    <!-- App root -->
+    <div class="flow-node root">
+      <div class="flow-label">App (단일 진입점)</div>
+      <div class="flow-sub">상단 글로벌 네비게이션 바 없음 — 데이터셋 라이브러리가 홈</div>
+    </div>
+    <div class="flow-arrow">↓</div>
+
+    <!-- Dataset Library -->
+    <div class="flow-node page">
+      <div class="flow-label" style="color:#a6e3a1">Dataset Library <span style="font-size:10px;color:#a6e3a155">[신규]</span></div>
+      <div class="flow-sub">그리드 뷰 · 검색/필터 · 마운트 경로 스캔 · 데이터셋 카드</div>
+    </div>
+    <div class="flow-arrow">↓ 데이터셋 선택</div>
+
+    <!-- Per-dataset page -->
+    <div class="flow-node page">
+      <div class="flow-label" style="color:#cba6f7">데이터셋 상세 페이지</div>
+      <div class="flow-sub">선택된 데이터셋에 대한 4개 탭</div>
+    </div>
+    <div class="flow-tabs-row">
+      <div class="flow-tab-chip new">Overview (분포 시각화)</div>
+      <div class="flow-tab-chip keep">Curate (에피소드 그레이딩)</div>
+      <div class="flow-tab-chip new">Fields (필드 추가/편집)</div>
+      <div class="flow-tab-chip keep">Ops (Split/Merge/Export)</div>
+    </div>
+
+    <div style="margin-top:14px">
+      <div class="flow-title" style="margin-bottom:8px">각 탭 내용</div>
+
+      <div class="flow-node tab">
+        <div class="flow-label" style="font-size:11px;color:#a6e3a1">Overview 탭 <span style="font-size:9px;color:#a6e3a155">[신규]</span></div>
+        <div class="flow-sub">필드 선택 → 차트 유형 선택 → 분포 렌더링 (히스토그램, 파이, 바)</div>
+      </div>
+
+      <div class="flow-node tab" style="margin-top:4px">
+        <div class="flow-label" style="font-size:11px;color:#89b4fa">Curate 탭 <span style="font-size:9px;color:#89b4fa55">[기존 유지]</span></div>
+        <div class="flow-sub">에피소드 목록 + 비디오 플레이어 + 스칼라 차트 + 그레이딩</div>
+      </div>
+
+      <div class="flow-node tab" style="margin-top:4px">
+        <div class="flow-label" style="font-size:11px;color:#a6e3a1">Fields 탭 <span style="font-size:9px;color:#a6e3a155">[신규]</span></div>
+        <div class="flow-sub">info.json 커스텀 필드 + meta/episodes/*.parquet 컬럼 추가</div>
+      </div>
+
+      <div class="flow-node tab" style="margin-top:4px">
+        <div class="flow-label" style="font-size:11px;color:#89b4fa">Ops 탭 <span style="font-size:9px;color:#89b4fa55">[기존 유지]</span></div>
+        <div class="flow-sub">Split / Merge / Delete / Export</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: change summary + repo names -->
+  <div class="change-summary">
+    <div class="change-title">변경 요약</div>
+
+    <div class="change-section">
+      <div class="change-section-label" style="color:#f38ba8">제거</div>
+      <div class="change-item remove">ConversionPage 전체</div>
+      <div class="change-item remove">conversion router / service</div>
+      <div class="change-item remove">HubSync 컴포넌트</div>
+      <div class="change-item remove">상단 page-tab-bar (Conversion/Curation)</div>
+    </div>
+
+    <div class="change-section">
+      <div class="change-section-label" style="color:#a6e3a1">신규 추가</div>
+      <div class="change-item add">DatasetLibrary 페이지 (그리드, 검색)</div>
+      <div class="change-item add">Overview 탭 (분포 시각화)</div>
+      <div class="change-item add">Fields 탭 (parquet 컬럼 + info.json 편집)</div>
+      <div class="change-item add">백엔드: /api/datasets/distribution 엔드포인트</div>
+      <div class="change-item add">백엔드: /api/datasets/fields 엔드포인트</div>
+    </div>
+
+    <div class="change-section">
+      <div class="change-section-label" style="color:#89b4fa">기존 유지</div>
+      <div class="change-item keep">EpisodeList, VideoPlayer, ScalarChart</div>
+      <div class="change-item keep">EpisodeEditor, TaskEditor</div>
+      <div class="change-item keep">SplitMergePanel + dataset_ops 백엔드</div>
+      <div class="change-item keep">export 기능</div>
+      <div class="change-item keep">Catppuccin 다크 팔레트</div>
+    </div>
+
+    <div style="margin-top:16px">
+      <div class="repo-box">
+        <div class="repo-box-title">저장소 이름 후보</div>
+        <div class="repo-option rec">
+          <div>
+            <div class="repo-name">robodata-studio</div>
+            <div class="repo-desc">범용 · 기능 명확</div>
+          </div>
+        </div>
+        <div class="repo-option">
+          <div>
+            <div class="repo-name">lerobot-studio</div>
+            <div class="repo-desc">포맷 명시 · 외부 공개 시 유리</div>
+          </div>
+        </div>
+        <div class="repo-option">
+          <div>
+            <div class="repo-name">dataset-curator</div>
+            <div class="repo-desc">큐레이션 강조</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

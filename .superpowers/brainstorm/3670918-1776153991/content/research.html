@@ -1,0 +1,337 @@
+<h2>디자인 레퍼런스 분석</h2>
+<p class="subtitle">유사 소프트웨어 패턴 → 우리 툴에 적용 가능한 요소</p>
+
+<style>
+  .ref-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 20px 0 28px; }
+
+  .ref-card { background: #141414; border: 1px solid #252525; border-radius: 8px; overflow: hidden; }
+  .ref-header { padding: 8px 12px; border-bottom: 1px solid #252525; display: flex; justify-content: space-between; align-items: center; }
+  .ref-name { font-size: 11px; font-weight: 700; color: #e0e0e0; }
+  .ref-tag { font-size: 9px; padding: 2px 6px; border-radius: 3px; }
+  .ref-preview { padding: 10px; min-height: 110px; }
+  .ref-insight { padding: 8px 12px; background: #1a1a1a; border-top: 1px solid #252525; font-size: 10px; color: #666; line-height: 1.5; }
+  .ref-insight strong { color: #aaa; }
+
+  /* FiftyOne mockup */
+  .fo-wrap { display: flex; height: 100px; gap: 6px; }
+  .fo-sidebar { width: 60px; background: #1a1c1e; border-radius: 4px; padding: 5px; }
+  .fo-field { background: #242628; border-radius: 2px; padding: 3px 4px; margin-bottom: 2px; font-size: 8px; color: #888; }
+  .fo-field.active { color: #e0e0e0; }
+  .fo-hist { background: #242628; border-radius: 2px; height: 18px; display: flex; gap: 1px; align-items: flex-end; padding: 2px; margin-top: 3px; }
+  .fo-bar { background: #4a9eff; border-radius: 1px; flex: 1; }
+  .fo-grid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+  .fo-cell { background: #1a1c1e; border-radius: 2px; }
+
+  /* W&B mockup */
+  .wb-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; height: 100px; }
+  .wb-panel { background: #12141a; border: 1px solid #1e2230; border-radius: 4px; padding: 6px; }
+  .wb-panel-title { font-size: 8px; color: #484f58; margin-bottom: 4px; }
+  .wb-line { height: 30px; background: #0d0e12; border-radius: 2px; position: relative; overflow: hidden; }
+  .wb-sparkline { position: absolute; bottom: 0; left: 0; right: 0; height: 100%; background: linear-gradient(180deg, transparent 40%, #f6a62215 100%); }
+  .wb-sparkline::after { content: ''; position: absolute; bottom: 4px; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, #f6a622, #f6a622, transparent); }
+
+  /* LeRobot Visualizer mockup */
+  .lrv-wrap { display: flex; height: 100px; gap: 5px; }
+  .lrv-nav { width: 55px; background: #111; border-radius: 4px; padding: 5px; }
+  .lrv-nav-item { font-size: 8px; color: #444; padding: 2px 4px; margin-bottom: 2px; }
+  .lrv-nav-item.active { color: #ddd; }
+  .lrv-main { flex: 1; background: #111; border-radius: 4px; padding: 5px; }
+  .lrv-video { background: #1a1a1a; height: 55px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #444; margin-bottom: 4px; }
+  .lrv-charts { display: flex; gap: 2px; }
+  .lrv-chart { flex: 1; background: #1a1a1a; height: 20px; border-radius: 2px; }
+
+  /* Roboflow mockup */
+  .rf-wrap { padding: 4px 0; }
+  .rf-stats-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .rf-stat { background: #111; border: 1px solid #222; border-radius: 4px; padding: 4px 8px; flex: 1; }
+  .rf-stat-n { font-size: 13px; font-weight: 700; color: #fff; }
+  .rf-stat-l { font-size: 8px; color: #555; }
+  .rf-class-bar { background: #111; border-radius: 4px; padding: 5px 8px; }
+  .rf-class-row { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+  .rf-class-name { font-size: 8px; color: #888; width: 35px; }
+  .rf-class-track { flex: 1; background: #222; height: 5px; border-radius: 2px; }
+  .rf-class-fill { height: 5px; border-radius: 2px; }
+  .rf-class-count { font-size: 8px; color: #555; width: 20px; text-align: right; }
+
+  /* Encord mockup */
+  .enc-wrap { display: flex; flex-direction: column; height: 100px; }
+  .enc-main { flex: 1; background: #111; border-radius: 4px 4px 0 0; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #444; }
+  .enc-timeline { background: #0e0e0e; border-top: 1px solid #222; height: 24px; border-radius: 0 0 4px 4px; display: flex; align-items: center; padding: 0 6px; gap: 2px; }
+  .enc-tick { width: 8px; height: 12px; background: #1e2a1e; border-radius: 1px; }
+  .enc-tick.marked { background: #2d5a2d; }
+
+  /* Lightly mockup */
+  .lt-wrap { display: flex; flex-direction: column; height: 100px; }
+  .lt-top { flex: 1; background: #0f0f0f; border-radius: 4px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 6px; }
+  .lt-dot { width: 100%; aspect-ratio: 1; border-radius: 50%; }
+
+  /* Section divider */
+  .section-div { border: none; border-top: 1px solid #252525; margin: 20px 0 16px; }
+  .section-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+
+  /* Pattern extraction */
+  .patterns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .pattern { background: #141414; border: 1px solid #252525; border-radius: 8px; padding: 12px; }
+  .pattern-icon { font-size: 18px; margin-bottom: 6px; }
+  .pattern-name { font-size: 11px; font-weight: 700; color: #e0e0e0; margin-bottom: 4px; }
+  .pattern-desc { font-size: 10px; color: #666; line-height: 1.5; }
+  .pattern-from { font-size: 9px; color: #444; margin-top: 5px; }
+
+  /* Refined direction */
+  .refined { background: #1a1612; border: 2px solid #e8c88a44; border-radius: 10px; padding: 14px; }
+  .refined-title { font-size: 12px; font-weight: 700; color: #e8c88a; margin-bottom: 8px; }
+  .refined-body { display: flex; gap: 12px; }
+  .refined-preview { flex: 1; background: #211d18; border-radius: 6px; overflow: hidden; }
+  .rp-nav { background: #181410; border-bottom: 1px solid #2d2820; padding: 7px 12px; display: flex; align-items: center; gap: 8px; }
+  .rp-logo { font-size: 11px; font-weight: 800; color: #e8d5b8; letter-spacing: -0.03em; }
+  .rp-logo span { color: #e8c88a; }
+  .rp-breadcrumb { font-size: 9px; color: #4a4038; font-family: monospace; }
+  .rp-breadcrumb em { color: #8a7a68; }
+  .rp-body { display: flex; height: 130px; }
+  .rp-sidebar { width: 100px; background: #181410; border-right: 1px solid #2d2820; padding: 8px; }
+  .rp-cell { background: #211d18; border: 1px solid #2d2820; border-radius: 4px; padding: 5px 6px; margin-bottom: 3px; cursor: default; }
+  .rp-cell.active { border-color: #e8c88a44; background: #e8c88a08; }
+  .rp-cell-name { font-size: 9px; font-weight: 600; color: #e8d5b8; }
+  .rp-cell-meta { font-size: 8px; color: #4a4038; }
+  .rp-main { flex: 1; padding: 8px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; align-content: start; }
+  .rp-ds { background: #181410; border: 1px solid #2d2820; border-radius: 4px; padding: 6px; }
+  .rp-ds-name { font-size: 9px; font-weight: 600; color: #e8d5b8; }
+  .rp-ds-meta { font-size: 8px; color: #4a4038; margin-top: 1px; }
+  .rp-prog { background: #2d2820; height: 2px; border-radius: 1px; margin-top: 4px; }
+  .rp-prog-fill { height: 2px; border-radius: 1px; background: #e8c88a; }
+
+  .refined-notes { width: 200px; }
+  .note { margin-bottom: 8px; }
+  .note-title { font-size: 10px; font-weight: 700; color: #e8c88a; margin-bottom: 3px; }
+  .note-desc { font-size: 10px; color: #8a7a68; line-height: 1.5; }
+
+  .color-swatches { display: flex; gap: 5px; margin-top: 10px; flex-wrap: wrap; }
+  .swatch { border-radius: 4px; height: 20px; flex: 1; min-width: 20px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: rgba(0,0,0,0.5); font-weight: 600; }
+</style>
+
+<!-- Reference tools -->
+<div class="ref-grid">
+  <!-- FiftyOne -->
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-name">FiftyOne</span>
+      <span class="ref-tag" style="background:#4a9eff22;color:#4a9eff;border:1px solid #4a9eff44">가장 유사</span>
+    </div>
+    <div class="ref-preview">
+      <div class="fo-wrap">
+        <div class="fo-sidebar">
+          <div class="fo-field active">episode_len</div>
+          <div class="fo-field">grade</div>
+          <div class="fo-field">task_idx</div>
+          <div class="fo-hist">
+            <div class="fo-bar" style="height:40%"></div>
+            <div class="fo-bar" style="height:80%"></div>
+            <div class="fo-bar" style="height:100%"></div>
+            <div class="fo-bar" style="height:60%"></div>
+            <div class="fo-bar" style="height:30%"></div>
+          </div>
+        </div>
+        <div class="fo-grid">
+          <div class="fo-cell"></div><div class="fo-cell"></div><div class="fo-cell"></div>
+          <div class="fo-cell"></div><div class="fo-cell"></div><div class="fo-cell"></div>
+          <div class="fo-cell"></div><div class="fo-cell"></div><div class="fo-cell"></div>
+        </div>
+      </div>
+    </div>
+    <div class="ref-insight"><strong>패턴:</strong> 좌측 필터 사이드바에 인라인 미니 히스토그램. 데이터 밀도 높음. 배경 중립 다크 (#1a1c1e). 악센트 최소화.</div>
+  </div>
+
+  <!-- W&B -->
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-name">Weights & Biases</span>
+      <span class="ref-tag" style="background:#f6a62222;color:#f6a622;border:1px solid #f6a62244">대시보드</span>
+    </div>
+    <div class="ref-preview">
+      <div class="wb-wrap">
+        <div class="wb-panel">
+          <div class="wb-panel-title">action.0 dist</div>
+          <div class="wb-line"><div class="wb-sparkline"></div></div>
+        </div>
+        <div class="wb-panel">
+          <div class="wb-panel-title">grade ratio</div>
+          <div class="wb-line"></div>
+        </div>
+        <div class="wb-panel">
+          <div class="wb-panel-title">ep_length</div>
+          <div class="wb-line"></div>
+        </div>
+        <div class="wb-panel" style="background:#0d0e12;border-style:dashed;display:flex;align-items:center;justify-content:center;font-size:9px;color:#333">+ add</div>
+      </div>
+    </div>
+    <div class="ref-insight"><strong>패턴:</strong> 패널 그리드 (추가/삭제 가능). 각 패널이 독립 위젯. 매우 어두운 네이비 (#0d0e12). 패널 경계가 구조를 만듦.</div>
+  </div>
+
+  <!-- LeRobot Visualizer -->
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-name">LeRobot Visualizer</span>
+      <span class="ref-tag" style="background:#ffffff11;color:#888;border:1px solid #333">동일 포맷</span>
+    </div>
+    <div class="ref-preview">
+      <div class="lrv-wrap">
+        <div class="lrv-nav">
+          <div class="lrv-nav-item active">Datasets</div>
+          <div class="lrv-nav-item">Episodes</div>
+          <div class="lrv-nav-item">Frames</div>
+        </div>
+        <div class="lrv-main">
+          <div class="lrv-video">▶ video</div>
+          <div class="lrv-charts">
+            <div class="lrv-chart"></div>
+            <div class="lrv-chart"></div>
+            <div class="lrv-chart"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ref-insight"><strong>패턴:</strong> 심플한 3단계 탐색. 비디오 + 그래프 동기화. 순수 블랙 (#111). 불필요한 장식 없음.</div>
+  </div>
+
+  <!-- Roboflow -->
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-name">Roboflow</span>
+      <span class="ref-tag" style="background:#6c47ff22;color:#9f7aff;border:1px solid #6c47ff44">클래스 분포</span>
+    </div>
+    <div class="ref-preview">
+      <div class="rf-wrap">
+        <div class="rf-stats-row">
+          <div class="rf-stat"><div class="rf-stat-n">142</div><div class="rf-stat-l">Images</div></div>
+          <div class="rf-stat"><div class="rf-stat-n">3</div><div class="rf-stat-l">Classes</div></div>
+          <div class="rf-stat"><div class="rf-stat-n">87%</div><div class="rf-stat-l">Annotated</div></div>
+        </div>
+        <div class="rf-class-bar">
+          <div class="rf-class-row"><span class="rf-class-name">good</span><div class="rf-class-track"><div class="rf-class-fill" style="width:72%;background:#4ade80"></div></div><span class="rf-class-count">102</span></div>
+          <div class="rf-class-row"><span class="rf-class-name">normal</span><div class="rf-class-track"><div class="rf-class-fill" style="width:28%;background:#facc15"></div></div><span class="rf-class-count">40</span></div>
+          <div class="rf-class-row"><span class="rf-class-name">bad</span><div class="rf-class-track"><div class="rf-class-fill" style="width:8%;background:#f87171"></div></div><span class="rf-class-count">12</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="ref-insight"><strong>패턴:</strong> 데이터셋 상단에 핵심 수치 3개. 클래스 분포를 가로 바로 표시. 간결하고 스캔하기 쉬움.</div>
+  </div>
+
+  <!-- Encord -->
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-name">Encord</span>
+      <span class="ref-tag" style="background:#22c55e22;color:#4ade80;border:1px solid #22c55e44">비디오</span>
+    </div>
+    <div class="ref-preview">
+      <div class="enc-wrap">
+        <div class="enc-main">▶ 비디오 + 어노테이션 오버레이</div>
+        <div class="enc-timeline">
+          <div class="enc-tick"></div><div class="enc-tick marked"></div><div class="enc-tick"></div>
+          <div class="enc-tick marked"></div><div class="enc-tick"></div><div class="enc-tick"></div>
+          <div class="enc-tick marked"></div><div class="enc-tick"></div><div class="enc-tick"></div>
+        </div>
+      </div>
+    </div>
+    <div class="ref-insight"><strong>패턴:</strong> 비디오 전체 화면 + 하단 타임라인. 이벤트/어노테이션을 타임라인에 마킹. 작업 중심 UX.</div>
+  </div>
+
+  <!-- Lightly.ai -->
+  <div class="ref-card">
+    <div class="ref-header">
+      <span class="ref-name">Lightly.ai</span>
+      <span class="ref-tag" style="background:#ec489922;color:#f472b6;border:1px solid #ec489944">임베딩</span>
+    </div>
+    <div class="ref-preview">
+      <div class="lt-wrap">
+        <div class="lt-top">
+          <div class="lt-dot" style="background:#4a9eff44"></div>
+          <div class="lt-dot" style="background:#4ade8055"></div>
+          <div class="lt-dot" style="background:#4a9eff33"></div>
+          <div class="lt-dot" style="background:#f87171aa"></div>
+          <div class="lt-dot" style="background:#4ade8033"></div>
+          <div class="lt-dot" style="background:#4a9eff55"></div>
+          <div class="lt-dot" style="background:#facc1555"></div>
+          <div class="lt-dot" style="background:#4ade8044"></div>
+          <div class="lt-dot" style="background:#4a9eff44"></div>
+          <div class="lt-dot" style="background:#f8717166"></div>
+        </div>
+      </div>
+    </div>
+    <div class="ref-insight"><strong>패턴:</strong> 임베딩 산점도 중심. 데이터 포인트를 직접 조작. 아웃라이어 탐지. 색상으로 클러스터 구분.</div>
+  </div>
+</div>
+
+<hr class="section-div">
+<div class="section-label">우리 툴에 채택할 패턴</div>
+
+<div class="patterns">
+  <div class="pattern">
+    <div class="pattern-icon">📊</div>
+    <div class="pattern-name">인라인 미니 히스토그램</div>
+    <div class="pattern-desc">데이터셋 카드 안에 grade 분포 바를 작게 표시. 목록에서 한눈에 품질 파악.</div>
+    <div class="pattern-from">← FiftyOne + Roboflow</div>
+  </div>
+  <div class="pattern">
+    <div class="pattern-icon">🔲</div>
+    <div class="pattern-name">추가 가능한 패널 그리드</div>
+    <div class="pattern-desc">Overview 탭을 W&B처럼 패널 그리드로. 사용자가 원하는 차트만 추가/제거.</div>
+    <div class="pattern-from">← Weights & Biases</div>
+  </div>
+  <div class="pattern">
+    <div class="pattern-icon">🎯</div>
+    <div class="pattern-name">악센트 최소화</div>
+    <div class="pattern-desc">색상은 데이터(good/bad/중립)에만 사용. UI 크롬은 거의 단색. 색상이 정보를 전달.</div>
+    <div class="pattern-from">← FiftyOne + LeRobot</div>
+  </div>
+</div>
+
+<hr class="section-div">
+<div class="section-label">refined: 웜 앰버 + 레퍼런스 패턴 적용</div>
+
+<div class="refined">
+  <div class="refined-title">수정된 방향 — 앰버는 인터랙션에만, 크롬은 거의 무채색</div>
+  <div class="refined-body">
+    <div class="refined-preview">
+      <div class="rp-nav">
+        <div class="rp-logo">robo<span>data</span></div>
+        <div class="rp-breadcrumb">/ <em>cell002</em> / <em>aic_pick_01</em></div>
+      </div>
+      <div class="rp-body">
+        <div class="rp-sidebar">
+          <div style="font-size:8px;color:#4a4038;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em">Cells</div>
+          <div class="rp-cell"><div class="rp-cell-name">cell001</div><div class="rp-cell-meta">8 datasets</div></div>
+          <div class="rp-cell active"><div class="rp-cell-name" style="color:#e8c88a">cell002</div><div class="rp-cell-meta">6 datasets</div></div>
+          <div class="rp-cell"><div class="rp-cell-name">cell003</div><div class="rp-cell-meta">4 datasets</div></div>
+        </div>
+        <div class="rp-main">
+          <div class="rp-ds"><div class="rp-ds-name">aic_pick_01</div><div class="rp-ds-meta">142 eps · 65%</div><div class="rp-prog"><div class="rp-prog-fill" style="width:65%"></div></div></div>
+          <div class="rp-ds"><div class="rp-ds-name">aic_pick_02</div><div class="rp-ds-meta">89 eps · 30%</div><div class="rp-prog"><div class="rp-prog-fill" style="width:30%"></div></div></div>
+          <div class="rp-ds"><div class="rp-ds-name">aic_place_01</div><div class="rp-ds-meta">210 eps · 100%</div><div class="rp-prog"><div class="rp-prog-fill" style="width:100%;background:#7fb77e"></div></div></div>
+          <div class="rp-ds"><div class="rp-ds-name">aic_place_02</div><div class="rp-ds-meta">55 eps · 0%</div><div class="rp-prog"><div class="rp-prog-fill" style="width:0%"></div></div></div>
+          <div class="rp-ds"><div class="rp-ds-name">aic_stack_01</div><div class="rp-ds-meta">120 eps · 45%</div><div class="rp-prog"><div class="rp-prog-fill" style="width:45%"></div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="refined-notes">
+      <div class="note">
+        <div class="note-title">배경 팔레트</div>
+        <div class="note-desc">극도로 어두운 웜 톤. 파란 기운 완전 제거. 거의 무채색처럼 보이되 따뜻함.</div>
+        <div class="color-swatches">
+          <div class="swatch" style="background:#0f0d0b">BG</div>
+          <div class="swatch" style="background:#1a1612">surface</div>
+          <div class="swatch" style="background:#252018">card</div>
+          <div class="swatch" style="background:#2d2820">border</div>
+          <div class="swatch" style="background:#e8c88a;color:#1a1612">accent</div>
+        </div>
+      </div>
+      <div class="note">
+        <div class="note-title">악센트 사용 원칙</div>
+        <div class="note-desc">앰버(#e8c88a)는 선택된 항목, 진행률 바, CTA 버튼에만 사용. 나머지는 #e8d5b8 (웜 화이트).</div>
+      </div>
+      <div class="note">
+        <div class="note-title">데이터 컬러</div>
+        <div class="note-desc">good → 머티드 그린 #7fb77e<br>normal → 머티드 오렌지 #c9965a<br>bad → 머티드 레드 #c97b7b</div>
+      </div>
+    </div>
+  </div>
+</div>

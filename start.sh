@@ -28,19 +28,17 @@ if [ ! -d "frontend/node_modules" ]; then
 fi
 
 # Ensure dataset mount point exists
-DATASET_ROOT="${CURATION_DATASET_PATH:-/tmp/hf-mounts/Phy-lab/dataset}"
-mkdir -p "$DATASET_ROOT"
+DATASET_ROOT="${CURATION_DATASET_PATH:-/mnt/synology/data/data_div/2026_1/lerobot}"
 export CURATION_DATASET_PATH="$DATASET_ROOT"
 
-echo "Starting LeRobot Curation Tools..."
+echo "Starting robodata-studio..."
 echo "  Dataset:  $DATASET_ROOT"
-echo "  Backend:  http://localhost:8000"
+echo "  Backend:  http://localhost:8001"
 echo "  Frontend: http://localhost:5173"
-echo "  Rerun:    http://localhost:9090"
 echo ""
 
 # Start backend
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload &
+uvicorn backend.main:app --host 0.0.0.0 --port 8001 --reload &
 BACKEND_PID=$!
 
 # Start frontend dev server

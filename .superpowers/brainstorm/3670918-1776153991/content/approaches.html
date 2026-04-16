@@ -1,0 +1,292 @@
+<h2>3가지 아키텍처 접근 방식</h2>
+<p class="subtitle">20개 이상 데이터셋 · 큐레이션 · 분포 시각화 · 필드 추가 — 어떤 구조가 가장 잘 맞나요?</p>
+
+<style>
+  .approach-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 24px 0; }
+  .approach-card { border: 1px solid #45475a; border-radius: 10px; overflow: hidden; cursor: pointer; transition: border-color 0.2s, transform 0.2s; }
+  .approach-card:hover { border-color: #89b4fa; transform: translateY(-2px); }
+  .approach-card.selected { border-color: #a6e3a1; box-shadow: 0 0 0 2px #a6e3a133; }
+  .approach-label { background: #1e1e2e; padding: 12px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6c7086; display: flex; justify-content: space-between; align-items: center; }
+  .approach-label .tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; }
+  .tag-rec { background: #a6e3a122; color: #a6e3a1; }
+  .tag-safe { background: #f9e2af22; color: #f9e2af; }
+  .tag-heavy { background: #f38ba822; color: #f38ba8; }
+  .wireframe { background: #11111b; padding: 12px; min-height: 200px; font-size: 10px; }
+
+  /* Wireframe A: Dashboard grid */
+  .wf-a-nav { background: #181825; border-bottom: 1px solid #313244; padding: 6px 10px; display: flex; gap: 6px; align-items: center; }
+  .wf-a-nav-logo { color: #cdd6f4; font-weight: 700; font-size: 11px; flex: 1; }
+  .wf-a-search { background: #1e1e2e; border: 1px solid #313244; border-radius: 4px; padding: 3px 8px; color: #6c7086; font-size: 10px; width: 120px; }
+  .wf-a-body { padding: 10px; }
+  .wf-a-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .wf-a-ds-card { background: #1e1e2e; border: 1px solid #313244; border-radius: 6px; padding: 8px; }
+  .wf-a-ds-name { color: #cdd6f4; font-size: 10px; font-weight: 600; margin-bottom: 3px; }
+  .wf-a-ds-meta { color: #6c7086; font-size: 9px; }
+  .wf-a-ds-bar { background: #313244; border-radius: 2px; height: 3px; margin-top: 5px; position: relative; }
+  .wf-a-ds-fill { background: #a6e3a1; border-radius: 2px; height: 3px; position: absolute; top: 0; left: 0; }
+  .wf-a-detail { background: #1e1e2e; border: 1px solid #313244; border-radius: 6px; margin-top: 6px; overflow: hidden; }
+  .wf-a-tabs { display: flex; background: #181825; border-bottom: 1px solid #313244; }
+  .wf-a-tab { padding: 4px 10px; font-size: 9px; color: #6c7086; border-right: 1px solid #313244; cursor: default; }
+  .wf-a-tab.active { color: #89b4fa; background: #1e1e2e; }
+  .wf-a-content { padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .wf-a-chart { background: #11111b; border-radius: 4px; height: 32px; display: flex; align-items: flex-end; padding: 3px; gap: 2px; }
+  .wf-a-bar { background: #89b4fa; border-radius: 1px; flex: 1; }
+
+  /* Wireframe B: 3-column extended */
+  .wf-b { display: flex; height: 220px; }
+  .wf-b-sidebar { width: 90px; background: #181825; border-right: 1px solid #313244; padding: 6px; overflow: hidden; }
+  .wf-b-sidebar-title { color: #6c7086; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .wf-b-ds-item { background: #1e1e2e; border-radius: 3px; padding: 3px 5px; margin-bottom: 2px; font-size: 9px; color: #a6adc8; }
+  .wf-b-ds-item.active { background: #313244; color: #cdd6f4; }
+  .wf-b-more { color: #45475a; font-size: 9px; padding: 2px 5px; }
+  .wf-b-center { flex: 1; background: #11111b; padding: 8px; }
+  .wf-b-video { background: #1e1e2e; border-radius: 4px; height: 70px; display: flex; align-items: center; justify-content: center; color: #45475a; font-size: 9px; margin-bottom: 6px; }
+  .wf-b-ep-list { display: flex; flex-direction: column; gap: 2px; }
+  .wf-b-ep { background: #181825; border-radius: 2px; padding: 2px 5px; font-size: 8px; color: #6c7086; display: flex; justify-content: space-between; }
+  .wf-b-ep.selected { background: #313244; color: #cdd6f4; }
+  .wf-b-right { width: 80px; background: #1e1e2e; border-left: 1px solid #313244; padding: 5px; }
+  .wf-b-right-tabs { display: flex; flex-direction: column; gap: 1px; margin-bottom: 5px; }
+  .wf-b-rtab { font-size: 8px; padding: 2px 4px; color: #6c7086; border-radius: 2px; cursor: default; }
+  .wf-b-rtab.active { background: #313244; color: #cdd6f4; }
+  .wf-b-chart { background: #11111b; border-radius: 2px; height: 24px; margin-bottom: 3px; display: flex; align-items: flex-end; padding: 2px; gap: 1px; }
+  .wf-b-cbar { background: #89b4fa; border-radius: 1px; }
+
+  /* Wireframe C: SPA routing */
+  .wf-c { display: flex; flex-direction: column; height: 220px; }
+  .wf-c-url { background: #181825; padding: 4px 10px; font-size: 9px; color: #45475a; font-family: monospace; border-bottom: 1px solid #313244; }
+  .wf-c-url span { color: #89b4fa; }
+  .wf-c-body { display: flex; flex: 1; }
+  .wf-c-nav { width: 70px; background: #181825; border-right: 1px solid #313244; padding: 6px; }
+  .wf-c-nav-logo { color: #cdd6f4; font-size: 10px; font-weight: 700; margin-bottom: 8px; }
+  .wf-c-navitem { padding: 3px 6px; border-radius: 3px; font-size: 9px; color: #6c7086; margin-bottom: 2px; cursor: default; }
+  .wf-c-navitem.active { background: #313244; color: #cdd6f4; }
+  .wf-c-content { flex: 1; background: #11111b; }
+  .wf-c-page-tabs { background: #1e1e2e; display: flex; gap: 0; border-bottom: 1px solid #313244; }
+  .wf-c-ptab { padding: 5px 10px; font-size: 9px; color: #6c7086; border-right: 1px solid #313244; cursor: default; }
+  .wf-c-ptab.active { color: #89b4fa; border-bottom: 2px solid #89b4fa; }
+  .wf-c-main { padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .wf-c-chart-box { background: #1e1e2e; border-radius: 4px; padding: 6px; }
+  .wf-c-chart-title { font-size: 9px; color: #6c7086; margin-bottom: 4px; }
+  .wf-c-bars { display: flex; gap: 2px; align-items: flex-end; height: 28px; }
+  .wf-c-b { border-radius: 1px; flex: 1; }
+
+  .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; font-size: 11px; }
+  .pros-cons .pros ul, .pros-cons .cons ul { margin: 4px 0 0 0; padding-left: 14px; }
+  .pros-cons li { margin-bottom: 3px; }
+</style>
+
+<div class="approach-grid">
+  <!-- Approach A -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)" style="padding:0">
+    <div class="approach-card" style="border:none">
+      <div class="approach-label">
+        A — 대시보드 우선
+        <span class="tag tag-rec">추천</span>
+      </div>
+      <div class="wireframe">
+        <div class="wf-a-nav">
+          <span class="wf-a-nav-logo">DataStudio</span>
+          <input class="wf-a-search" placeholder="Search datasets..." readonly>
+        </div>
+        <div class="wf-a-body">
+          <div style="color:#6c7086;font-size:9px;margin-bottom:5px">데이터셋 라이브러리 · 24개</div>
+          <div class="wf-a-grid">
+            <div class="wf-a-ds-card">
+              <div class="wf-a-ds-name">aic_task_01</div>
+              <div class="wf-a-ds-meta">142 eps · ur5e</div>
+              <div class="wf-a-ds-bar"><div class="wf-a-ds-fill" style="width:65%"></div></div>
+            </div>
+            <div class="wf-a-ds-card">
+              <div class="wf-a-ds-name">aic_task_02</div>
+              <div class="wf-a-ds-meta">89 eps · panda</div>
+              <div class="wf-a-ds-bar"><div class="wf-a-ds-fill" style="width:30%"></div></div>
+            </div>
+            <div class="wf-a-ds-card">
+              <div class="wf-a-ds-name">aic_task_03</div>
+              <div class="wf-a-ds-meta">210 eps · so100</div>
+              <div class="wf-a-ds-bar"><div class="wf-a-ds-fill" style="width:90%"></div></div>
+            </div>
+          </div>
+          <div class="wf-a-detail">
+            <div class="wf-a-tabs">
+              <div class="wf-a-tab active">Overview</div>
+              <div class="wf-a-tab">Curate</div>
+              <div class="wf-a-tab">Fields</div>
+              <div class="wf-a-tab">Ops</div>
+            </div>
+            <div class="wf-a-content">
+              <div>
+                <div style="color:#6c7086;font-size:9px;margin-bottom:3px">Episode Lengths</div>
+                <div class="wf-a-chart">
+                  <div class="wf-a-bar" style="height:60%"></div>
+                  <div class="wf-a-bar" style="height:85%"></div>
+                  <div class="wf-a-bar" style="height:100%"></div>
+                  <div class="wf-a-bar" style="height:70%"></div>
+                  <div class="wf-a-bar" style="height:40%"></div>
+                  <div class="wf-a-bar" style="height:20%"></div>
+                </div>
+              </div>
+              <div>
+                <div style="color:#6c7086;font-size:9px;margin-bottom:3px">Grade Dist.</div>
+                <div class="wf-a-chart">
+                  <div class="wf-a-bar" style="height:75%;background:#a6e3a1"></div>
+                  <div class="wf-a-bar" style="height:45%;background:#f9e2af"></div>
+                  <div class="wf-a-bar" style="height:20%;background:#f38ba8"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:10px 14px;background:#1e1e2e;border-top:1px solid #313244">
+        <div style="font-size:11px;color:#cdd6f4;font-weight:600;margin-bottom:4px">대시보드 우선 구조</div>
+        <div style="font-size:10px;color:#6c7086">데이터셋 라이브러리 → 선택 → 탭별 기능 (Overview/Curate/Fields/Ops)</div>
+        <div class="pros-cons">
+          <div class="pros"><h4 style="font-size:10px;color:#a6e3a1;margin:4px 0">장점</h4><ul><li>20개+ 데이터셋 탐색에 최적</li><li>Overview가 분포 시각화 홈</li><li>탭 구조로 명확한 기능 분리</li></ul></div>
+          <div class="cons"><h4 style="font-size:10px;color:#f38ba8;margin:4px 0">단점</h4><ul><li>기존 코드 대폭 수정 필요</li><li>큐레이션 중 화면 전환 2단계</li></ul></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach B -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)" style="padding:0">
+    <div class="approach-card" style="border:none">
+      <div class="approach-label">
+        B — 기존 레이아웃 확장
+        <span class="tag tag-safe">보수적</span>
+      </div>
+      <div class="wireframe">
+        <div class="wf-b">
+          <div class="wf-b-sidebar">
+            <div class="wf-b-sidebar-title">Datasets</div>
+            <div class="wf-b-ds-item">aic_01</div>
+            <div class="wf-b-ds-item active">aic_02</div>
+            <div class="wf-b-ds-item">aic_03</div>
+            <div class="wf-b-ds-item">aic_04</div>
+            <div class="wf-b-more">+20 more...</div>
+          </div>
+          <div class="wf-b-center">
+            <div class="wf-b-video">▶ Video Player</div>
+            <div class="wf-b-ep-list">
+              <div class="wf-b-ep selected"><span>ep_001</span><span style="color:#a6e3a1">good</span></div>
+              <div class="wf-b-ep"><span>ep_002</span><span style="color:#f9e2af">normal</span></div>
+              <div class="wf-b-ep"><span>ep_003</span><span style="color:#45475a">—</span></div>
+            </div>
+          </div>
+          <div class="wf-b-right">
+            <div class="wf-b-right-tabs">
+              <div class="wf-b-rtab">Details</div>
+              <div class="wf-b-rtab active">Dist.</div>
+              <div class="wf-b-rtab">Fields</div>
+              <div class="wf-b-rtab">Ops</div>
+            </div>
+            <div style="color:#6c7086;font-size:8px;margin-bottom:2px">Ep Length</div>
+            <div class="wf-b-chart">
+              <div class="wf-b-cbar" style="width:8px;height:40%"></div>
+              <div class="wf-b-cbar" style="width:8px;height:70%"></div>
+              <div class="wf-b-cbar" style="width:8px;height:100%"></div>
+              <div class="wf-b-cbar" style="width:8px;height:60%"></div>
+              <div class="wf-b-cbar" style="width:8px;height:30%"></div>
+            </div>
+            <div style="color:#6c7086;font-size:8px;margin-bottom:2px">Grades</div>
+            <div class="wf-b-chart">
+              <div class="wf-b-cbar" style="width:20px;height:75%;background:#a6e3a1"></div>
+              <div class="wf-b-cbar" style="width:20px;height:40%;background:#f9e2af"></div>
+              <div class="wf-b-cbar" style="width:20px;height:15%;background:#f38ba8"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:10px 14px;background:#1e1e2e;border-top:1px solid #313244">
+        <div style="font-size:11px;color:#cdd6f4;font-weight:600;margin-bottom:4px">기존 레이아웃 확장</div>
+        <div style="font-size:10px;color:#6c7086">현재 3-컬럼 유지 + 사이드바에 데이터셋 목록 + 우측 탭 확장</div>
+        <div class="pros-cons">
+          <div class="pros"><h4 style="font-size:10px;color:#a6e3a1;margin:4px 0">장점</h4><ul><li>기존 코드 최소 수정</li><li>큐레이션 워크플로 유지</li></ul></div>
+          <div class="cons"><h4 style="font-size:10px;color:#f38ba8;margin:4px 0">단점</h4><ul><li>20개+ 목록이 좁은 사이드바에 불편</li><li>분포 시각화 공간 부족</li><li>필드 편집기 넣을 공간 없음</li></ul></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach C -->
+  <div class="option" data-choice="c" onclick="toggleSelect(this)" style="padding:0">
+    <div class="approach-card" style="border:none">
+      <div class="approach-label">
+        C — SPA 라우팅
+        <span class="tag tag-heavy">공수 큼</span>
+      </div>
+      <div class="wireframe">
+        <div class="wf-c">
+          <div class="wf-c-url">/datasets/<span>aic_task_02</span>/overview</div>
+          <div class="wf-c-body">
+            <div class="wf-c-nav">
+              <div class="wf-c-nav-logo">DS</div>
+              <div class="wf-c-navitem active">Library</div>
+              <div class="wf-c-navitem">Curate</div>
+              <div class="wf-c-navitem">Analyze</div>
+              <div class="wf-c-navitem">Fields</div>
+              <div class="wf-c-navitem">Ops</div>
+            </div>
+            <div class="wf-c-content">
+              <div class="wf-c-page-tabs">
+                <div class="wf-c-ptab active">Overview</div>
+                <div class="wf-c-ptab">Episodes</div>
+                <div class="wf-c-ptab">Fields</div>
+              </div>
+              <div class="wf-c-main">
+                <div class="wf-c-chart-box">
+                  <div class="wf-c-chart-title">Episode Length Distribution</div>
+                  <div class="wf-c-bars">
+                    <div class="wf-c-b" style="height:45%;background:#89b4fa"></div>
+                    <div class="wf-c-b" style="height:80%;background:#89b4fa"></div>
+                    <div class="wf-c-b" style="height:100%;background:#89b4fa"></div>
+                    <div class="wf-c-b" style="height:65%;background:#89b4fa"></div>
+                    <div class="wf-c-b" style="height:35%;background:#89b4fa"></div>
+                    <div class="wf-c-b" style="height:15%;background:#89b4fa"></div>
+                  </div>
+                </div>
+                <div class="wf-c-chart-box">
+                  <div class="wf-c-chart-title">Grade Distribution</div>
+                  <div class="wf-c-bars">
+                    <div class="wf-c-b" style="height:70%;background:#a6e3a1;flex:2"></div>
+                    <div class="wf-c-b" style="height:40%;background:#f9e2af;flex:1.5"></div>
+                    <div class="wf-c-b" style="height:20%;background:#f38ba8;flex:1"></div>
+                  </div>
+                </div>
+                <div class="wf-c-chart-box">
+                  <div class="wf-c-chart-title">Task Distribution</div>
+                  <div class="wf-c-bars">
+                    <div class="wf-c-b" style="height:55%;background:#cba6f7"></div>
+                    <div class="wf-c-b" style="height:90%;background:#cba6f7"></div>
+                    <div class="wf-c-b" style="height:40%;background:#cba6f7"></div>
+                    <div class="wf-c-b" style="height:70%;background:#cba6f7"></div>
+                  </div>
+                </div>
+                <div class="wf-c-chart-box">
+                  <div class="wf-c-chart-title">Action Value Range</div>
+                  <div class="wf-c-bars">
+                    <div class="wf-c-b" style="height:30%;background:#fab387"></div>
+                    <div class="wf-c-b" style="height:60%;background:#fab387"></div>
+                    <div class="wf-c-b" style="height:100%;background:#fab387"></div>
+                    <div class="wf-c-b" style="height:75%;background:#fab387"></div>
+                    <div class="wf-c-b" style="height:45%;background:#fab387"></div>
+                    <div class="wf-c-b" style="height:85%;background:#fab387"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:10px 14px;background:#1e1e2e;border-top:1px solid #313244">
+        <div style="font-size:11px;color:#cdd6f4;font-weight:600;margin-bottom:4px">SPA 라우팅</div>
+        <div style="font-size:10px;color:#6c7086">React Router 추가 · URL 기반 네비게이션 · 페이지별 전용 공간</div>
+        <div class="pros-cons">
+          <div class="pros"><h4 style="font-size:10px;color:#a6e3a1;margin:4px 0">장점</h4><ul><li>각 기능에 넉넉한 공간</li><li>URL 공유, 북마크 가능</li><li>확장성 최고</li></ul></div>
+          <div class="cons"><h4 style="font-size:10px;color:#f38ba8;margin:4px 0">단점</h4><ul><li>React Router 추가, 구조 전면 개편</li><li>개발 공수 가장 큼</li></ul></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

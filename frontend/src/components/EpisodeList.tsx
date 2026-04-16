@@ -1,8 +1,7 @@
-import { useState } from 'react'
-import { GRADE_COLORS } from '../types'
+import { useMemo, useEffect, useRef, memo, useState } from 'react'
 import type { Episode } from '../types'
 
-type Filter = 'all' | 'ungraded' | 'graded'
+type GradeFilter = 'all' | 'good' | 'normal' | 'bad' | 'ungraded'
 
 interface EpisodeListProps {
   episodes: Episode[]
@@ -10,220 +9,107 @@ interface EpisodeListProps {
   error: string | null
   onEpisodeSelect: (episode: Episode) => void
   selectedIndex: number | null
+  initialGradeFilter?: GradeFilter
+  filterChip?: { label: string; onClear: () => void } | null
 }
 
-export function EpisodeList({ episodes, loading, error, onEpisodeSelect, selectedIndex }: EpisodeListProps) {
-  const [filter, setFilter] = useState<Filter>('all')
+function gradeDotClass(grade: string | null): string {
+  if (grade === 'good')   return 'good'
+  if (grade === 'normal') return 'normal'
+  if (grade === 'bad')    return 'bad'
+  return 'none'
+}
 
-  const handleClick = (episode: Episode) => {
-    onEpisodeSelect(episode)
-  }
+export const EpisodeList = memo(function EpisodeList({
+  episodes, loading, error, onEpisodeSelect, selectedIndex,
+  initialGradeFilter, filterChip,
+}: EpisodeListProps) {
+  const [gradeFilter, setGradeFilter] = useState<GradeFilter>(initialGradeFilter ?? 'all')
+  const gradedCount = useMemo(() => episodes.filter(e => e.grade).length, [episodes])
 
-  const filtered = episodes.filter(ep => {
-    if (filter === 'ungraded') return !ep.grade
-    if (filter === 'graded') return !!ep.grade
-    return true
-  })
+  const filteredEpisodes = useMemo(() => {
+    if (gradeFilter === 'all') return episodes
+    if (gradeFilter === 'ungraded') return episodes.filter(e => !e.grade)
+    return episodes.filter(e => e.grade === gradeFilter)
+  }, [episodes, gradeFilter])
 
-  if (loading && episodes.length === 0) {
-    return <div style={styles.message}>Loading episodes...</div>
-  }
+  const selectedItemRef = useRef<HTMLDivElement>(null)
 
-  if (error) {
-    return <div style={styles.errorMessage}>{error}</div>
-  }
-
-  if (episodes.length === 0) {
-    return <div style={styles.message}>No dataset loaded</div>
-  }
+  useEffect(() => {
+    selectedItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selectedIndex])
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <span style={styles.headerTitle}>Episodes</span>
-        <span style={styles.count}>{filtered.length}</span>
+    <>
+      <div className="episode-sidebar-header">
+        <span className="episode-sidebar-title">Episodes</span>
+        <span className="episode-progress-count">{gradedCount} / {episodes.length}</span>
       </div>
 
-      {/* Filter tabs */}
-      <div style={styles.filterRow}>
-        {(['all', 'ungraded', 'graded'] as const).map(f => (
+      {filterChip && (
+        <div className="filter-chip-bar">
+          <span className="filter-chip">
+            {filterChip.label}
+            <button className="filter-chip-clear" onClick={filterChip.onClear}>&times;</button>
+          </span>
+        </div>
+      )}
+
+      <div className="grade-filter-bar">
+        {([
+          ['all', 'All'],
+          ['good', 'Good'],
+          ['normal', 'Normal'],
+          ['bad', 'Bad'],
+          ['ungraded', 'Ungraded'],
+        ] as [GradeFilter, string][]).map(([value, label]) => (
           <button
-            key={f}
-            style={{
-              ...styles.filterBtn,
-              ...(filter === f ? styles.filterActive : {}),
-            }}
-            onClick={() => setFilter(f)}
+            key={value}
+            className={`grade-filter-btn${gradeFilter === value ? ` active ${value}` : ''}`}
+            onClick={() => setGradeFilter(value)}
           >
-            {f === 'all' ? 'All' : f === 'ungraded' ? 'Todo' : 'Done'}
+            {label}
+            <span className="grade-filter-count">
+              {value === 'all' ? episodes.length
+                : value === 'ungraded' ? episodes.filter(e => !e.grade).length
+                : episodes.filter(e => e.grade === value).length}
+            </span>
           </button>
         ))}
       </div>
 
-      <div style={styles.list} role="listbox">
-        {filtered.map(ep => {
-          const isSelected = selectedIndex === ep.episode_index
+      {loading && (
+        <div className="loading-pulse" style={{ padding: '10px', fontSize: 11, color: 'var(--text-muted)' }}>
+          Loading...
+        </div>
+      )}
+      {error && (
+        <div style={{ padding: '10px', fontSize: 11, color: 'var(--c-red)' }}>
+          {error}
+        </div>
+      )}
+
+      <div className="episode-list">
+        {filteredEpisodes.map(ep => {
+          const isSelected = ep.episode_index === selectedIndex
           return (
             <div
               key={ep.episode_index}
-              role="option"
-              tabIndex={0}
-              aria-selected={isSelected}
-              style={{
-                ...styles.item,
-                background: isSelected ? '#1a2a3a' : 'transparent',
-                borderLeft: isSelected ? '3px solid #89b4fa' : '3px solid transparent',
-              }}
-              onClick={() => handleClick(ep)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  handleClick(ep)
-                }
-              }}
+              ref={isSelected ? selectedItemRef : null}
+              className={`episode-item${isSelected ? ' active' : ''}`}
+              onClick={() => onEpisodeSelect(ep)}
             >
-              <div style={styles.itemTop}>
-                <span style={styles.index}>#{ep.episode_index}</span>
-                <div style={styles.badges}>
-                  {ep.grade ? (
-                    <span style={{
-                      ...styles.grade,
-                      background: GRADE_COLORS[ep.grade] ?? '#666',
-                    }}>
-                      {ep.grade}
-                    </span>
-                  ) : (
-                    <span style={styles.ungraded}>--</span>
-                  )}
-                </div>
-              </div>
-              <div style={styles.itemBottom}>
-                <span style={styles.length}>{ep.length}f</span>
-                {ep.tags.length > 0 && (
-                  <span style={styles.tagCount}>{ep.tags.length} tags</span>
-                )}
-              </div>
+              <span className={`episode-grade-dot ${gradeDotClass(ep.grade)}`} />
+              <span className="episode-item-idx">ep_{String(ep.episode_index).padStart(3, '0')}</span>
             </div>
           )
         })}
+        {!loading && filteredEpisodes.length === 0 && (
+          <div style={{ padding: '10px', fontSize: 11, color: 'var(--text-muted)' }}>
+            {episodes.length === 0 ? 'No episodes found.' : 'No matching episodes.'}
+          </div>
+        )}
       </div>
-    </div>
+    </>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    flex: 1,
-    overflow: 'hidden',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 12px',
-    borderBottom: '1px solid #222',
-  },
-  headerTitle: {
-    fontSize: '10px',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
-    color: '#666',
-  },
-  count: {
-    fontSize: '10px',
-    color: '#555',
-    background: '#1e1e1e',
-    padding: '1px 6px',
-    borderRadius: '10px',
-    fontFamily: 'monospace',
-  },
-  filterRow: {
-    display: 'flex',
-    gap: '2px',
-    padding: '6px 8px',
-    borderBottom: '1px solid #222',
-  },
-  filterBtn: {
-    flex: 1,
-    background: 'transparent',
-    border: '1px solid #2a2a2a',
-    borderRadius: '4px',
-    color: '#666',
-    fontSize: '10px',
-    fontWeight: 600,
-    padding: '3px 0',
-    cursor: 'pointer',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  filterActive: {
-    background: '#1a2a3a',
-    borderColor: '#89b4fa',
-    color: '#89b4fa',
-  },
-  list: {
-    overflowY: 'auto',
-    flex: 1,
-  },
-  item: {
-    padding: '6px 10px',
-    cursor: 'pointer',
-    borderBottom: '1px solid #1a1a1a',
-    transition: 'background 0.1s',
-  },
-  itemTop: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '2px',
-  },
-  index: {
-    fontFamily: 'monospace',
-    fontSize: '12px',
-    color: '#cdd6f4',
-  },
-  badges: {
-    display: 'flex',
-    gap: '4px',
-    alignItems: 'center',
-  },
-  grade: {
-    fontSize: '10px',
-    fontWeight: 700,
-    color: '#fff',
-    padding: '0px 5px',
-    borderRadius: '3px',
-    lineHeight: '16px',
-  },
-  ungraded: {
-    fontSize: '10px',
-    color: '#3a3a3a',
-    fontFamily: 'monospace',
-  },
-  itemBottom: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '10px',
-    color: '#444',
-  },
-  length: {
-    color: '#555',
-    fontFamily: 'monospace',
-  },
-  tagCount: {
-    color: '#89b4fa',
-  },
-  message: {
-    padding: '16px 12px',
-    color: '#555',
-    fontSize: '12px',
-  },
-  errorMessage: {
-    padding: '16px 12px',
-    color: '#f38ba8',
-    fontSize: '12px',
-  },
-}
+})

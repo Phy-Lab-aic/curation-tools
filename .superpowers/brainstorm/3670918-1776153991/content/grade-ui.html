@@ -1,0 +1,150 @@
+<h2>Grade UI 대안</h2>
+<p class="subtitle">good / normal / bad 표시 방식 — 어떤 스타일이 맞나요?</p>
+
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --panel: #161616;
+    --panel2: #1c1c1c;
+    --border: #222;
+    --border2: #2a2a2a;
+    --text: #d9d9d9;
+    --text-muted: #555;
+    --text-dim: #333;
+    --accent: #ff9830;
+  }
+
+  body { background: var(--bg); }
+
+  .options { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+
+  .opt { background: var(--panel); border: 2px solid var(--border); border-radius: 10px; overflow: hidden; cursor: pointer; transition: border-color 0.15s; }
+  .opt:hover { border-color: #444; }
+  .opt.selected { border-color: var(--accent) !important; }
+
+  .opt-label { padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; display: flex; justify-content: space-between; }
+  .opt-preview { padding: 20px 16px; }
+  .opt-desc { padding: 10px 14px; border-top: 1px solid var(--border); font-size: 10px; color: var(--text-muted); background: #111; line-height: 1.5; }
+
+  /* A: 세그먼트 컨트롤 */
+  .seg { display: flex; background: #111; border: 1px solid var(--border2); border-radius: 6px; overflow: hidden; }
+  .seg-btn { flex: 1; padding: 7px 0; font-size: 11px; font-weight: 600; text-align: center; color: var(--text-muted); border-right: 1px solid var(--border2); cursor: default; }
+  .seg-btn:last-child { border-right: none; }
+  .seg-btn.active-g { background: var(--panel2); color: #d9d9d9; }
+
+  /* B: 숫자 키 강조 */
+  .num-btns { display: flex; gap: 8px; }
+  .num-btn { background: #111; border: 1px solid var(--border2); border-radius: 5px; padding: 8px 16px; cursor: default; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .num-btn .num { font-size: 16px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+  .num-btn .word { font-size: 9px; color: var(--text-muted); letter-spacing: 0.04em; }
+  .num-btn.active-b { background: var(--accent); border-color: var(--accent); }
+  .num-btn.active-b .num, .num-btn.active-b .word { color: #000; }
+
+  /* C: 아이콘만 */
+  .icon-btns { display: flex; gap: 6px; align-items: center; }
+  .icon-btn { width: 36px; height: 36px; border-radius: 6px; background: #111; border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: default; }
+  .icon-btn.active-c { background: var(--panel2); border-color: #555; }
+  .icon-label { font-size: 10px; color: var(--text-muted); }
+
+  /* D: 미니멀 텍스트 */
+  .text-btns { display: flex; gap: 4px; }
+  .text-btn { padding: 5px 14px; border-radius: 4px; font-size: 11px; font-weight: 500; border: 1px solid transparent; cursor: default; color: var(--text-muted); }
+  .text-btn:hover { background: var(--panel2); }
+  .text-btn.active-d { background: #2a2a2a; color: var(--text); border-color: #444; }
+
+  /* Context block */
+  .context { background: var(--panel2); border-radius: 6px; padding: 8px 12px; margin-top: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .ctx-ep { font-size: 10px; color: var(--text-muted); font-family: monospace; }
+  .ctx-kbd { font-size: 9px; color: var(--text-dim); }
+  kbd { background: #111; border: 1px solid var(--border2); border-radius: 2px; padding: 1px 4px; font-size: 9px; color: var(--text-muted); }
+</style>
+
+<div class="options">
+
+  <!-- A: 세그먼트 -->
+  <div class="option opt" data-choice="a" onclick="toggleSelect(this)">
+    <div class="opt-label">A — 세그먼트 컨트롤 <span style="color:var(--accent)">추천</span></div>
+    <div class="opt-preview">
+      <div class="seg">
+        <div class="seg-btn active-g">good</div>
+        <div class="seg-btn">normal</div>
+        <div class="seg-btn">bad</div>
+        <div class="seg-btn" style="color:var(--text-dim)">—</div>
+      </div>
+      <div class="context">
+        <span class="ctx-ep">ep_001 · 342 frames</span>
+        <span class="ctx-kbd"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span>
+      </div>
+    </div>
+    <div class="opt-desc">선택된 항목만 밝게. 색상 없음. 현재 상태가 어디 있는지 한눈에. 가장 미니멀.</div>
+  </div>
+
+  <!-- B: 숫자 키 강조 -->
+  <div class="option opt" data-choice="b" onclick="toggleSelect(this)">
+    <div class="opt-label">B — 숫자 키 강조</div>
+    <div class="opt-preview">
+      <div class="num-btns">
+        <div class="num-btn active-b">
+          <span class="num">1</span>
+          <span class="word">good</span>
+        </div>
+        <div class="num-btn">
+          <span class="num">2</span>
+          <span class="word">normal</span>
+        </div>
+        <div class="num-btn">
+          <span class="num">3</span>
+          <span class="word">bad</span>
+        </div>
+      </div>
+      <div class="context">
+        <span class="ctx-ep">ep_001 · 342 frames</span>
+        <span class="ctx-kbd">숫자키로 빠른 그레이딩</span>
+      </div>
+    </div>
+    <div class="opt-desc">키보드 단축키가 UI 자체. 숫자를 크게 강조. 활성 = 오렌지 fill. 단색.</div>
+  </div>
+
+  <!-- C: 아이콘 -->
+  <div class="option opt" data-choice="c" onclick="toggleSelect(this)">
+    <div class="opt-label">C — 심볼 아이콘</div>
+    <div class="opt-preview">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="icon-btns">
+          <div class="icon-btn active-c">✓</div>
+          <div class="icon-btn">~</div>
+          <div class="icon-btn">✕</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span class="icon-label">✓ good</span>
+          <span class="icon-label">~ normal</span>
+          <span class="icon-label">✕ bad</span>
+        </div>
+      </div>
+      <div class="context">
+        <span class="ctx-ep">ep_001 · 342 frames</span>
+        <span class="ctx-kbd"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span>
+      </div>
+    </div>
+    <div class="opt-desc">텍스트 대신 기호. 언어 독립적. 작게 표시해도 인식 가능. 에피소드 목록에서도 동일 아이콘 사용.</div>
+  </div>
+
+  <!-- D: 미니멀 텍스트 -->
+  <div class="option opt" data-choice="d" onclick="toggleSelect(this)">
+    <div class="opt-label">D — 미니멀 텍스트</div>
+    <div class="opt-preview">
+      <div class="text-btns">
+        <div class="text-btn active-d">good</div>
+        <div class="text-btn">normal</div>
+        <div class="text-btn">bad</div>
+        <div class="text-btn" style="color:var(--text-dim)">clear</div>
+      </div>
+      <div class="context">
+        <span class="ctx-ep">ep_001 · 342 frames</span>
+        <span class="ctx-kbd"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span>
+      </div>
+    </div>
+    <div class="opt-desc">색 없이 배경/테두리만으로 상태 구분. 가장 조용한 UI. 데이터에 집중.</div>
+  </div>
+
+</div>

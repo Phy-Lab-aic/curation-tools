@@ -5,25 +5,32 @@ interface Camera {
   key: string
   label: string
   url: string
+  from_timestamp: number
+  to_timestamp: number | null
 }
 
 export interface VideoPlayerHandle {
   stepFrame: (direction: 1 | -1) => void
+  seekToFrame: (frame: number) => void
+  seekToTimestamp: (ts: number) => void
 }
 
 interface VideoPlayerProps {
   episodeIndex: number | null
   fps: number
   onFrameChange?: (frame: number) => void
+  terminalFrames?: number[]
 }
 
-export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer({ episodeIndex, fps, onFrameChange }, ref) {
+export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer({ episodeIndex, fps, onFrameChange, terminalFrames = [] }, ref) {
   const [cameras, setCameras] = useState<Camera[]>([])
   const [loading, setLoading] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [ready, setReady] = useState(false)
+  const [videoStartTime, setVideoStartTime] = useState(0)
+  const [videoEndTime, setVideoEndTime] = useState(0)
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
   const primaryKeyRef = useRef<string | null>(null)
   const animFrameRef = useRef<number>(0)
@@ -55,7 +62,14 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     primaryKeyRef.current = null
 
     client.get<Camera[]>(`/videos/${episodeIndex}/cameras`)
-      .then(res => setCameras(res.data))
+      .then(res => {
+        setCameras(res.data)
+        if (res.data.length > 0) {
+          const cam = res.data[0]
+          setVideoStartTime(cam.from_timestamp ?? 0)
+          setVideoEndTime(cam.to_timestamp ?? 0)
+        }
+      })
       .catch(() => setCameras([]))
       .finally(() => setLoading(false))
   }, [episodeIndex])
@@ -90,9 +104,15 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       if (video && isFinite(video.duration)) {
         setDuration(video.duration)
         setReady(true)
+        // Seek to episode start within the shared video file
+        if (videoStartTime > 0) {
+          const videos = Array.from(videoRefs.current.values())
+          videos.forEach(v => { v.currentTime = videoStartTime })
+          setCurrentTime(videoStartTime)
+        }
       }
     }
-  }, [])
+  }, [videoStartTime])
 
   const togglePlay = useCallback(() => {
     if (!ready) return
@@ -119,8 +139,9 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       v.currentTime = time
     })
     setCurrentTime(time)
-    onFrameChange?.(Math.floor(time * effectiveFps))
-  }, [onFrameChange, effectiveFps])
+    // Report episode-relative frame index
+    onFrameChange?.(Math.max(0, Math.floor((time - videoStartTime) * effectiveFps)))
+  }, [onFrameChange, effectiveFps, videoStartTime])
 
   const stepFrame = useCallback((direction: 1 | -1) => {
     const videos = Array.from(videoRefs.current.values())
@@ -128,13 +149,30 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     setPlaying(false)
     const primary = primaryKeyRef.current ? videoRefs.current.get(primaryKeyRef.current) : null
     const cur = primary?.currentTime ?? currentTime
-    const newTime = Math.max(0, Math.min(duration, cur + direction / effectiveFps))
+    const endTime = videoEndTime || duration
+    const newTime = Math.max(videoStartTime, Math.min(endTime, cur + direction / effectiveFps))
     seek(newTime)
-  }, [currentTime, duration, effectiveFps, seek])
+  }, [currentTime, duration, effectiveFps, seek, videoStartTime, videoEndTime])
+
+  const seekToFrame = useCallback((frame: number) => {
+    const videos = Array.from(videoRefs.current.values())
+    videos.forEach(v => v.pause())
+    setPlaying(false)
+    seek(videoStartTime + frame / effectiveFps)
+  }, [effectiveFps, seek, videoStartTime])
+
+  const seekToTimestamp = useCallback((ts: number) => {
+    const videos = Array.from(videoRefs.current.values())
+    videos.forEach(v => v.pause())
+    setPlaying(false)
+    seek(videoStartTime + ts)
+  }, [seek, videoStartTime])
 
   useImperativeHandle(ref, () => ({
     stepFrame,
-  }), [stepFrame])
+    seekToFrame,
+    seekToTimestamp,
+  }), [stepFrame, seekToFrame, seekToTimestamp])
 
   const changeSpeed = useCallback((rate: number) => {
     setPlaybackRate(rate)
@@ -161,17 +199,20 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     const primary = primaryKeyRef.current ? videoRefs.current.get(primaryKeyRef.current) : null
     if (!primary) return
     setCurrentTime(primary.currentTime)
-    onFrameChange?.(Math.floor(primary.currentTime * effectiveFps))
+    onFrameChange?.(Math.max(0, Math.floor((primary.currentTime - videoStartTime) * effectiveFps)))
     // Sync other videos if they drift too far
     videoRefs.current.forEach((video, key) => {
       if (key !== primaryKeyRef.current && Math.abs(video.currentTime - primary.currentTime) > 0.1) {
         video.currentTime = primary.currentTime
       }
     })
-  }, [onFrameChange, effectiveFps])
+  }, [onFrameChange, effectiveFps, videoStartTime])
 
-  const currentFrame = Math.floor(currentTime * effectiveFps)
-  const totalFrames = Math.floor(duration * effectiveFps)
+  // Episode-relative frame numbers
+  const currentFrame = Math.max(0, Math.floor((currentTime - videoStartTime) * effectiveFps))
+  const totalFrames = videoEndTime > 0
+    ? Math.floor((videoEndTime - videoStartTime) * effectiveFps)
+    : Math.floor(duration * effectiveFps)
 
   if (episodeIndex === null) {
     return (
@@ -248,18 +289,63 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
             &#9654;&#9654;
           </button>
 
-          <input
-            type="range"
-            min={0}
-            max={duration || 1}
-            step={0.001}
-            value={currentTime}
-            onChange={e => seek(parseFloat(e.target.value))}
-            style={styles.scrubber}
-          />
+          {terminalFrames.length > 0 && (
+            <button
+              style={{ ...styles.ctrlBtn, color: '#f38ba8', borderColor: '#4a2a2a' }}
+              onClick={() => {
+                // Jump to next terminal frame after current position; wrap around
+                const next = terminalFrames.find(f => f > currentFrame) ?? terminalFrames[0]
+                seekToFrame(next)
+              }}
+              title={`Jump to next terminal frame (${terminalFrames.length} total)`}
+            >
+              {'\u23ED'}
+            </button>
+          )}
+
+          <div style={{ flex: 1, position: 'relative' }}>
+            <input
+              type="range"
+              min={videoStartTime}
+              max={videoEndTime || duration || 1}
+              step={0.001}
+              value={currentTime}
+              onChange={e => seek(parseFloat(e.target.value))}
+              style={{ ...styles.scrubber, flex: 'none', width: '100%' }}
+            />
+            {totalFrames > 0 && terminalFrames.map((f, i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: `${(f / totalFrames) * 100}%`,
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: '12px',
+                  height: '14px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 3,
+                }}
+                onClick={() => seekToFrame(f)}
+                title={`Terminal frame ${f}`}
+              >
+                <div style={{
+                  width: '2px',
+                  height: '10px',
+                  background: '#f38ba8',
+                  opacity: 0.7,
+                  borderRadius: '1px',
+                  pointerEvents: 'none',
+                }} />
+              </div>
+            ))}
+          </div>
 
           <span style={styles.timeLabel}>
-            {currentFrame} / {totalFrames}f
+            {Math.max(0, currentTime - videoStartTime).toFixed(1)}s / {((videoEndTime || duration) - videoStartTime).toFixed(1)}s
           </span>
 
           <div style={styles.speedGroup}>

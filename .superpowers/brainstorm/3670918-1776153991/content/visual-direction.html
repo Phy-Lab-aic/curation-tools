@@ -1,0 +1,156 @@
+<h2>비주얼 방향성</h2>
+<p class="subtitle">어떤 느낌의 UI를 원하시나요?</p>
+
+<style>
+  .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 20px 0; }
+
+  /* Shared card shell */
+  .vcard { border-radius: 10px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: border-color 0.2s, transform 0.15s; }
+  .vcard:hover { transform: translateY(-2px); }
+  .vcard.selected { border-color: #fff !important; }
+
+  /* Direction A: Linear / Vercel - monochrome dark */
+  .dir-a { background: #0a0a0a; }
+  .dir-a .preview { background: #0a0a0a; padding: 14px; }
+  .dir-a .p-nav { background: #111; border-bottom: 1px solid #222; padding: 7px 12px; display: flex; gap: 10px; align-items: center; border-radius: 6px 6px 0 0; margin-bottom: 8px; }
+  .dir-a .p-logo { color: #fff; font-size: 11px; font-weight: 800; letter-spacing: -0.04em; }
+  .dir-a .p-tab { font-size: 10px; color: #555; padding: 2px 8px; border-radius: 4px; }
+  .dir-a .p-tab.on { color: #fff; background: #222; }
+  .dir-a .p-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .dir-a .p-card { background: #111; border: 1px solid #222; border-radius: 5px; padding: 8px; }
+  .dir-a .p-card-name { font-size: 10px; font-weight: 700; color: #fff; }
+  .dir-a .p-card-meta { font-size: 9px; color: #555; margin-top: 1px; }
+  .dir-a .p-bar { height: 2px; background: #222; border-radius: 1px; margin-top: 5px; }
+  .dir-a .p-fill { height: 2px; background: #fff; border-radius: 1px; }
+  .dir-label { padding: 10px 14px; }
+  .dir-label h3 { font-size: 12px; font-weight: 700; margin: 0 0 3px; }
+  .dir-label p { font-size: 10px; color: #888; margin: 0; }
+
+  /* Direction B: Industrial / terminal green */
+  .dir-b { background: #0d1117; }
+  .dir-b .preview { background: #0d1117; padding: 14px; }
+  .dir-b .p-nav { background: #161b22; border-bottom: 1px solid #1e2730; padding: 7px 12px; display: flex; gap: 10px; align-items: center; border-radius: 6px 6px 0 0; margin-bottom: 8px; }
+  .dir-b .p-logo { color: #3fb950; font-size: 11px; font-weight: 700; font-family: monospace; }
+  .dir-b .p-tab { font-size: 10px; color: #484f58; padding: 2px 8px; }
+  .dir-b .p-tab.on { color: #3fb950; border-bottom: 1px solid #3fb950; }
+  .dir-b .p-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .dir-b .p-card { background: #161b22; border: 1px solid #1e2730; border-radius: 5px; padding: 8px; }
+  .dir-b .p-card-name { font-size: 10px; font-weight: 600; color: #e6edf3; font-family: monospace; }
+  .dir-b .p-card-meta { font-size: 9px; color: #484f58; margin-top: 1px; font-family: monospace; }
+  .dir-b .p-bar { height: 2px; background: #1e2730; border-radius: 1px; margin-top: 5px; }
+  .dir-b .p-fill { height: 2px; background: #3fb950; border-radius: 1px; }
+
+  /* Direction C: Warm dark / amber accent */
+  .dir-c { background: #1a1612; }
+  .dir-c .preview { background: #1a1612; padding: 14px; }
+  .dir-c .p-nav { background: #211d18; border-bottom: 1px solid #2d2820; padding: 7px 12px; display: flex; gap: 10px; align-items: center; border-radius: 6px 6px 0 0; margin-bottom: 8px; }
+  .dir-c .p-logo { color: #e8c88a; font-size: 11px; font-weight: 700; }
+  .dir-c .p-tab { font-size: 10px; color: #6b6258; padding: 2px 8px; }
+  .dir-c .p-tab.on { color: #e8c88a; border-bottom: 1px solid #e8c88a44; }
+  .dir-c .p-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .dir-c .p-card { background: #211d18; border: 1px solid #2d2820; border-radius: 5px; padding: 8px; }
+  .dir-c .p-card-name { font-size: 10px; font-weight: 600; color: #e8d5b8; }
+  .dir-c .p-card-meta { font-size: 9px; color: #6b6258; margin-top: 1px; }
+  .dir-c .p-bar { height: 2px; background: #2d2820; border-radius: 1px; margin-top: 5px; }
+  .dir-c .p-fill { height: 2px; background: #e8c88a; border-radius: 1px; }
+
+  /* Direction D: Slate / neutral professional */
+  .dir-d { background: #0f1117; }
+  .dir-d .preview { background: #0f1117; padding: 14px; }
+  .dir-d .p-nav { background: #161922; border-bottom: 1px solid #1e2230; padding: 7px 12px; display: flex; gap: 10px; align-items: center; border-radius: 6px 6px 0 0; margin-bottom: 8px; }
+  .dir-d .p-logo { color: #e2e8f0; font-size: 11px; font-weight: 800; letter-spacing: -0.03em; }
+  .dir-d .p-tab { font-size: 10px; color: #4a5568; padding: 2px 8px; }
+  .dir-d .p-tab.on { color: #a78bfa; border-bottom: 1px solid #a78bfa55; }
+  .dir-d .p-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .dir-d .p-card { background: #161922; border: 1px solid #1e2230; border-radius: 5px; padding: 8px; }
+  .dir-d .p-card-name { font-size: 10px; font-weight: 600; color: #e2e8f0; }
+  .dir-d .p-card-meta { font-size: 9px; color: #4a5568; margin-top: 1px; }
+  .dir-d .p-bar { height: 2px; background: #1e2230; border-radius: 1px; margin-top: 5px; }
+  .dir-d .p-fill { height: 2px; background: #a78bfa; border-radius: 1px; }
+</style>
+
+<div class="cards">
+
+  <!-- A: Monochrome dark -->
+  <div class="option vcard dir-a" data-choice="a" onclick="toggleSelect(this)">
+    <div class="preview">
+      <div class="p-nav">
+        <span class="p-logo">ROBOSTUDIO</span>
+        <span class="p-tab on">cell002</span>
+        <span class="p-tab">Overview</span>
+      </div>
+      <div class="p-grid">
+        <div class="p-card"><div class="p-card-name">aic_pick_01</div><div class="p-card-meta">142 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:65%"></div></div></div>
+        <div class="p-card"><div class="p-card-name">aic_place_01</div><div class="p-card-meta">89 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:30%"></div></div></div>
+        <div class="p-card"><div class="p-card-name">aic_grasp_01</div><div class="p-card-meta">210 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:95%"></div></div></div>
+      </div>
+    </div>
+    <div class="dir-label" style="background:#111;border-top:1px solid #222">
+      <h3 style="color:#fff">A — 모노크롬 블랙</h3>
+      <p>Vercel / Linear 스타일. 흰색 + 어두운 배경. 군더더기 없음.</p>
+    </div>
+  </div>
+
+  <!-- B: Terminal green -->
+  <div class="option vcard dir-b" data-choice="b" onclick="toggleSelect(this)">
+    <div class="preview">
+      <div class="p-nav">
+        <span class="p-logo">robodata $</span>
+        <span class="p-tab on">cell002</span>
+        <span class="p-tab">overview</span>
+      </div>
+      <div class="p-grid">
+        <div class="p-card"><div class="p-card-name">aic_pick_01</div><div class="p-card-meta">142 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:65%"></div></div></div>
+        <div class="p-card"><div class="p-card-name">aic_place_01</div><div class="p-card-meta">89 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:30%"></div></div></div>
+        <div class="p-card"><div class="p-card-name">aic_grasp_01</div><div class="p-card-meta">210 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:95%"></div></div></div>
+      </div>
+    </div>
+    <div class="dir-label" style="background:#161b22;border-top:1px solid #1e2730">
+      <h3 style="color:#3fb950">B — 터미널 그린</h3>
+      <p>GitHub Dark 스타일. 초록 악센트. 엔지니어링 도구 느낌.</p>
+    </div>
+  </div>
+
+  <!-- C: Warm amber -->
+  <div class="option vcard dir-c" data-choice="c" onclick="toggleSelect(this)">
+    <div class="preview">
+      <div class="p-nav">
+        <span class="p-logo">RoboStudio</span>
+        <span class="p-tab on">cell002</span>
+        <span class="p-tab">Overview</span>
+      </div>
+      <div class="p-grid">
+        <div class="p-card"><div class="p-card-name">aic_pick_01</div><div class="p-card-meta">142 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:65%"></div></div></div>
+        <div class="p-card"><div class="p-card-name">aic_place_01</div><div class="p-card-meta">89 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:30%"></div></div></div>
+        <div class="p-card"><div class="p-card-name">aic_grasp_01</div><div class="p-card-meta">210 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:95%"></div></div></div>
+      </div>
+    </div>
+    <div class="dir-label" style="background:#211d18;border-top:1px solid #2d2820">
+      <h3 style="color:#e8c88a">C — 웜 앰버</h3>
+      <p>따뜻한 다크톤. 황금색 악센트. 차별화된 인하우스 느낌.</p>
+    </div>
+  </div>
+
+  <!-- D: Slate purple -->
+  <div class="option vcard dir-d" data-choice="d" onclick="toggleSelect(this)">
+    <div class="preview">
+      <div class="p-nav">
+        <span class="p-logo">RoboStudio</span>
+        <span class="p-tab on">cell002</span>
+        <span class="p-tab">Overview</span>
+      </div>
+      <div class="p-grid">
+        <div class="p-card"><div class="p-card-name">aic_pick_01</div><div class="p-card-meta">142 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:65%"></div></div></div>
+        <div class="p-card"><div class="p-card-name">aic_place_01</div><div class="p-card-meta">89 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:30%"></div></div></div>
+        <div class="p-card"><div class="p-card-name">aic_grasp_01</div><div class="p-card-meta">210 eps · ur5e</div><div class="p-bar"><div class="p-fill" style="width:95%"></div></div></div>
+      </div>
+    </div>
+    <div class="dir-label" style="background:#161922;border-top:1px solid #1e2230">
+      <h3 style="color:#a78bfa">D — 슬레이트 퍼플</h3>
+      <p>중립적 다크 슬레이트 + 보라 악센트. 세련된 사내 툴 느낌.</p>
+    </div>
+  </div>
+
+</div>
+
+<p style="font-size:11px;color:#555;text-align:center">클릭해서 선택 · 없으면 터미널에서 원하는 방향 설명해주세요</p>

@@ -1,0 +1,290 @@
+<h2>Grafana 스타일 방향 — 블랙 베이스 + 비비드 데이터 컬러</h2>
+<p class="subtitle">순수 블랙 배경 · UI 크롬은 거의 무색 · 차트/데이터만 선명하게</p>
+
+<style>
+  /* Pure black Grafana palette */
+  :root {
+    --bg: #0f0f0f;
+    --panel: #161616;
+    --panel2: #1c1c1c;
+    --border: #222222;
+    --border2: #2a2a2a;
+    --text: #d9d9d9;
+    --text-muted: #555;
+    --text-dim: #333;
+    /* Data colors - vivid, Grafana-style */
+    --c-green: #73bf69;
+    --c-yellow: #fade2a;
+    --c-orange: #ff9830;
+    --c-blue: #5794f2;
+    --c-pink: #f08080;
+    --c-cyan: #37872d;
+    --c-purple: #b877d9;
+    /* accent for interactive */
+    --accent: #ff9830;
+    --accent-dim: #ff983015;
+  }
+
+  .mockup-wrap { background: var(--bg); border-radius: 10px; border: 1px solid var(--border); overflow: hidden; margin: 16px 0; }
+
+  /* Top nav */
+  .top-nav { background: #111; border-bottom: 1px solid var(--border); padding: 0 16px; display: flex; align-items: stretch; height: 40px; }
+  .nav-logo { font-size: 13px; font-weight: 800; color: var(--text); letter-spacing: -0.04em; display: flex; align-items: center; margin-right: 20px; }
+  .nav-logo span { color: var(--accent); }
+  .nav-breadcrumb { display: flex; align-items: center; font-size: 11px; color: var(--text-muted); gap: 6px; flex: 1; }
+  .nav-breadcrumb em { color: #888; }
+  .nav-breadcrumb .sep { color: var(--text-dim); }
+  .nav-tabs { display: flex; }
+  .nav-tab { padding: 0 14px; font-size: 11px; color: var(--text-muted); display: flex; align-items: center; border-bottom: 2px solid transparent; cursor: default; }
+  .nav-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  /* Body layout */
+  .body { display: flex; min-height: 300px; }
+  .left-rail { width: 180px; background: #111; border-right: 1px solid var(--border); padding: 10px 8px; flex-shrink: 0; }
+  .rail-section { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 6px; margin-bottom: 4px; }
+  .cell-item { padding: 6px 8px; border-radius: 4px; margin-bottom: 2px; cursor: default; display: flex; align-items: center; gap: 7px; }
+  .cell-item:hover { background: var(--panel2); }
+  .cell-item.active { background: var(--accent-dim); }
+  .cell-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .cell-label { font-size: 11px; color: var(--text-muted); }
+  .cell-item.active .cell-label { color: var(--accent); }
+  .cell-sub { font-size: 9px; color: var(--text-dim); margin-left: auto; }
+
+  /* Main content */
+  .main { flex: 1; padding: 14px; }
+
+  /* Stats bar */
+  .stats-bar { display: flex; gap: 10px; margin-bottom: 14px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; flex: 1; }
+  .stat-n { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+  .stat-l { font-size: 10px; color: var(--text-muted); }
+  .stat-card.accent-card { border-color: var(--accent); }
+  .stat-card.accent-card .stat-n { color: var(--accent); }
+
+  /* Panel grid */
+  .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .panel-title { font-size: 11px; color: #777; }
+  .panel-menu { font-size: 10px; color: var(--text-dim); }
+
+  /* Histogram panel */
+  .hist { display: flex; align-items: flex-end; gap: 2px; height: 70px; }
+  .hb { border-radius: 2px 2px 0 0; }
+  .x-labels { display: flex; justify-content: space-between; font-size: 8px; color: var(--text-dim); margin-top: 4px; }
+  .y-stat { display: flex; gap: 10px; font-size: 9px; color: var(--text-muted); margin-top: 6px; }
+  .y-stat strong { color: #888; font-variant-numeric: tabular-nums; }
+
+  /* Donut */
+  .donut-wrap { display: flex; align-items: center; gap: 14px; }
+  .donut-svg { flex-shrink: 0; }
+  .legend { display: flex; flex-direction: column; gap: 5px; }
+  .legend-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #888; }
+  .ldot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .lval { margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 600; }
+
+  /* Bar chart */
+  .bar-chart { display: flex; flex-direction: column; gap: 5px; }
+  .bar-row { display: flex; align-items: center; gap: 7px; }
+  .bar-label { font-size: 9px; color: var(--text-muted); width: 52px; text-align: right; font-family: monospace; }
+  .bar-track { flex: 1; background: var(--panel2); height: 14px; border-radius: 2px; position: relative; }
+  .bar-fill { height: 14px; border-radius: 2px; display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
+  .bar-fill span { font-size: 9px; color: rgba(0,0,0,0.6); font-weight: 700; }
+
+  /* Line sparkline panel */
+  .sparkline-area { height: 70px; background: var(--panel2); border-radius: 4px; position: relative; overflow: hidden; }
+  .spark-grid { position: absolute; inset: 0; }
+  .spark-line { position: absolute; bottom: 10px; left: 0; right: 0; height: 2px; }
+  .spark-line-1 { background: linear-gradient(90deg, transparent, var(--c-green) 20%, var(--c-green) 70%, transparent); bottom: 40px; opacity: 0.9; transform: rotate(-2deg); }
+  .spark-line-2 { background: linear-gradient(90deg, transparent, var(--c-blue) 15%, var(--c-blue) 60%, transparent); bottom: 25px; opacity: 0.8; transform: rotate(1deg); }
+  .spark-line-3 { background: linear-gradient(90deg, transparent, var(--c-orange) 25%, var(--c-orange) 65%, transparent); bottom: 55px; opacity: 0.7; transform: rotate(-3deg); }
+  .spark-legend { display: flex; gap: 8px; margin-top: 5px; }
+  .sl { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--text-muted); }
+  .sl-dot { width: 12px; height: 2px; border-radius: 1px; }
+
+  /* Wide panel */
+  .panel-wide { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+  .wide-hist { display: flex; align-items: flex-end; gap: 3px; height: 50px; }
+  .wb2 { border-radius: 2px 2px 0 0; flex: 1; }
+</style>
+
+<div class="mockup-wrap">
+  <!-- Top nav -->
+  <div class="top-nav">
+    <div class="nav-logo">robo<span>data</span></div>
+    <div class="nav-breadcrumb">
+      <span>Library</span><span class="sep">/</span>
+      <em>cell002</em><span class="sep">/</span>
+      <em>aic_task_pick_01</em>
+    </div>
+    <div class="nav-tabs">
+      <div class="nav-tab active">Overview</div>
+      <div class="nav-tab">Curate</div>
+      <div class="nav-tab">Fields</div>
+      <div class="nav-tab">Ops</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- Left rail: cell list -->
+    <div class="left-rail">
+      <div class="rail-section">Cells</div>
+      <div class="cell-item">
+        <div class="cell-dot" style="background:var(--c-green)"></div>
+        <span class="cell-label">cell001</span>
+        <span class="cell-sub">8</span>
+      </div>
+      <div class="cell-item active">
+        <div class="cell-dot" style="background:var(--accent)"></div>
+        <span class="cell-label">cell002</span>
+        <span class="cell-sub">6</span>
+      </div>
+      <div class="cell-item">
+        <div class="cell-dot" style="background:var(--text-dim)"></div>
+        <span class="cell-label">cell003</span>
+        <span class="cell-sub">4</span>
+      </div>
+      <div class="cell-item">
+        <div class="cell-dot" style="background:var(--text-dim)"></div>
+        <span class="cell-label">cell004</span>
+        <span class="cell-sub">6</span>
+      </div>
+    </div>
+
+    <!-- Main: Overview panels -->
+    <div class="main">
+      <!-- Stats row -->
+      <div class="stats-bar">
+        <div class="stat-card accent-card">
+          <div class="stat-n">142</div>
+          <div class="stat-l">Total Episodes</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-n" style="color:var(--c-green)">92</div>
+          <div class="stat-l">Graded</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-n" style="color:var(--c-yellow)">50</div>
+          <div class="stat-l">Ungraded</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-n">3</div>
+          <div class="stat-l">Tasks</div>
+        </div>
+      </div>
+
+      <!-- Wide: episode length -->
+      <div class="panel-wide">
+        <div class="panel-header">
+          <span class="panel-title">Episode Length Distribution</span>
+          <span class="panel-menu">+ add field</span>
+        </div>
+        <div class="wide-hist">
+          <div class="wb2" style="height:18%;background:#5794f244"></div>
+          <div class="wb2" style="height:35%;background:#5794f266"></div>
+          <div class="wb2" style="height:65%;background:#5794f2"></div>
+          <div class="wb2" style="height:100%;background:#5794f2"></div>
+          <div class="wb2" style="height:85%;background:#5794f2"></div>
+          <div class="wb2" style="height:60%;background:#5794f266"></div>
+          <div class="wb2" style="height:38%;background:#5794f244"></div>
+          <div class="wb2" style="height:20%;background:#5794f244"></div>
+          <div class="wb2" style="height:10%;background:#5794f233"></div>
+          <div class="wb2" style="height:5%;background:#5794f222"></div>
+        </div>
+        <div class="x-labels"><span>50</span><span>100</span><span>150</span><span>200</span><span>300</span><span>400</span><span>500</span><span>600+</span></div>
+        <div class="y-stat">
+          <span>mean <strong>218</strong></span>
+          <span>median <strong>195</strong></span>
+          <span>min <strong>52</strong></span>
+          <span>max <strong>841</strong></span>
+          <span>std <strong>94</strong></span>
+        </div>
+      </div>
+
+      <!-- 2-col panel grid -->
+      <div class="panel-grid">
+        <!-- Grade donut -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Grade Distribution</span>
+          </div>
+          <div class="donut-wrap">
+            <svg class="donut-svg" width="70" height="70" viewBox="0 0 70 70">
+              <circle cx="35" cy="35" r="28" fill="none" stroke="#1c1c1c" stroke-width="12"/>
+              <!-- good: 52.5% = 189deg -->
+              <circle cx="35" cy="35" r="28" fill="none" stroke="#73bf69" stroke-width="12" stroke-dasharray="91.6 174.9" stroke-dashoffset="43.8" transform="rotate(-90 35 35)"/>
+              <!-- normal: 20% = 72deg -->
+              <circle cx="35" cy="35" r="28" fill="none" stroke="#fade2a" stroke-width="12" stroke-dasharray="34.9 131.9" stroke-dashoffset="-47.8" transform="rotate(-90 35 35)"/>
+              <!-- bad: 12.5% = 45deg -->
+              <circle cx="35" cy="35" r="28" fill="none" stroke="#f08080" stroke-width="12" stroke-dasharray="21.8 145" stroke-dashoffset="-82.7" transform="rotate(-90 35 35)"/>
+            </svg>
+            <div class="legend">
+              <div class="legend-row"><div class="ldot" style="background:#73bf69"></div>good<span class="lval">75</span></div>
+              <div class="legend-row"><div class="ldot" style="background:#fade2a"></div>normal<span class="lval">28</span></div>
+              <div class="legend-row"><div class="ldot" style="background:#f08080"></div>bad<span class="lval">18</span></div>
+              <div class="legend-row"><div class="ldot" style="background:#333"></div>none<span class="lval">21</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Task bar -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Task Distribution</span>
+          </div>
+          <div class="bar-chart">
+            <div class="bar-row">
+              <span class="bar-label">pick_red</span>
+              <div class="bar-track">
+                <div class="bar-fill" style="width:72%;background:#b877d9"><span>72</span></div>
+              </div>
+            </div>
+            <div class="bar-row">
+              <span class="bar-label">pick_blue</span>
+              <div class="bar-track">
+                <div class="bar-fill" style="width:46%;background:#b877d988"><span>46</span></div>
+              </div>
+            </div>
+            <div class="bar-row">
+              <span class="bar-label">place</span>
+              <div class="bar-track">
+                <div class="bar-fill" style="width:24%;background:#b877d955"><span>24</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scalar multi-line -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Action Value Range (per ep)</span>
+          </div>
+          <div class="sparkline-area">
+            <div class="spark-line spark-line-3"></div>
+            <div class="spark-line spark-line-1"></div>
+            <div class="spark-line spark-line-2"></div>
+          </div>
+          <div class="spark-legend">
+            <div class="sl"><div class="sl-dot" style="background:var(--c-green)"></div>action.0</div>
+            <div class="sl"><div class="sl-dot" style="background:var(--c-blue)"></div>action.1</div>
+            <div class="sl"><div class="sl-dot" style="background:var(--c-orange)"></div>action.2</div>
+          </div>
+        </div>
+
+        <!-- Add panel -->
+        <div class="panel" style="border-style:dashed;background:#111;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;min-height:100px">
+          <div style="font-size:18px;color:var(--text-dim)">+</div>
+          <div style="font-size:10px;color:var(--text-dim)">필드 선택 후 패널 추가</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="background:#161616;border:1px solid #222;border-radius:8px;padding:14px;margin-top:4px;font-size:11px;color:#555;line-height:1.8">
+  <strong style="color:#999">Grafana 패턴 적용 포인트:</strong><br>
+  • 배경 <code style="color:#777">#0f0f0f</code> — 순수 블랙. 패널 <code style="color:#777">#161616</code> — 겨우 구분될 정도<br>
+  • 악센트(오렌지 <code style="color:#ff9830">#ff9830</code>)는 선택/활성 상태에만. 나머지 인터랙션은 무채색<br>
+  • 차트 컬러는 <span style="color:#73bf69">■ 그린</span> <span style="color:#fade2a">■ 옐로</span> <span style="color:#5794f2">■ 블루</span> <span style="color:#f08080">■ 핑크</span> <span style="color:#b877d9">■ 퍼플</span> — 데이터 시리즈마다 선명하게 구분<br>
+  • 숫자는 크게, 레이블은 작게 — 한눈에 핵심 수치 파악
+</div>

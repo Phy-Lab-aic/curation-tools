@@ -1,17 +1,18 @@
-import asyncio
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.config import settings
-from backend.routers import datasets, episodes, tasks, rerun, videos, scalars, hf_sync, dataset_ops, conversion
-from backend.services import rerun_service
-from backend.services.hf_sync_service import hf_sync_service
-from backend.services.conversion_service import conversion_service
+from backend.core.config import settings
+from backend.core.db import init_db, close_db
+from backend.datasets.routers import (
+    datasets, episodes, tasks, rerun, videos, scalars,
+    dataset_ops, cells, distribution, fields,
+)
+from backend.converter import router as converter_mod
+from backend.datasets.services import rerun_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Rerun is optional — video player is the primary visualization
+    await init_db()
+
     if settings.enable_rerun:
         try:
             rerun_service.init_rerun(
@@ -32,22 +34,15 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Rerun disabled — using native video player")
 
-    # HF sync: initialize and start background sync loop
-    derived_path = str(Path(settings.derived_dataset_path).expanduser())
-    hf_sync_service.init(settings.hf_org, settings.dataset_path, state_dir=derived_path)
-    sync_task = asyncio.create_task(hf_sync_service.run_sync_loop(settings.sync_interval_seconds))
-
     yield
 
-    # Cleanup: cancel the sync loop
-    sync_task.cancel()
-    conversion_service.shutdown()  # stop watchdog if running
+    await close_db()
 
 
 app = FastAPI(
-    title="LeRobot Curation Tools",
-    description="Local curation tool for LeRobot datasets with Rerun visualization",
-    version="0.1.0",
+    title="robodata-studio",
+    description="Internal curation and analytics tool for LeRobot datasets",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -55,7 +50,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -65,9 +60,11 @@ app.include_router(tasks.router)
 app.include_router(rerun.router)
 app.include_router(videos.router)
 app.include_router(scalars.router)
-app.include_router(hf_sync.router)
 app.include_router(dataset_ops.router)
-app.include_router(conversion.router)
+app.include_router(cells.router)
+app.include_router(distribution.router)
+app.include_router(fields.router)
+app.include_router(converter_mod.router)
 
 
 @app.get("/api/health")
@@ -76,7 +73,6 @@ async def health():
 
 
 def start():
-    """Entry point for pyproject.toml scripts."""
     uvicorn.run(
         "backend.main:app",
         host=settings.host,

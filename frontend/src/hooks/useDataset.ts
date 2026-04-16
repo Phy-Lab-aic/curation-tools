@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import axios from 'axios'
 import client from '../api/client'
 import type { DatasetInfo } from '../types'
 
@@ -21,8 +22,11 @@ export function useDataset(): UseDatasetReturn {
       const response = await client.post<DatasetInfo>('/datasets/load', { path })
       setDataset(response.data)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load dataset'
+      const message = axios.isAxiosError(err)
+        ? (typeof err.response?.data?.detail === 'string' ? err.response.data.detail : err.message)
+        : (err instanceof Error ? err.message : 'Failed to load dataset')
       setError(message)
+      throw err
     } finally {
       setLoading(false)
     }

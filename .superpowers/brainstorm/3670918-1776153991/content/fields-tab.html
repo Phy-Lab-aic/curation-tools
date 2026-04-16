@@ -1,0 +1,211 @@
+<h2>Fields 탭 — 데이터 필드 추가/편집</h2>
+<p class="subtitle">섹션 4 / 5 · 웜 앰버 팔레트 · info.json + episodes parquet 컬럼</p>
+
+<style>
+  /* Warm amber palette */
+  :root {
+    --bg: #1a1612;
+    --surface: #211d18;
+    --surface2: #2a2520;
+    --border: #2d2820;
+    --border2: #3a342c;
+    --text: #e8d5b8;
+    --text-muted: #6b6258;
+    --text-dim: #4a4038;
+    --accent: #e8c88a;
+    --accent-dim: #e8c88a22;
+    --accent-border: #e8c88a44;
+    --green: #7fb77e;
+    --red: #c97b7b;
+    --blue: #7ba8c9;
+  }
+
+  .mockup { background: var(--bg); border-radius: 10px; border: 1px solid var(--border); overflow: hidden; margin: 16px 0; font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; }
+
+  .tab-bar { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .tab { padding: 8px 16px; font-size: 11px; color: var(--text-muted); border-right: 1px solid var(--border); cursor: default; }
+  .tab.active { color: var(--accent); border-bottom: 2px solid var(--accent); background: var(--bg); }
+
+  .fields-layout { display: flex; min-height: 360px; }
+
+  /* Left nav */
+  .fields-nav { width: 160px; background: var(--surface); border-right: 1px solid var(--border); padding: 12px 8px; flex-shrink: 0; }
+  .nav-section { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 6px 6px; }
+  .nav-item { padding: 6px 10px; border-radius: 5px; font-size: 11px; color: var(--text-muted); cursor: default; margin-bottom: 2px; }
+  .nav-item.active { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
+
+  /* Main content */
+  .fields-main { flex: 1; padding: 16px; overflow-y: auto; }
+
+  /* Section header */
+  .section-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .section-desc { font-size: 11px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+
+  /* Existing fields table */
+  .fields-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  .fields-table th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .fields-table td { padding: 7px 10px; border-bottom: 1px solid var(--border2); font-size: 11px; color: var(--text); }
+  .fields-table tr:hover td { background: var(--surface); }
+  .field-key { font-family: monospace; color: var(--text); font-size: 11px; }
+  .field-source { font-size: 9px; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+  .source-info { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
+  .source-parquet { background: #7ba8c922; color: var(--blue); border: 1px solid #7ba8c944; }
+  .source-custom { background: #7fb77e22; color: var(--green); border: 1px solid #7fb77e44; }
+  .field-value-preview { font-family: monospace; font-size: 10px; color: var(--text-muted); }
+  .field-edit-btn { font-size: 10px; color: var(--text-dim); background: none; border: 1px solid var(--border); border-radius: 3px; padding: 2px 7px; cursor: pointer; }
+  .field-edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Add field form */
+  .add-field-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 8px; }
+  .add-field-title { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+  .form-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-end; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+  .form-input { background: var(--bg); border: 1px solid var(--border2); border-radius: 4px; padding: 5px 9px; font-size: 11px; color: var(--text); min-width: 120px; }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+  .form-select { background: var(--bg); border: 1px solid var(--border2); border-radius: 4px; padding: 5px 9px; font-size: 11px; color: var(--text); }
+  .form-hint { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+  .btn-add { background: var(--accent); border: none; border-radius: 5px; padding: 6px 14px; font-size: 11px; font-weight: 700; color: var(--bg); cursor: pointer; }
+  .btn-cancel { background: none; border: 1px solid var(--border); border-radius: 5px; padding: 6px 12px; font-size: 11px; color: var(--text-muted); cursor: pointer; }
+
+  .warn-box { background: #c97b7b15; border: 1px solid #c97b7b44; border-radius: 6px; padding: 8px 12px; font-size: 10px; color: #c97b7b; margin-top: 10px; line-height: 1.6; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+</style>
+
+<div class="mockup">
+  <div class="tab-bar">
+    <div class="tab">Overview</div>
+    <div class="tab">Curate</div>
+    <div class="tab active">Fields</div>
+    <div class="tab">Ops</div>
+  </div>
+
+  <div class="fields-layout">
+    <!-- Left nav -->
+    <div class="fields-nav">
+      <div class="nav-section">편집 대상</div>
+      <div class="nav-item active">Dataset Info</div>
+      <div class="nav-item">Episode Columns</div>
+    </div>
+
+    <!-- Main: Dataset Info (info.json) -->
+    <div class="fields-main">
+      <div class="section-title">Dataset Info 필드</div>
+      <div class="section-desc">
+        <code style="font-size:10px;color:var(--text-muted)">meta/info.json</code> 에 커스텀 속성을 추가합니다.<br>
+        기존 시스템 필드(fps, total_episodes 등)는 읽기 전용입니다.
+      </div>
+
+      <table class="fields-table">
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Source</th>
+            <th>현재 값</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="field-key">fps</span></td>
+            <td><span class="field-source source-info">info.json</span></td>
+            <td><span class="field-value-preview">30</span></td>
+            <td><span style="font-size:9px;color:var(--text-dim)">읽기 전용</span></td>
+          </tr>
+          <tr>
+            <td><span class="field-key">robot_type</span></td>
+            <td><span class="field-source source-info">info.json</span></td>
+            <td><span class="field-value-preview">"ur5e"</span></td>
+            <td><span style="font-size:9px;color:var(--text-dim)">읽기 전용</span></td>
+          </tr>
+          <tr>
+            <td><span class="field-key">total_episodes</span></td>
+            <td><span class="field-source source-info">info.json</span></td>
+            <td><span class="field-value-preview">142</span></td>
+            <td><span style="font-size:9px;color:var(--text-dim)">읽기 전용</span></td>
+          </tr>
+          <tr style="background:var(--accent-dim)">
+            <td><span class="field-key" style="color:var(--accent)">project_id</span></td>
+            <td><span class="field-source source-custom">custom</span></td>
+            <td><span class="field-value-preview">"AIC-2025-Q1"</span></td>
+            <td><button class="field-edit-btn">편집</button></td>
+          </tr>
+          <tr style="background:var(--accent-dim)">
+            <td><span class="field-key" style="color:var(--accent)">collection_date</span></td>
+            <td><span class="field-source source-custom">custom</span></td>
+            <td><span class="field-value-preview">"2025-03-15"</span></td>
+            <td><button class="field-edit-btn">편집</button></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="add-field-box">
+        <div class="add-field-title">+ 새 커스텀 필드 추가</div>
+        <div class="form-row">
+          <div class="form-group">
+            <div class="form-label">Key 이름</div>
+            <input class="form-input" type="text" placeholder="예: scene_type" readonly>
+          </div>
+          <div class="form-group">
+            <div class="form-label">타입</div>
+            <select class="form-select">
+              <option>string</option>
+              <option>number</option>
+              <option>boolean</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <div class="form-label">기본값</div>
+            <input class="form-input" type="text" placeholder="예: indoor" readonly style="min-width:100px">
+          </div>
+          <button class="btn-add">저장</button>
+          <button class="btn-cancel">취소</button>
+        </div>
+        <div class="form-hint">저장 시 meta/info.json에 즉시 반영됩니다.</div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Episode Columns section preview -->
+      <div class="section-title">Episode Columns</div>
+      <div class="section-desc">
+        <code style="font-size:10px;color:var(--text-muted)">meta/episodes/*.parquet</code> 에 새 컬럼을 추가합니다.<br>
+        모든 에피소드에 기본값으로 채워진 컬럼이 추가됩니다.
+      </div>
+
+      <table class="fields-table">
+        <thead>
+          <tr><th>Column</th><th>Source</th><th>타입</th><th>기본값</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="field-key">episode_index</span></td>
+            <td><span class="field-source source-parquet">parquet</span></td>
+            <td><span class="field-value-preview">int64</span></td>
+            <td><span class="field-value-preview">—</span></td>
+            <td><span style="font-size:9px;color:var(--text-dim)">읽기 전용</span></td>
+          </tr>
+          <tr>
+            <td><span class="field-key">length</span></td>
+            <td><span class="field-source source-parquet">parquet</span></td>
+            <td><span class="field-value-preview">int64</span></td>
+            <td><span class="field-value-preview">—</span></td>
+            <td><span style="font-size:9px;color:var(--text-dim)">읽기 전용</span></td>
+          </tr>
+          <tr style="background:var(--accent-dim)">
+            <td><span class="field-key" style="color:var(--accent)">difficulty</span></td>
+            <td><span class="field-source source-custom">custom</span></td>
+            <td><span class="field-value-preview">string</span></td>
+            <td><span class="field-value-preview">null</span></td>
+            <td><button class="field-edit-btn">삭제</button></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="warn-box">
+        ⚠ parquet 컬럼 추가는 전체 episodes 파일을 재작성합니다. 대용량 데이터셋의 경우 시간이 걸릴 수 있습니다.
+      </div>
+    </div>
+  </div>
+</div>
