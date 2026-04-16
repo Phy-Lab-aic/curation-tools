@@ -540,3 +540,203 @@ class TestServiceIntegration:
         assert info["total_episodes"] == 3
 
         assert not work.with_suffix(".bak").exists()
+
+
+# ---------------------------------------------------------------------------
+# E2E tests
+# ---------------------------------------------------------------------------
+
+
+class TestE2EFullWorkflow:
+    """End-to-end: split from source → merge into target → delete from source → verify all."""
+
+    def test_split_merge_delete_roundtrip(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import (
+            split_dataset, merge_datasets, delete_episodes,
+            read_info, read_episodes,
+        )
+
+        # Source has episodes 0..4. Split out [2, 3] into a new dataset.
+        split_out = tmp_path / "split_out"
+        split_dataset(sample_dataset, episode_ids=[2, 3], output_dir=split_out)
+
+        # Create a "target" dataset from episodes [0] to merge into
+        target = tmp_path / "target"
+        split_dataset(sample_dataset, episode_ids=[0], output_dir=target)
+
+        # Merge split_out into target: target should now have 3 episodes
+        merged = tmp_path / "merged"
+        merge_datasets([target, split_out], output_dir=merged)
+
+        merged_info = read_info(merged)
+        assert merged_info["total_episodes"] == 3
+        merged_eps = read_episodes(merged)
+        assert merged_eps.column("episode_index").to_pylist() == [0, 1, 2]
+        # Serials: ep0 from target (originally SN_000000), ep1+2 from split_out (originally SN_000002, SN_000003)
+        serials = merged_eps.column("Serial_number").to_pylist()
+        assert serials == ["SN_000000", "SN_000002", "SN_000003"]
+
+        # dataset_from/to must be continuous
+        froms = merged_eps.column("dataset_from_index").to_pylist()
+        tos = merged_eps.column("dataset_to_index").to_pylist()
+        for i in range(1, len(froms)):
+            assert froms[i] == tos[i - 1], f"Gap at episode {i}: to[{i-1}]={tos[i-1]} != from[{i}]={froms[i]}"
+
+        # Now delete [2, 3] from original source
+        source_after = tmp_path / "source_after"
+        delete_episodes(sample_dataset, episode_ids=[2, 3], output_dir=source_after)
+
+        source_info = read_info(source_after)
+        assert source_info["total_episodes"] == 3
+        source_eps = read_episodes(source_after)
+        source_serials = source_eps.column("Serial_number").to_pylist()
+        assert source_serials == ["SN_000000", "SN_000001", "SN_000004"]
+
+        # Total episodes across both datasets: 3 + 3 = 6 (but original had 5,
+        # because ep0 was duplicated into target). Verify no data corruption.
+        merged_frames = merged_info["total_frames"]
+        source_frames = source_info["total_frames"]
+        assert merged_frames > 0
+        assert source_frames > 0
+
+
+class TestE2ESplitAndMergeService:
+    """End-to-end: split_and_merge service operation (extract episodes into existing dataset)."""
+
+    @pytest.mark.asyncio
+    async def test_split_and_merge_workflow(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_service import DatasetOpsService
+        from backend.datasets.services.dataset_ops_engine import (
+            split_dataset, read_info, read_episodes,
+        )
+        import asyncio
+
+        # Create target dataset with episodes [0, 1]
+        target = tmp_path / "target_ds"
+        split_dataset(sample_dataset, episode_ids=[0, 1], output_dir=target)
+
+        # Use service to split episodes [3, 4] from source and merge into target
+        svc = DatasetOpsService()
+        job_id = await svc.split_and_merge(
+            source_path=sample_dataset,
+            episode_ids=[3, 4],
+            target_path=target,
+            target_name="target_ds",
+        )
+        await asyncio.sleep(2.0)
+
+        job = svc.get_job_status(job_id)
+        assert job["status"] == "complete", f"Job failed: {job.get('error')}"
+
+        # Target should now have 4 episodes (2 original + 2 merged)
+        info = read_info(target)
+        assert info["total_episodes"] == 4
+
+        eps = read_episodes(target)
+        assert eps.column("episode_index").to_pylist() == [0, 1, 2, 3]
+
+        # Serials: first 2 from original target, next 2 from source
+        serials = eps.column("Serial_number").to_pylist()
+        assert serials == ["SN_000000", "SN_000001", "SN_000003", "SN_000004"]
+
+        # Continuous from/to indices
+        froms = eps.column("dataset_from_index").to_pylist()
+        tos = eps.column("dataset_to_index").to_pylist()
+        for i in range(1, len(froms)):
+            assert froms[i] == tos[i - 1]
+
+
+class TestE2EDataIntegrity:
+    """End-to-end: verify data parquet content is preserved byte-accurately after operations."""
+
+    def test_data_values_preserved_after_split(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset
+
+        # Read original data for episode 2 (chunk-000/file-002.parquet)
+        orig_data = pq.read_table(
+            str(sample_dataset / "data" / "chunk-000" / "file-002.parquet")
+        )
+        orig_actions = orig_data.column("action").to_pylist()
+        orig_states = orig_data.column("observation.state").to_pylist()
+        orig_timestamps = orig_data.column("timestamp").to_pylist()
+        orig_length = len(orig_data)
+
+        # Split: extract episode 2 only
+        output = tmp_path / "split_integrity"
+        split_dataset(sample_dataset, episode_ids=[2], output_dir=output)
+
+        # In output, episode 2 becomes episode 0 (reindexed) -> chunk-000/file-000.parquet
+        new_data = pq.read_table(str(output / "data" / "chunk-000" / "file-000.parquet"))
+        assert len(new_data) == orig_length
+
+        # episode_index should be rewritten to 0
+        assert all(v == 0 for v in new_data.column("episode_index").to_pylist())
+
+        # But action and observation.state values must be identical
+        assert new_data.column("action").to_pylist() == orig_actions
+        assert new_data.column("observation.state").to_pylist() == orig_states
+        assert new_data.column("timestamp").to_pylist() == orig_timestamps
+
+    def test_data_values_preserved_after_delete(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import delete_episodes
+
+        # Read original data for episode 4 (chunk-001/file-001.parquet)
+        orig_data = pq.read_table(
+            str(sample_dataset / "data" / "chunk-001" / "file-001.parquet")
+        )
+        orig_actions = orig_data.column("action").to_pylist()
+        orig_task_index = orig_data.column("task_index").to_pylist()
+
+        # Delete episodes 0, 1, 2, 3 — only episode 4 remains (becomes ep 0)
+        output = tmp_path / "delete_integrity"
+        delete_episodes(sample_dataset, episode_ids=[0, 1, 2, 3], output_dir=output)
+
+        new_data = pq.read_table(str(output / "data" / "chunk-000" / "file-000.parquet"))
+        assert len(new_data) == len(orig_data)
+
+        # episode_index rewritten to 0
+        assert all(v == 0 for v in new_data.column("episode_index").to_pylist())
+
+        # action and task_index values preserved
+        assert new_data.column("action").to_pylist() == orig_actions
+        assert new_data.column("task_index").to_pylist() == orig_task_index
+
+    def test_data_values_preserved_after_merge(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset, merge_datasets
+
+        # Split into two, then merge back
+        ds_a = tmp_path / "ds_a"
+        ds_b = tmp_path / "ds_b"
+        split_dataset(sample_dataset, episode_ids=[0, 1], output_dir=ds_a)
+        split_dataset(sample_dataset, episode_ids=[2, 3, 4], output_dir=ds_b)
+
+        merged = tmp_path / "merged_integrity"
+        merge_datasets([ds_a, ds_b], output_dir=merged)
+
+        # Read original episode 3 data (chunk-001/file-000.parquet in source)
+        orig_ep3 = pq.read_table(
+            str(sample_dataset / "data" / "chunk-001" / "file-000.parquet")
+        )
+        orig_ep3_actions = orig_ep3.column("action").to_pylist()
+
+        # After merge, episode 3 is at index 3 (ds_a has 2 eps, ds_b starts at 2)
+        # In merged output: chunk-000/file-003.parquet
+        merged_ep3 = pq.read_table(
+            str(merged / "data" / "chunk-000" / "file-003.parquet")
+        )
+        assert merged_ep3.column("action").to_pylist() == orig_ep3_actions
+        assert all(v == 3 for v in merged_ep3.column("episode_index").to_pylist())
+
+    def test_video_files_preserved_after_operations(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset
+
+        # Read original video content
+        orig_vid = (sample_dataset / "videos" / "observation.images.cam_top" / "chunk-000" / "file-002.mp4").read_bytes()
+
+        # Split episode 2
+        output = tmp_path / "vid_integrity"
+        split_dataset(sample_dataset, episode_ids=[2], output_dir=output)
+
+        # Video should be identical (byte-for-byte)
+        new_vid = (output / "videos" / "observation.images.cam_top" / "chunk-000" / "file-000.mp4").read_bytes()
+        assert new_vid == orig_vid
