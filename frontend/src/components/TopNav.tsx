@@ -1,12 +1,17 @@
-import { useEffect, useState } from 'react'
 import type { AppState, DatasetTab, ConverterState } from '../types'
+
+interface ThemeOption { key: string; dot: string }
 
 interface TopNavProps {
   state: AppState
+  converterState: ConverterState
   onNavigateHome: () => void
   onNavigateCell: (cellName: string, cellPath: string) => void
   onTabChange?: (tab: DatasetTab) => void
   onNavigateConverter?: () => void
+  themes: readonly ThemeOption[]
+  currentTheme: string
+  onThemeChange: (key: string) => void
 }
 
 const TABS: { id: DatasetTab; label: string }[] = [
@@ -23,26 +28,7 @@ const DOT_CLASS: Record<ConverterState, string> = {
   unknown: 'converter-dot-stopped',
 }
 
-export function TopNav({ state, onNavigateHome, onNavigateCell, onTabChange, onNavigateConverter }: TopNavProps) {
-  const [converterState, setConverterState] = useState<ConverterState>('unknown')
-
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch('/api/converter/status')
-        if (res.ok) {
-          const data = await res.json()
-          setConverterState(data.container_state)
-        }
-      } catch {
-        setConverterState('unknown')
-      }
-    }
-    poll()
-    const id = setInterval(poll, 5000)
-    return () => clearInterval(id)
-  }, [])
-
+export function TopNav({ state, converterState, onNavigateHome, onNavigateCell, onTabChange, onNavigateConverter, themes, currentTheme, onThemeChange }: TopNavProps) {
   return (
     <nav className="top-nav">
       <button className="top-nav-logo" onClick={onNavigateHome}>
@@ -93,6 +79,18 @@ export function TopNav({ state, onNavigateHome, onNavigateCell, onTabChange, onN
           ))}
         </div>
       )}
+
+      <div className="bg-picker">
+        {themes.map(t => (
+          <button
+            key={t.key}
+            className={`bg-dot${currentTheme === t.key ? ' active' : ''}`}
+            style={{ background: t.dot }}
+            onClick={() => onThemeChange(t.key)}
+            title={t.key}
+          />
+        ))}
+      </div>
     </nav>
   )
 }

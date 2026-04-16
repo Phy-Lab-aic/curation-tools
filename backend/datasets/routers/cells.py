@@ -32,7 +32,7 @@ async def list_datasets_in_cell(cell_path: str):
     if not any(resolved == root or str(resolved).startswith(str(root) + "/") for root in allowed_roots):
         raise HTTPException(status_code=403, detail="Access denied: path outside allowed roots")
 
-    datasets = get_datasets_in_cell(decoded)
+    datasets = await get_datasets_in_cell(decoded)
     if not Path(decoded).exists():
         raise HTTPException(status_code=404, detail=f"Cell path not found: {decoded}")
     return datasets

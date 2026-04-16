@@ -210,7 +210,7 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
               textAlign: 'left',
               cursor: 'pointer',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(243,139,168,0.1)')}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--c-red-dim)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}
             onClick={() => void handleBulkBad(contextMenu)}
           >
@@ -267,10 +267,10 @@ function GradeSummary({ chart, fps, episodes, onNavigateCurate }: {
   }, [episodes, fps])
 
   const items = [
-    { label: 'Good', key: 'good', color: 'var(--c-green)', bg: 'rgba(166, 227, 161, 0.08)' },
-    { label: 'Normal', key: 'normal', color: 'var(--c-yellow)', bg: 'rgba(249, 226, 175, 0.08)' },
-    { label: 'Bad', key: 'bad', color: 'var(--c-red)', bg: 'rgba(243, 139, 168, 0.08)' },
-    { label: 'Ungraded', key: '(ungraded)', color: 'var(--text-dim)', bg: 'rgba(85, 85, 85, 0.08)' },
+    { label: 'Good', key: 'good', color: 'var(--c-green)' },
+    { label: 'Normal', key: 'normal', color: 'var(--c-yellow)' },
+    { label: 'Bad', key: 'bad', color: 'var(--c-red)' },
+    { label: 'Ungraded', key: '(ungraded)', color: 'var(--text-dim)' },
   ]
 
   return (
@@ -285,7 +285,7 @@ function GradeSummary({ chart, fps, episodes, onNavigateCurate }: {
           const dur = gradeDurations[item.key] ?? 0
           return (
             <div key={item.key} style={{
-              background: item.bg,
+              background: 'var(--panel2)',
               border: `1px solid ${count > 0 ? item.color : 'var(--border)'}`,
               borderRadius: 8,
               padding: '12px 10px',
@@ -489,6 +489,7 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
             />
             <Tooltip
               content={<GradeTooltip field={chart.field} episodes={episodes} fps={fps} formatLabel={formatLabel} />}
+              cursor={false}
             />
             <Bar
               dataKey="count"

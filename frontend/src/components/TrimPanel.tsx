@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import client from '../api/client'
 import type { Episode } from '../types/index'
 
-interface SplitMergePanelProps {
+interface TrimPanelProps {
   datasetPath: string | null
   episodes: Episode[]
 }
@@ -66,16 +66,16 @@ function JobProgress({ jobStatus, polling }: { jobStatus: JobStatus | null; poll
   const isFail = jobStatus.status === 'failed'
 
   return (
-    <div style={{ ...s.statusBox, borderColor: isOk ? '#a6e3a1' : isFail ? '#f38ba8' : '#89b4fa' }}>
+    <div style={{ ...s.statusBox, borderColor: isOk ? 'var(--c-green)' : isFail ? 'var(--c-red)' : 'var(--interactive)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ color: isOk ? '#a6e3a1' : isFail ? '#f38ba8' : '#aaa', fontSize: 12, fontWeight: 600 }}>
+        <span style={{ color: isOk ? 'var(--c-green)' : isFail ? 'var(--c-red)' : 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>
           {jobStatus.status.toUpperCase()}
         </span>
         {polling && <span style={s.spinner}>⟳</span>}
       </div>
       {isOk && jobStatus.result_path && (
         <div style={s.resultPath}>
-          Result: <span style={{ fontFamily: 'monospace', color: '#a6e3a1' }}>{jobStatus.result_path}</span>
+          Result: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--c-green)' }}>{jobStatus.result_path}</span>
         </div>
       )}
       {isFail && jobStatus.error && (
@@ -239,7 +239,7 @@ function SplitTab({
           <div style={s.chipRow}>
             {GRADE_OPTIONS.map(grade => {
               const active = selectedGrades.has(grade)
-              const color = grade === 'good' ? '#a6e3a1' : grade === 'bad' ? '#f38ba8' : grade === 'normal' ? '#f9e2af' : '#888'
+              const color = grade === 'good' ? 'var(--c-green)' : grade === 'bad' ? 'var(--c-red)' : grade === 'normal' ? 'var(--c-yellow)' : 'var(--text-muted)'
               return (
                 <button
                   key={grade}
@@ -274,9 +274,9 @@ function SplitTab({
                     key={tag}
                     style={{
                       ...s.chip,
-                      borderColor: active ? '#89b4fa' : '#333',
-                      color: active ? '#89b4fa' : '#666',
-                      background: active ? '#89b4fa18' : 'transparent',
+                      borderColor: active ? 'var(--interactive)' : 'var(--border3)',
+                      color: active ? 'var(--interactive)' : 'var(--text-dim)',
+                      background: active ? 'var(--interactive-dim)' : 'transparent',
                     }}
                     onClick={() => toggleTag(tag)}
                   >
@@ -291,7 +291,7 @@ function SplitTab({
 
       {/* Match preview */}
       <div style={s.matchPreview}>
-        <span style={{ color: matchingEpisodes.length > 0 ? '#89b4fa' : '#555' }}>
+        <span style={{ color: matchingEpisodes.length > 0 ? 'var(--interactive)' : 'var(--text-dim)' }}>
           {matchingEpisodes.length} episode{matchingEpisodes.length !== 1 ? 's' : ''} match
         </span>
         {matchingEpisodes.length > 0 && (
@@ -454,7 +454,7 @@ function MergeTab() {
               style={s.checkbox}
             />
             <span style={s.epLabel}>
-              <span style={{ ...s.epIndex, color: '#89b4fa' }}>{ds.name}</span>
+              <span style={{ ...s.epIndex, color: 'var(--interactive)' }}>{ds.name}</span>
               <span style={s.epTask}>{ds.path}</span>
             </span>
           </label>
@@ -573,7 +573,7 @@ function DeleteTab({
           <div style={s.chipRow}>
             {GRADE_OPTIONS.map(grade => {
               const active = selectedGrades.has(grade)
-              const color = grade === 'good' ? '#a6e3a1' : grade === 'bad' ? '#f38ba8' : grade === 'normal' ? '#f9e2af' : '#888'
+              const color = grade === 'good' ? 'var(--c-green)' : grade === 'bad' ? 'var(--c-red)' : grade === 'normal' ? 'var(--c-yellow)' : 'var(--text-muted)'
               return (
                 <button
                   key={grade}
@@ -607,9 +607,9 @@ function DeleteTab({
                     key={tag}
                     style={{
                       ...s.chip,
-                      borderColor: active ? '#f38ba8' : '#333',
-                      color: active ? '#f38ba8' : '#666',
-                      background: active ? '#f38ba818' : 'transparent',
+                      borderColor: active ? 'var(--c-red)' : 'var(--border3)',
+                      color: active ? 'var(--c-red)' : 'var(--text-dim)',
+                      background: active ? 'var(--c-red-dim)' : 'transparent',
                     }}
                     onClick={() => toggleTag(tag)}
                   >
@@ -623,7 +623,7 @@ function DeleteTab({
       )}
 
       <div style={s.matchPreview}>
-        <span style={{ color: matchingEpisodes.length > 0 ? '#f38ba8' : '#555' }}>
+        <span style={{ color: matchingEpisodes.length > 0 ? 'var(--c-red)' : 'var(--text-dim)' }}>
           {matchingEpisodes.length} episode{matchingEpisodes.length !== 1 ? 's' : ''} will be deleted
         </span>
         {matchingEpisodes.length > 0 && (
@@ -632,7 +632,7 @@ function DeleteTab({
           </div>
         )}
         {matchingEpisodes.length > 0 && (
-          <span style={{ fontSize: 11, color: '#888' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {episodes.length - matchingEpisodes.length} episode{episodes.length - matchingEpisodes.length !== 1 ? 's' : ''} will remain
           </span>
         )}
@@ -641,7 +641,7 @@ function DeleteTab({
       {submitError && <div style={s.errorText}>{submitError}</div>}
 
       <button
-        style={{ ...s.actionBtn, background: '#f38ba8', opacity: submitting || polling ? 0.6 : 1 }}
+        style={{ ...s.actionBtn, background: 'var(--c-red)', opacity: submitting || polling ? 0.6 : 1 }}
         onClick={handleSubmit}
         disabled={submitting || polling}
       >
@@ -653,66 +653,35 @@ function DeleteTab({
   )
 }
 
-export function SplitMergePanel({ datasetPath, episodes }: SplitMergePanelProps) {
-  const [open, setOpen] = useState(false)
+export function TrimPanel({ datasetPath, episodes }: TrimPanelProps) {
   const [tab, setTab] = useState<TabId>('split')
 
   return (
     <div style={s.container}>
-      <button style={s.header} onClick={() => setOpen(v => !v)} aria-expanded={open} aria-label="Split / Merge panel">
-        <span style={s.headerTitle}>Split / Merge</span>
-        <span style={s.chevron}>{open ? '▲' : '▼'}</span>
-      </button>
-
-      {open && (
-        <div style={s.body}>
-          <div style={s.tabs}>
-            {(['split', 'merge', 'delete'] as TabId[]).map(t => (
-              <button
-                key={t}
-                style={{ ...s.tabBtn, ...(tab === t ? (t === 'delete' ? { ...s.tabBtnActive, color: '#f38ba8' } : s.tabBtnActive) : {}) }}
-                onClick={() => setTab(t)}
-              >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          {tab === 'split' && <SplitTab datasetPath={datasetPath} episodes={episodes} />}
-          {tab === 'merge' && <MergeTab />}
-          {tab === 'delete' && <DeleteTab datasetPath={datasetPath} episodes={episodes} />}
+      <div style={s.body}>
+        <div style={s.tabs}>
+          {(['split', 'merge', 'delete'] as TabId[]).map(t => (
+            <button
+              key={t}
+              style={{ ...s.tabBtn, ...(tab === t ? (t === 'delete' ? { ...s.tabBtnActive, color: 'var(--c-red)' } : s.tabBtnActive) : {}) }}
+              onClick={() => setTab(t)}
+            >
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          ))}
         </div>
-      )}
+
+        {tab === 'split' && <SplitTab datasetPath={datasetPath} episodes={episodes} />}
+        {tab === 'merge' && <MergeTab />}
+        {tab === 'delete' && <DeleteTab datasetPath={datasetPath} episodes={episodes} />}
+      </div>
     </div>
   )
 }
 
 const s: Record<string, React.CSSProperties> = {
   container: {
-    borderBottom: '1px solid #333',
-  },
-  header: {
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '10px 12px',
-    background: 'transparent',
-    border: 'none',
-    color: '#e0e0e0',
-    cursor: 'pointer',
-    textAlign: 'left',
-  },
-  headerTitle: {
-    fontSize: '11px',
-    fontWeight: 600,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.08em',
-    color: '#888',
-  },
-  chevron: {
-    fontSize: 10,
-    color: '#555',
+    borderBottom: '1px solid var(--border3)',
   },
   body: {
     padding: '0 12px 12px',
@@ -723,21 +692,21 @@ const s: Record<string, React.CSSProperties> = {
   tabs: {
     display: 'flex',
     gap: 4,
-    borderBottom: '1px solid #2a2a2a',
+    borderBottom: '1px solid var(--border2)',
     paddingBottom: 6,
   },
   tabBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#666',
+    color: 'var(--text-dim)',
     fontSize: 12,
     padding: '4px 10px',
     cursor: 'pointer',
     borderRadius: '3px 3px 0 0',
   },
   tabBtnActive: {
-    color: '#89b4fa',
-    background: '#2a2a2a',
+    color: 'var(--interactive)',
+    background: 'var(--border2)',
   },
   tabContent: {
     display: 'flex',
@@ -746,7 +715,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   fieldLabel: {
     fontSize: 11,
-    color: '#888',
+    color: 'var(--text-muted)',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em',
     display: 'flex',
@@ -755,9 +724,9 @@ const s: Record<string, React.CSSProperties> = {
   },
   selectAllBtn: {
     background: 'transparent',
-    border: '1px solid #333',
+    border: '1px solid var(--border3)',
     borderRadius: 3,
-    color: '#888',
+    color: 'var(--text-muted)',
     fontSize: 10,
     padding: '2px 6px',
     cursor: 'pointer',
@@ -768,17 +737,17 @@ const s: Record<string, React.CSSProperties> = {
   },
   modeBtn: {
     background: 'transparent',
-    border: '1px solid #333',
+    border: '1px solid var(--border3)',
     borderRadius: 4,
-    color: '#666',
+    color: 'var(--text-dim)',
     fontSize: 12,
     padding: '4px 12px',
     cursor: 'pointer',
   },
   modeBtnActive: {
     background: '#2a3a4a',
-    border: '1px solid #89b4fa',
-    color: '#89b4fa',
+    border: '1px solid var(--interactive)',
+    color: 'var(--interactive)',
   },
   chipRow: {
     display: 'flex',
@@ -787,7 +756,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   chip: {
     background: 'transparent',
-    border: '1px solid #333',
+    border: '1px solid var(--border3)',
     borderRadius: 12,
     fontSize: 11,
     fontWeight: 600,
@@ -796,8 +765,8 @@ const s: Record<string, React.CSSProperties> = {
     transition: 'all 0.1s',
   },
   matchPreview: {
-    background: '#1a1a1a',
-    border: '1px solid #2a2a2a',
+    background: 'var(--panel2)',
+    border: '1px solid var(--border2)',
     borderRadius: 4,
     padding: '8px 10px',
     fontSize: 12,
@@ -807,15 +776,15 @@ const s: Record<string, React.CSSProperties> = {
   },
   matchRanges: {
     fontSize: 11,
-    color: '#888',
-    fontFamily: 'monospace',
+    color: 'var(--text-muted)',
+    fontFamily: 'var(--font-mono)',
     wordBreak: 'break-all' as const,
   },
   refreshBtn: {
     background: 'transparent',
-    border: '1px solid #333',
+    border: '1px solid var(--border3)',
     borderRadius: 3,
-    color: '#888',
+    color: 'var(--text-muted)',
     fontSize: 10,
     padding: '2px 6px',
     cursor: 'pointer',
@@ -826,9 +795,9 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 2,
-    background: '#1a1a1a',
+    background: 'var(--panel2)',
     borderRadius: 4,
-    border: '1px solid #2a2a2a',
+    border: '1px solid var(--border2)',
     padding: '4px',
   },
   checkRow: {
@@ -842,7 +811,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   checkbox: {
     flexShrink: 0,
-    accentColor: '#89b4fa',
+    accentColor: 'var(--interactive)',
   },
   epLabel: {
     display: 'flex',
@@ -854,7 +823,7 @@ const s: Record<string, React.CSSProperties> = {
   epIndex: {
     color: '#888',
     fontSize: 11,
-    fontFamily: 'monospace',
+    fontFamily: 'var(--font-mono)',
     flexShrink: 0,
   },
   gradeTag: {
@@ -863,17 +832,17 @@ const s: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   epTask: {
-    color: '#aaa',
+    color: 'var(--text-muted)',
     fontSize: 11,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
   },
   textInput: {
-    background: '#2a2a2a',
-    border: '1px solid #444',
+    background: 'var(--border2)',
+    border: '1px solid var(--border3)',
     borderRadius: 4,
-    color: '#e0e0e0',
+    color: 'var(--text)',
     padding: '6px 8px',
     fontSize: 12,
     outline: 'none',
@@ -881,7 +850,7 @@ const s: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box' as const,
   },
   actionBtn: {
-    background: '#89b4fa',
+    background: 'var(--interactive)',
     border: 'none',
     borderRadius: 4,
     color: '#fff',
@@ -891,8 +860,8 @@ const s: Record<string, React.CSSProperties> = {
     alignSelf: 'flex-start' as const,
   },
   statusBox: {
-    background: '#1a1a1a',
-    border: '1px solid #333',
+    background: 'var(--panel2)',
+    border: '1px solid var(--border3)',
     borderRadius: 4,
     padding: '8px 10px',
     display: 'flex',
@@ -902,12 +871,12 @@ const s: Record<string, React.CSSProperties> = {
   },
   resultPath: {
     fontSize: 11,
-    color: '#888',
+    color: 'var(--text-muted)',
     wordBreak: 'break-all' as const,
   },
   errorText: {
     fontSize: 12,
-    color: '#f38ba8',
+    color: 'var(--c-red)',
   },
   spinner: {
     display: 'inline-block',
@@ -915,7 +884,7 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 14,
   },
   empty: {
-    color: '#555',
+    color: 'var(--text-dim)',
     fontSize: 12,
     padding: '6px 0',
   },

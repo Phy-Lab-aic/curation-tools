@@ -9,6 +9,8 @@ interface EpisodeEditorProps {
 export function EpisodeEditor({ episode, onSave }: EpisodeEditorProps) {
   const [tags, setTags] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [tagInput, setTagInput] = useState('')
+  const [showTagInput, setShowTagInput] = useState(false)
 
   useEffect(() => {
     if (episode) {
@@ -56,16 +58,12 @@ export function EpisodeEditor({ episode, onSave }: EpisodeEditorProps) {
           ep_{String(episode.episode_index).padStart(3, '0')}
         </span>
       </div>
-      <div className="ep-details-row">
-        <span className="ep-details-key">length</span>
-        <span className="ep-details-val">{episode.length} frames</span>
-      </div>
-      <div className="ep-details-row">
-        <span className="ep-details-key">task</span>
-        <span className="ep-details-val" style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {episode.task_instruction || `task_${episode.task_index}`}
-        </span>
-      </div>
+      {episode.created_at && (
+        <div className="ep-details-row">
+          <span className="ep-details-key">created</span>
+          <span className="ep-details-val">{episode.created_at}</span>
+        </div>
+      )}
       <div className="ep-details-row">
         <span className="ep-details-key">grade</span>
         <span className="ep-details-val" style={{
@@ -77,11 +75,11 @@ export function EpisodeEditor({ episode, onSave }: EpisodeEditorProps) {
           {episode.grade ?? '—'}
         </span>
       </div>
-      {saving && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>saving...</div>}
+      {saving && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>saving...</div>}
 
       {/* Tags */}
       <div style={{ marginTop: 10 }}>
-        <div style={{ fontSize: 9, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Tags</div>
+        <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Tags</div>
         <div className="tag-chips">
           {tags.map(tag => (
             <span key={tag} className="tag-chip">
@@ -89,15 +87,37 @@ export function EpisodeEditor({ episode, onSave }: EpisodeEditorProps) {
               <button className="tag-chip-remove" onClick={() => removeTag(tag)}>×</button>
             </span>
           ))}
-          <button
-            className="tag-add-chip"
-            onClick={() => {
-              const t = prompt('Tag:')
-              if (t) addTag(t)
-            }}
-          >
-            + add
-          </button>
+          {showTagInput ? (
+            <input
+              className="tag-chip"
+              style={{ minWidth: 60, outline: 'none', background: 'var(--panel2)', color: 'var(--text)', border: '1px solid var(--accent)', borderRadius: 3, padding: '2px 6px', fontSize: 12 }}
+              autoFocus
+              value={tagInput}
+              onChange={e => setTagInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  addTag(tagInput)
+                  setTagInput('')
+                  setShowTagInput(false)
+                } else if (e.key === 'Escape') {
+                  setTagInput('')
+                  setShowTagInput(false)
+                }
+              }}
+              onBlur={() => {
+                if (tagInput.trim()) addTag(tagInput)
+                setTagInput('')
+                setShowTagInput(false)
+              }}
+            />
+          ) : (
+            <button
+              className="tag-add-chip"
+              onClick={() => setShowTagInput(true)}
+            >
+              + add
+            </button>
+          )}
         </div>
       </div>
     </div>

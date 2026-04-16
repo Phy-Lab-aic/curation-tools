@@ -202,6 +202,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   value: {
     color: '#a6e3a1',
-    fontFamily: 'monospace',
+    fontFamily: 'var(--font-mono)',
   },
 }

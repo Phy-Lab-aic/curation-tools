@@ -226,6 +226,7 @@ def _compute_annotation_distribution(
     (user annotations), with DB taking priority when both exist.
     """
     import asyncio
+    import concurrent.futures
 
     from backend.datasets.services.episode_service import (
         _ensure_dataset_registered, _ensure_migrated, _load_annotations_from_db,
@@ -233,15 +234,15 @@ def _compute_annotation_distribution(
 
     dataset_path_obj = Path(dataset_path)
 
-    dataset_id = asyncio.get_event_loop().run_until_complete(
-        _ensure_dataset_registered(dataset_path_obj)
-    )
-    asyncio.get_event_loop().run_until_complete(
-        _ensure_migrated(dataset_id, dataset_path_obj)
-    )
-    db_annotations = asyncio.get_event_loop().run_until_complete(
-        _load_annotations_from_db(dataset_id)
-    )
+    def _fetch_annotations():
+        async def _inner():
+            ds_id = await _ensure_dataset_registered(dataset_path_obj)
+            await _ensure_migrated(ds_id, dataset_path_obj)
+            return ds_id, await _load_annotations_from_db(ds_id)
+        return asyncio.run(_inner())
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        dataset_id, db_annotations = pool.submit(_fetch_annotations).result()
 
     # Read base grade/tags from parquet, then overlay DB annotations
     root = Path(dataset_path)

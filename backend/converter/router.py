@@ -1,11 +1,94 @@
 """Converter control API — build/start/stop + status/progress."""
 
 import asyncio
+import json
 import logging
+import re
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from backend.converter import service as converter_service
+
+# ---------------------------------------------------------------------------
+# Log line parser — extracts structured events from raw container output
+# ---------------------------------------------------------------------------
+
+_NOISE_RE = re.compile(
+    r"^(_read_rosbag|Traceback |  File |    |ValueError|^$)"
+)
+_TS_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\[(\w+)]\s*(.*)"
+)
+_CONVERTED_RE = re.compile(
+    r"Converted:\s+(.+?)\s+\((\d+)\s+frames,\s+([\d.]+)s\)"
+)
+_FAILED_RE = re.compile(
+    r"Failed\s+\[(\w+)]:\s+(.+?):\s+(.*)"
+)
+_CONVERTING_RE = re.compile(
+    r"Converting\s+(.+?):\s+(\d+)\s+new recordings"
+)
+_SCAN_RE = re.compile(
+    r"(\d+)\s+tasks?\s+with\s+(\d+)\s+pending"
+)
+
+
+def _parse_log_line(raw: str) -> dict | None:
+    """Parse a raw log line into a structured event dict, or None to skip."""
+    if not raw.strip() or _NOISE_RE.match(raw):
+        return None
+    # Indented continuation lines (quality anomaly details)
+    if raw.startswith("  ") or raw.startswith("Timestamp gap"):
+        return None
+
+    ts_m = _TS_RE.match(raw)
+    if not ts_m:
+        return None
+
+    ts, level, msg = ts_m.group(1), ts_m.group(2), ts_m.group(3).strip()
+
+    conv_m = _CONVERTED_RE.search(msg)
+    if conv_m:
+        return {
+            "type": "converted", "ts": ts,
+            "recording": conv_m.group(1),
+            "frames": int(conv_m.group(2)),
+            "duration": float(conv_m.group(3)),
+        }
+
+    fail_m = _FAILED_RE.search(msg)
+    if fail_m:
+        return {
+            "type": "failed", "ts": ts,
+            "error_code": fail_m.group(1),
+            "recording": fail_m.group(2),
+            "reason": fail_m.group(3),
+        }
+
+    converting_m = _CONVERTING_RE.search(msg)
+    if converting_m:
+        return {
+            "type": "converting", "ts": ts,
+            "task": converting_m.group(1),
+            "count": int(converting_m.group(2)),
+        }
+
+    scan_m = _SCAN_RE.search(msg)
+    if scan_m:
+        return {
+            "type": "scan", "ts": ts,
+            "tasks": int(scan_m.group(1)),
+            "pending": int(scan_m.group(2)),
+        }
+
+    if level == "WARNING" and "anomal" in msg.lower():
+        return {"type": "warning", "ts": ts, "message": msg}
+
+    # Generic info/error that passed noise filter
+    if level in ("INFO", "ERROR"):
+        return {"type": level.lower(), "ts": ts, "message": msg}
+
+    return None
 
 _last_build_result: dict | None = None
 
@@ -38,8 +121,8 @@ async def get_status():
 
 @router.get("/progress")
 async def get_progress():
-    """Get conversion progress (parsed from latest scan table)."""
-    tasks, summary = await converter_service.parse_progress()
+    """Get conversion progress from state file + NAS scan."""
+    tasks, summary = converter_service.build_progress()
     return {
         "tasks": [
             {
@@ -128,7 +211,9 @@ async def logs_ws(ws: WebSocket):
             return
 
         async for line in converter_service.stream_logs(tail=200):
-            await ws.send_text(line)
+            event = _parse_log_line(line)
+            if event:
+                await ws.send_text(json.dumps(event))
     except WebSocketDisconnect:
         pass
     except Exception as e:

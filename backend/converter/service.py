@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -13,13 +14,21 @@ from typing import AsyncGenerator, Callable
 # Config
 # ---------------------------------------------------------------------------
 
-ROSBAG_PROJECT = Path(os.environ.get(
-    "CONVERTER_PROJECT_PATH",
-    "/home/tommoro/jm_ws/local_data_pipline/rosbag-to-lerobot",
-))
-COMPOSE_FILE = ROSBAG_PROJECT / "docker" / "docker-compose.yml"
+CURATION_TOOLS_ROOT = Path(__file__).resolve().parent.parent.parent
+COMPOSE_FILE = CURATION_TOOLS_ROOT / "docker" / "converter" / "docker-compose.yml"
 PROJECT_NAME = "convert-server"
 CONTAINER_NAME = "convert-server"
+
+# NAS paths (host-side) — same mount that Docker maps to /data
+_DATA_ROOT = Path(os.environ.get(
+    "CONVERTER_DATA_ROOT",
+    "/mnt/synology/data/data_div/2026_1",
+))
+RAW_BASE = _DATA_ROOT / "raw"
+LEROBOT_BASE = _DATA_ROOT / "lerobot"
+STATE_FILE = LEROBOT_BASE / "convert_state.json"
+
+SERIAL_RE = re.compile(r"^\d{8}_\d{6}(_\d+)?$")
 
 # Module-level lock to guard concurrent build requests
 _build_lock = asyncio.Lock()
@@ -45,18 +54,6 @@ class ConverterStatus:
     docker_available: bool
     tasks: list[TaskProgress] = field(default_factory=list)
     summary: str = ""
-
-# ---------------------------------------------------------------------------
-# Regex patterns for progress parsing
-# ---------------------------------------------------------------------------
-
-_ROW_RE = re.compile(
-    r"^\s+(.{1,36})\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$"
-)
-_TOTAL_RE = re.compile(
-    r"Total:\s+(\d+)\s+tasks?\s*\|\s*(\d+)\s+recordings?\s*\|\s*(\d+)\s+done"
-    r"\s*\|\s*(\d+)\s+pending\s*\|\s*(\d+)\s+failed"
-)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -90,6 +87,126 @@ async def _run(cmd: list[str], timeout: float = 10.0) -> tuple[int, str, str]:
         await proc.wait()
         return -1, "", "timeout"
     return proc.returncode or 0, stdout.decode(), stderr.decode()
+
+
+# ---------------------------------------------------------------------------
+# NAS scanner (host-side, lightweight)
+# ---------------------------------------------------------------------------
+
+def _count_recordings(task_dir: Path) -> int:
+    """Count valid recordings (serial pattern + metacard.json) in a task dir."""
+    count = 0
+    try:
+        for entry in task_dir.iterdir():
+            if entry.is_dir() and SERIAL_RE.match(entry.name):
+                if (entry / "metacard.json").is_file():
+                    count += 1
+    except OSError:
+        pass
+    return count
+
+
+def scan_raw_totals() -> dict[str, int]:
+    """Scan NAS raw/ and return {cell_task: total_recordings}.
+
+    Supports both 2-level (cell/task/serial) and 3-level (cell/task/subtask/serial).
+    """
+    totals: dict[str, int] = {}
+    if not RAW_BASE.is_dir():
+        return totals
+
+    for cell_dir in sorted(RAW_BASE.iterdir()):
+        if not cell_dir.is_dir() or cell_dir.name.startswith("."):
+            continue
+        for task_dir in sorted(cell_dir.iterdir()):
+            if not task_dir.is_dir() or task_dir.name.startswith("."):
+                continue
+
+            cell_task = f"{cell_dir.name}/{task_dir.name}"
+
+            # Check for direct serial dirs
+            serials = 0
+            subtask_dirs = []
+            try:
+                for entry in task_dir.iterdir():
+                    if not entry.is_dir():
+                        continue
+                    if SERIAL_RE.match(entry.name):
+                        if (entry / "metacard.json").is_file():
+                            serials += 1
+                    else:
+                        subtask_dirs.append(entry)
+            except OSError:
+                continue
+
+            if serials > 0:
+                totals[cell_task] = serials
+            elif subtask_dirs:
+                # 3-level: cell/task/subtask/serial
+                for sub_dir in sorted(subtask_dirs):
+                    if sub_dir.name.startswith("."):
+                        continue
+                    sub_count = _count_recordings(sub_dir)
+                    if sub_count > 0:
+                        sub_key = f"{cell_dir.name}/{task_dir.name}/{sub_dir.name}"
+                        totals[sub_key] = sub_count
+
+    return totals
+
+
+def read_state() -> dict:
+    """Read convert_state.json from NAS."""
+    try:
+        if STATE_FILE.is_file():
+            return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Progress (state file based)
+# ---------------------------------------------------------------------------
+
+def build_progress() -> tuple[list[TaskProgress], str]:
+    """Build progress from state file + NAS scan. No log parsing needed."""
+    state = read_state()
+    totals = scan_raw_totals()
+
+    all_keys = sorted(set(state.keys()) | set(totals.keys()))
+    tasks: list[TaskProgress] = []
+    sum_total = sum_done = sum_pending = sum_failed = 0
+
+    for key in all_keys:
+        total = totals.get(key, 0)
+        entry = state.get(key, {})
+        done = entry.get("converted_count", 0)
+        failed = len(entry.get("failed_serials", []))
+        retry = len(entry.get("transient_failed", {}))
+        pending = max(0, total - done - failed)
+
+        if total == 0 and done == 0:
+            continue
+
+        tasks.append(TaskProgress(
+            cell_task=key,
+            total=total,
+            done=done,
+            pending=pending,
+            failed=failed,
+            retry=retry,
+        ))
+        sum_total += total
+        sum_done += done
+        sum_pending += pending
+        sum_failed += failed
+
+    summary = (
+        f"{len(tasks)} tasks | {sum_total} recordings | "
+        f"{sum_done} done | {sum_pending} pending | {sum_failed} failed"
+    )
+    return tasks, summary
+
 
 # ---------------------------------------------------------------------------
 # Public functions
@@ -131,15 +248,15 @@ async def get_status() -> ConverterStatus:
         )
 
     state = await get_container_state()
-    # Map Docker states to our states
     if state == "exited":
-        state = "stopped"  # container finished or crashed — treat as stopped
+        state = "stopped"
 
-    tasks: list[TaskProgress] = []
-    summary = ""
-
-    if state == "running":
-        tasks, summary = await parse_progress()
+    try:
+        tasks, summary = build_progress()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("build_progress failed: %s", e)
+        tasks, summary = [], f"Progress scan failed: {e}"
 
     return ConverterStatus(
         container_state=state,
@@ -178,14 +295,13 @@ async def start_converter() -> tuple[bool, str]:
     if state == "running":
         return False, "Container already running"
     if state not in ("stopped", "exited"):
-        # Don't force-remove containers in transitional states
         return False, f"Container in unexpected state: {state}"
 
     # Remove old container if it exists (safe — not running)
     await _run(["docker", "rm", "-f", CONTAINER_NAME], timeout=10.0)
 
     cmd = _compose_cmd(
-        "run", "-d",
+        "run", "-d", "--build",
         "--name", CONTAINER_NAME,
         "convert-server",
         "python3", "/app/auto_converter.py",
@@ -202,66 +318,6 @@ async def stop_converter() -> tuple[bool, str]:
     if rc == 0:
         return True, stdout.strip() or "stopped"
     return False, stderr.strip() or "failed to stop"
-
-
-async def parse_progress() -> tuple[list[TaskProgress], str]:
-    """Parse the last scan table from container logs.
-
-    Returns (list_of_task_progress, summary_line).
-    """
-    rc, stdout, stderr = await _run(
-        ["docker", "logs", "--tail", "100", CONTAINER_NAME],
-        timeout=10.0,
-    )
-    output = stdout + stderr  # docker logs may write to stderr
-    if rc != 0 or not output:
-        return [], ""
-
-    # Strip timestamp + [LEVEL] prefix from each line
-    # e.g. "2026-04-15 10:23:01 [INFO]   cell_a/task_1  ..." → "  cell_a/task_1  ..."
-    raw_lines = output.splitlines()
-    lines: list[str] = []
-    for raw in raw_lines:
-        idx = raw.find("]")
-        if idx != -1 and "[" in raw[:idx]:
-            lines.append(raw[idx + 1:])
-        else:
-            lines.append(raw)
-
-    # Find the last scan table block bounded by ━ lines
-    block_start: int | None = None
-    block_end: int | None = None
-    for i, line in enumerate(lines):
-        if "━" in line:
-            if block_start is None:
-                block_start = i
-                block_end = None
-            else:
-                block_end = i
-
-    if block_start is None or block_end is None:
-        return [], ""
-
-    tasks: list[TaskProgress] = []
-    summary = ""
-
-    for line in lines[block_start:block_end + 1]:
-        row_m = _ROW_RE.match(line)
-        if row_m:
-            tasks.append(TaskProgress(
-                cell_task=row_m.group(1).strip(),
-                total=int(row_m.group(2)),
-                done=int(row_m.group(3)),
-                pending=int(row_m.group(4)),
-                failed=int(row_m.group(5)),
-                retry=int(row_m.group(6)),
-            ))
-
-        total_m = _TOTAL_RE.search(line)
-        if total_m:
-            summary = line.strip()
-
-    return tasks, summary
 
 
 async def stream_logs(tail: int = 200) -> AsyncGenerator[str, None]:

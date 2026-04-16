@@ -34,12 +34,11 @@ export function LibraryPage({ onSelectCell }: LibraryPageProps) {
         />
       </div>
 
-      {loading && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Scanning mounts...</div>}
+      {loading && <div className="loading-pulse" style={{ color: 'var(--text-muted)', fontSize: 12 }}>Scanning mounts...</div>}
       {error && <div style={{ color: 'var(--c-red)', fontSize: 12 }}>{error}</div>}
 
       {Object.entries(byRoot).map(([root, rootCells]) => (
         <div key={root}>
-          <div className="library-section-header">{root}</div>
           <div className="cell-grid">
             {rootCells.map(cell => (
               <div

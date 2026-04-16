@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, memo } from 'react'
 import client from '../api/client'
 
 interface ScalarData {
@@ -16,13 +16,18 @@ interface ScalarChartProps {
   onTerminalFrames?: (frames: number[], timestamps: number[]) => void
 }
 
-const COLORS = [
-  '#5794f2', '#73bf69', '#fade2a', '#f08080', '#b877d9',
-  '#ff9830', '#37aee2', '#7fb77e', '#e8a838', '#e07070',
-  '#9c6ede', '#dd8040', '#4dbfa8', '#9fb04a', '#d06088',
-]
+function getChartColors(): string[] {
+  const s = getComputedStyle(document.documentElement)
+  const base = [
+    s.getPropertyValue('--chart-1'), s.getPropertyValue('--chart-2'),
+    s.getPropertyValue('--chart-3'), s.getPropertyValue('--chart-4'),
+    s.getPropertyValue('--chart-5'), s.getPropertyValue('--chart-6'),
+  ].map(c => c.trim()).filter(Boolean)
+  if (base.length >= 6) return base
+  return ['#5794f2','#73bf69','#fade2a','#f08080','#b877d9','#ff9830']
+}
 
-function MiniChart({ label, series, color, currentFrame, collapsed }: {
+const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, collapsed }: {
   label: string
   series: number[]
   color: string
@@ -35,63 +40,77 @@ function MiniChart({ label, series, color, currentFrame, collapsed }: {
     if (collapsed) return
     const canvas = canvasRef.current
     if (!canvas || series.length === 0) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
 
-    const w = canvas.width
-    const h = canvas.height
-    const min = Math.min(...series)
-    const max = Math.max(...series)
-    const range = max - min || 1
+    const draw = () => {
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
 
-    ctx.clearRect(0, 0, w, h)
+      const dpr = window.devicePixelRatio || 1
+      const w = canvas.clientWidth
+      const h = canvas.clientHeight
+      if (w === 0 || h === 0) return
 
-    // Background
-    ctx.fillStyle = '#0f0f0f'
-    ctx.fillRect(0, 0, w, h)
+      canvas.width = w * dpr
+      canvas.height = h * dpr
+      ctx.scale(dpr, dpr)
 
-    // Grid lines
-    ctx.strokeStyle = '#1e1e1e'
-    ctx.lineWidth = 1
-    for (let i = 0; i < 4; i++) {
-      const y = (h / 4) * i
-      ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(w, y)
-      ctx.stroke()
-    }
+      const min = Math.min(...series)
+      const max = Math.max(...series)
+      const range = max - min || 1
 
-    // Data line
-    ctx.strokeStyle = color
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    for (let i = 0; i < series.length; i++) {
-      const x = (i / (series.length - 1)) * w
-      const y = h - ((series[i] - min) / range) * (h - 4) - 2
-      if (i === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    }
-    ctx.stroke()
+      // Background
+      const cs = getComputedStyle(document.documentElement)
+      ctx.fillStyle = cs.getPropertyValue('--bg-deep').trim() || '#0f0f0f'
+      ctx.fillRect(0, 0, w, h)
 
-    // Current frame indicator
-    if (currentFrame >= 0 && currentFrame < series.length) {
-      const x = (currentFrame / (series.length - 1)) * w
-      ctx.strokeStyle = '#fff'
+      // Grid lines
+      ctx.strokeStyle = cs.getPropertyValue('--border').trim() || '#1e1e1e'
       ctx.lineWidth = 1
-      ctx.setLineDash([2, 2])
-      ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, h)
-      ctx.stroke()
-      ctx.setLineDash([])
+      for (let i = 0; i < 4; i++) {
+        const y = (h / 4) * i
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.lineTo(w, y)
+        ctx.stroke()
+      }
 
-      // Value dot
-      const y = h - ((series[currentFrame] - min) / range) * (h - 4) - 2
-      ctx.fillStyle = color
+      // Data line
+      ctx.strokeStyle = color
+      ctx.lineWidth = 1.5
       ctx.beginPath()
-      ctx.arc(x, y, 3, 0, Math.PI * 2)
-      ctx.fill()
+      for (let i = 0; i < series.length; i++) {
+        const x = (i / (series.length - 1)) * w
+        const y = h - ((series[i] - min) / range) * (h - 4) - 2
+        if (i === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.stroke()
+
+      // Current frame indicator
+      if (currentFrame >= 0 && currentFrame < series.length) {
+        const x = (currentFrame / (series.length - 1)) * w
+        ctx.strokeStyle = '#fff'
+        ctx.lineWidth = 1
+        ctx.setLineDash([2, 2])
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, h)
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        // Value dot
+        const y = h - ((series[currentFrame] - min) / range) * (h - 4) - 2
+        ctx.fillStyle = color
+        ctx.beginPath()
+        ctx.arc(x, y, 3, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
+
+    draw()
+    const ro = new ResizeObserver(draw)
+    ro.observe(canvas)
+    return () => ro.disconnect()
   }, [series, color, currentFrame, collapsed])
 
   const currentVal = currentFrame >= 0 && currentFrame < series.length
@@ -107,14 +126,12 @@ function MiniChart({ label, series, color, currentFrame, collapsed }: {
       {!collapsed && (
         <canvas
           ref={canvasRef}
-          width={400}
-          height={40}
           style={chartStyles.canvas}
         />
       )}
     </div>
   )
-}
+})
 
 export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: ScalarChartProps) {
   const [data, setData] = useState<ScalarData | null>(null)
@@ -122,6 +139,7 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
   const [error, setError] = useState<string | null>(null)
   const [obsCollapsed, setObsCollapsed] = useState(false)
   const [actCollapsed, setActCollapsed] = useState(false)
+  const COLORS = useMemo(getChartColors, [])
 
   useEffect(() => {
     if (episodeIndex === null) {
@@ -240,9 +258,9 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
 }
 
 const chartStyles: Record<string, React.CSSProperties> = {
-  container: { display: 'flex', flexDirection: 'column', overflow: 'visible', flexShrink: 0 },
-  loading: { padding: '12px', fontSize: '11px', color: 'var(--text-muted)' as string },
-  error: { padding: '12px', fontSize: '11px', color: 'var(--c-red)' as string },
+  container: { display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 1 },
+  loading: { padding: '12px', fontSize: '12px', color: 'var(--text-muted)' as string },
+  error: { padding: '12px', fontSize: '12px', color: 'var(--c-red)' as string },
   section: { borderBottom: '1px solid var(--border)' as string },
   sectionHeader: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -250,11 +268,11 @@ const chartStyles: Record<string, React.CSSProperties> = {
     background: 'var(--panel)' as string,
     borderBottom: '1px solid var(--border2)' as string,
   },
-  sectionTitle: { fontSize: '10px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: 'var(--text-dim)' as string },
-  sectionCount: { fontSize: '10px', color: 'var(--text-dim)' as string, fontFamily: 'monospace' },
+  sectionTitle: { fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: 'var(--text-muted)' as string },
+  sectionCount: { fontSize: '11px', color: 'var(--text-dim)' as string, fontFamily: 'var(--font-mono)' },
   chartItem: { padding: '3px 12px', borderBottom: '1px solid #1a1a1a' },
   chartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' },
-  chartLabel: { fontSize: '10px', fontFamily: 'monospace', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, maxWidth: '180px' },
-  chartValue: { fontSize: '10px', fontFamily: 'monospace', color: 'var(--text-muted)' as string },
+  chartLabel: { fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, maxWidth: '180px' },
+  chartValue: { fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' as string },
   canvas: { width: '100%', height: '40px', borderRadius: '2px' },
 }
