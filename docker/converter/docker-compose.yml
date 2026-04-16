@@ -1,0 +1,27 @@
+services:
+  convert-server:
+    build:
+      context: ../../..
+      dockerfile: curation-tools/docker/converter/Dockerfile
+    container_name: convert-server
+    volumes:
+      - /mnt/synology/data/data_div/2026_1:/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RAW_BASE=/data/raw
+      - LEROBOT_BASE=/data/lerobot
+      - SCAN_INTERVAL=60
+      - HZ_MIN_RATIO=0.7
+      - MEMORY_THRESHOLD_PCT=80
+      - VIDEO_ENCODE_WORKERS=1
+    working_dir: /app
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/healthy && find /tmp/healthy -mmin -5 | grep -q ."]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
