@@ -458,3 +458,85 @@ class TestMergeDatasets:
 
         with pytest.raises(ValueError, match="robot_type"):
             merge_datasets([ds_a, ds_b], output_dir=tmp_path / "bad_merge")
+
+
+# ---------------------------------------------------------------------------
+# Tests: service integration
+# ---------------------------------------------------------------------------
+
+
+class TestServiceIntegration:
+    """Test that DatasetOpsService correctly delegates to the engine."""
+
+    @pytest.mark.asyncio
+    async def test_delete_via_service(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_service import DatasetOpsService
+        from backend.datasets.services.dataset_ops_engine import read_info
+        import asyncio
+
+        svc = DatasetOpsService()
+        output = tmp_path / "svc_delete"
+        job_id = await svc.delete_episodes(sample_dataset, [1, 3], output_dir=output)
+        await asyncio.sleep(1.0)
+
+        job = svc.get_job_status(job_id)
+        assert job["status"] == "complete"
+        assert job["error"] is None
+        assert read_info(output)["total_episodes"] == 3
+
+    @pytest.mark.asyncio
+    async def test_split_via_service(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_service import DatasetOpsService
+        from backend.datasets.services.dataset_ops_engine import read_info
+        import asyncio
+
+        svc = DatasetOpsService()
+        output = tmp_path / "svc_split"
+        job_id = await svc.split_dataset(sample_dataset, [0, 2], "svc_split", output_dir=output)
+        await asyncio.sleep(1.0)
+
+        job = svc.get_job_status(job_id)
+        assert job["status"] == "complete"
+        assert read_info(output)["total_episodes"] == 2
+
+    @pytest.mark.asyncio
+    async def test_merge_via_service(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_service import DatasetOpsService
+        from backend.datasets.services.dataset_ops_engine import split_dataset, read_info
+        import asyncio
+
+        ds_a = tmp_path / "a"
+        ds_b = tmp_path / "b"
+        split_dataset(sample_dataset, [0, 1], ds_a)
+        split_dataset(sample_dataset, [2, 3], ds_b)
+
+        svc = DatasetOpsService()
+        output = tmp_path / "svc_merge"
+        job_id = await svc.merge_datasets([ds_a, ds_b], "svc_merge", output_dir=output)
+        await asyncio.sleep(1.0)
+
+        job = svc.get_job_status(job_id)
+        assert job["status"] == "complete"
+        assert read_info(output)["total_episodes"] == 4
+
+    @pytest.mark.asyncio
+    async def test_delete_inplace_backup_restore(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import read_info
+        from backend.datasets.services.dataset_ops_service import DatasetOpsService
+        import asyncio
+
+        work = tmp_path / "inplace_ds"
+        shutil.copytree(str(sample_dataset), str(work))
+
+        svc = DatasetOpsService()
+        job_id = await svc.delete_episodes(work, [0, 4])
+        await asyncio.sleep(1.0)
+
+        job = svc.get_job_status(job_id)
+        assert job["status"] == "complete"
+        assert job["result_path"] == str(work)
+
+        info = read_info(work)
+        assert info["total_episodes"] == 3
+
+        assert not work.with_suffix(".bak").exists()
