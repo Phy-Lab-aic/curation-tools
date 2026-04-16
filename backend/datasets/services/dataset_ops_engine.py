@@ -191,3 +191,136 @@ def _table_to_dicts(table: pa.Table) -> list[dict]:
     names = table.schema.names
     columns = [table.column(n).to_pylist() for n in names]
     return [dict(zip(names, row)) for row in zip(*columns)]
+
+
+# ---------------------------------------------------------------------------
+# Core operations
+# ---------------------------------------------------------------------------
+
+
+def delete_episodes(
+    dataset_root: Path,
+    episode_ids: list[int],
+    output_dir: Path,
+) -> Path:
+    """Delete specified episodes and write result to output_dir."""
+    info = read_info(dataset_root)
+    episodes = read_episodes(dataset_root)
+    tasks = read_tasks(dataset_root)
+    camera_keys = get_camera_keys(info)
+    chunks_size = 1000
+
+    delete_set = set(episode_ids)
+    mask = pa.array([
+        idx not in delete_set
+        for idx in episodes.column("episode_index").to_pylist()
+    ])
+    kept = episodes.filter(mask)
+    original_kept = kept
+
+    reindexed = reindex_episodes(kept, camera_keys, chunks_size)
+
+    write_dataset(
+        output_dir=output_dir,
+        info=info,
+        episodes=reindexed,
+        tasks=tasks,
+        source_roots=[dataset_root],
+        original_episodes=[original_kept],
+    )
+
+    logger.info("Deleted %d episodes from %s -> %s", len(episode_ids), dataset_root, output_dir)
+    return output_dir
+
+
+def split_dataset(
+    dataset_root: Path,
+    episode_ids: list[int],
+    output_dir: Path,
+) -> Path:
+    """Extract specified episodes into a new dataset at output_dir."""
+    info = read_info(dataset_root)
+    episodes = read_episodes(dataset_root)
+    tasks = read_tasks(dataset_root)
+    camera_keys = get_camera_keys(info)
+    chunks_size = 1000
+
+    select_set = set(episode_ids)
+    mask = pa.array([
+        idx in select_set
+        for idx in episodes.column("episode_index").to_pylist()
+    ])
+    selected = episodes.filter(mask)
+    original_selected = selected
+
+    reindexed = reindex_episodes(selected, camera_keys, chunks_size)
+
+    write_dataset(
+        output_dir=output_dir,
+        info=info,
+        episodes=reindexed,
+        tasks=tasks,
+        source_roots=[dataset_root],
+        original_episodes=[original_selected],
+    )
+
+    logger.info("Split %d episodes from %s -> %s", len(episode_ids), dataset_root, output_dir)
+    return output_dir
+
+
+def merge_datasets(
+    dataset_roots: list[Path],
+    output_dir: Path,
+) -> Path:
+    """Merge multiple datasets into one at output_dir."""
+    if not dataset_roots:
+        raise ValueError("No datasets to merge")
+
+    infos = [read_info(r) for r in dataset_roots]
+    all_episodes = [read_episodes(r) for r in dataset_roots]
+    all_tasks = [read_tasks(r) for r in dataset_roots]
+
+    base_fps = infos[0].get("fps")
+    base_robot = infos[0].get("robot_type")
+    for i, info in enumerate(infos[1:], 1):
+        if info.get("fps") != base_fps:
+            raise ValueError(
+                f"fps mismatch: dataset 0 has fps={base_fps}, "
+                f"dataset {i} has fps={info.get('fps')}"
+            )
+        if info.get("robot_type") != base_robot:
+            raise ValueError(
+                f"robot_type mismatch: dataset 0 has robot_type={base_robot!r}, "
+                f"dataset {i} has robot_type={info.get('robot_type')!r}"
+            )
+
+    combined = pa.concat_tables(all_episodes, promote_options="default")
+
+    combined_tasks = pa.concat_tables(all_tasks, promote_options="default")
+    seen: set[int] = set()
+    keep_mask = []
+    for idx in combined_tasks.column("task_index").to_pylist():
+        if idx not in seen:
+            seen.add(idx)
+            keep_mask.append(True)
+        else:
+            keep_mask.append(False)
+    deduped_tasks = combined_tasks.filter(pa.array(keep_mask))
+
+    camera_keys = get_camera_keys(infos[0])
+    reindexed = reindex_episodes(combined, camera_keys, chunks_size=1000)
+
+    write_dataset(
+        output_dir=output_dir,
+        info=infos[0],
+        episodes=reindexed,
+        tasks=deduped_tasks,
+        source_roots=dataset_roots,
+        original_episodes=all_episodes,
+    )
+
+    logger.info(
+        "Merged %d datasets (%d total episodes) -> %s",
+        len(dataset_roots), len(reindexed), output_dir,
+    )
+    return output_dir

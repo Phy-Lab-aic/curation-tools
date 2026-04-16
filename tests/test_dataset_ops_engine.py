@@ -262,3 +262,199 @@ class TestWriteDataset:
         assert len(new_episodes) == 5
         assert (output / "data" / "chunk-000" / "file-000.parquet").exists()
         assert (output / "videos" / "observation.images.cam_top" / "chunk-000" / "file-000.mp4").exists()
+
+
+# ---------------------------------------------------------------------------
+# Tests: delete_episodes
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteEpisodes:
+    def test_delete_middle_episodes(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import delete_episodes, read_info, read_episodes
+
+        output = tmp_path / "after_delete"
+        delete_episodes(sample_dataset, episode_ids=[1, 3], output_dir=output)
+
+        info = read_info(output)
+        assert info["total_episodes"] == 3
+
+        episodes = read_episodes(output)
+        assert episodes.column("episode_index").to_pylist() == [0, 1, 2]
+
+        serials = episodes.column("Serial_number").to_pylist()
+        assert serials == ["SN_000000", "SN_000002", "SN_000004"]
+
+        froms = episodes.column("dataset_from_index").to_pylist()
+        lengths = episodes.column("length").to_pylist()
+        assert froms[0] == 0
+        assert froms[1] == lengths[0]
+        assert froms[2] == lengths[0] + lengths[1]
+
+    def test_delete_preserves_data_parquets(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import delete_episodes
+
+        output = tmp_path / "after_delete"
+        delete_episodes(sample_dataset, episode_ids=[1, 3], output_dir=output)
+
+        data_files = sorted((output / "data" / "chunk-000").glob("*.parquet"))
+        assert len(data_files) == 3
+
+        t = pq.read_table(str(data_files[1]))
+        assert t.column("episode_index")[0].as_py() == 1
+
+    def test_delete_preserves_videos(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import delete_episodes
+
+        output = tmp_path / "after_delete"
+        delete_episodes(sample_dataset, episode_ids=[1, 3], output_dir=output)
+
+        vid_dir = output / "videos" / "observation.images.cam_top" / "chunk-000"
+        vids = sorted(vid_dir.glob("*.mp4"))
+        assert len(vids) == 3
+
+    def test_delete_from_multi_chunk(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import delete_episodes, read_episodes
+
+        output = tmp_path / "after_delete"
+        delete_episodes(sample_dataset, episode_ids=[4], output_dir=output)
+
+        episodes = read_episodes(output)
+        assert len(episodes) == 4
+        assert all(c == 0 for c in episodes.column("data/chunk_index").to_pylist())
+
+    def test_delete_empty_list(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import delete_episodes, read_episodes
+
+        output = tmp_path / "no_delete"
+        delete_episodes(sample_dataset, episode_ids=[], output_dir=output)
+
+        episodes = read_episodes(output)
+        assert len(episodes) == 5
+
+
+# ---------------------------------------------------------------------------
+# Tests: split_dataset
+# ---------------------------------------------------------------------------
+
+
+class TestSplitDataset:
+    def test_split_selected_episodes(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset, read_info, read_episodes
+
+        output = tmp_path / "split_out"
+        split_dataset(sample_dataset, episode_ids=[1, 3], output_dir=output)
+
+        info = read_info(output)
+        assert info["total_episodes"] == 2
+
+        episodes = read_episodes(output)
+        assert episodes.column("episode_index").to_pylist() == [0, 1]
+        serials = episodes.column("Serial_number").to_pylist()
+        assert serials == ["SN_000001", "SN_000003"]
+
+    def test_split_preserves_data(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset
+
+        output = tmp_path / "split_out"
+        split_dataset(sample_dataset, episode_ids=[2, 4], output_dir=output)
+
+        data_files = sorted((output / "data" / "chunk-000").glob("*.parquet"))
+        assert len(data_files) == 2
+
+    def test_split_preserves_videos(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset
+
+        output = tmp_path / "split_out"
+        split_dataset(sample_dataset, episode_ids=[0], output_dir=output)
+
+        vid = output / "videos" / "observation.images.cam_top" / "chunk-000" / "file-000.mp4"
+        assert vid.exists()
+
+    def test_split_single_episode(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset, read_episodes
+
+        output = tmp_path / "split_one"
+        split_dataset(sample_dataset, episode_ids=[4], output_dir=output)
+
+        episodes = read_episodes(output)
+        assert len(episodes) == 1
+        assert episodes.column("episode_index").to_pylist() == [0]
+
+
+# ---------------------------------------------------------------------------
+# Tests: merge_datasets
+# ---------------------------------------------------------------------------
+
+
+class TestMergeDatasets:
+    def test_merge_two_datasets(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import (
+            split_dataset, merge_datasets, read_info, read_episodes,
+        )
+
+        ds_a = tmp_path / "ds_a"
+        ds_b = tmp_path / "ds_b"
+        split_dataset(sample_dataset, episode_ids=[0, 1], output_dir=ds_a)
+        split_dataset(sample_dataset, episode_ids=[2, 3, 4], output_dir=ds_b)
+
+        merged = tmp_path / "merged"
+        merge_datasets([ds_a, ds_b], output_dir=merged)
+
+        info = read_info(merged)
+        assert info["total_episodes"] == 5
+
+        episodes = read_episodes(merged)
+        assert episodes.column("episode_index").to_pylist() == [0, 1, 2, 3, 4]
+
+        froms = episodes.column("dataset_from_index").to_pylist()
+        tos = episodes.column("dataset_to_index").to_pylist()
+        for i in range(1, len(froms)):
+            assert froms[i] == tos[i - 1]
+
+    def test_merge_preserves_all_data(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset, merge_datasets
+
+        ds_a = tmp_path / "ds_a"
+        ds_b = tmp_path / "ds_b"
+        split_dataset(sample_dataset, episode_ids=[0, 1], output_dir=ds_a)
+        split_dataset(sample_dataset, episode_ids=[2], output_dir=ds_b)
+
+        merged = tmp_path / "merged"
+        merge_datasets([ds_a, ds_b], output_dir=merged)
+
+        data_files = sorted((merged / "data" / "chunk-000").glob("*.parquet"))
+        assert len(data_files) == 3
+
+        vid_files = sorted((merged / "videos" / "observation.images.cam_top" / "chunk-000").glob("*.mp4"))
+        assert len(vid_files) == 3
+
+    def test_merge_validates_fps(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset, merge_datasets, read_info
+
+        ds_a = tmp_path / "ds_a"
+        ds_b = tmp_path / "ds_b"
+        split_dataset(sample_dataset, episode_ids=[0], output_dir=ds_a)
+        split_dataset(sample_dataset, episode_ids=[1], output_dir=ds_b)
+
+        info_b = read_info(ds_b)
+        info_b["fps"] = 60
+        (ds_b / "meta" / "info.json").write_text(json.dumps(info_b))
+
+        with pytest.raises(ValueError, match="fps"):
+            merge_datasets([ds_a, ds_b], output_dir=tmp_path / "bad_merge")
+
+    def test_merge_validates_robot_type(self, sample_dataset: Path, tmp_path: Path) -> None:
+        from backend.datasets.services.dataset_ops_engine import split_dataset, merge_datasets, read_info
+
+        ds_a = tmp_path / "ds_a"
+        ds_b = tmp_path / "ds_b"
+        split_dataset(sample_dataset, episode_ids=[0], output_dir=ds_a)
+        split_dataset(sample_dataset, episode_ids=[1], output_dir=ds_b)
+
+        info_b = read_info(ds_b)
+        info_b["robot_type"] = "other_robot"
+        (ds_b / "meta" / "info.json").write_text(json.dumps(info_b))
+
+        with pytest.raises(ValueError, match="robot_type"):
+            merge_datasets([ds_a, ds_b], output_dir=tmp_path / "bad_merge")
