@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from backend.config import settings
 from backend.datasets.services.cycle_stamp_service import describe_stamp_state
@@ -64,6 +64,12 @@ class SplitIntoRequest(BaseModel):
             raise ValueError("episode_ids must not be empty")
         return v
 
+    @model_validator(mode="after")
+    def validate_mode_specific_paths(self):
+        if self.target_path is not None and self.output_dir is not None:
+            raise ValueError("Cannot provide both target_path and output_dir")
+        return self
+
 
 class DeleteRequest(BaseModel):
     source_path: str
@@ -105,6 +111,11 @@ class JobStatusResponse(BaseModel):
     result_path: str | None = None
 
 
+class StampCyclesStatusResponse(BaseModel):
+    stamped: bool
+    is_terminal_count_sample: int
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -119,7 +130,7 @@ async def split_dataset(req: SplitRequest):
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
 
     job_id = await dataset_ops_service.split_dataset(
-        source_path=req.source_path,
+        source_path=str(source),
         episode_ids=req.episode_ids,
         target_name=req.target_name,
         output_dir=output_dir,
@@ -138,7 +149,7 @@ async def split_into_dataset(req: SplitIntoRequest):
         # New dataset mode — create new derived dataset
         output_dir = _validate_optional_path(req.output_dir)
         job_id = await dataset_ops_service.split_dataset(
-            source_path=req.source_path,
+            source_path=str(source),
             episode_ids=req.episode_ids,
             target_name=req.target_name,
             output_dir=output_dir,
@@ -150,9 +161,9 @@ async def split_into_dataset(req: SplitIntoRequest):
         if not target.exists():
             raise HTTPException(status_code=404, detail=f"Target path not found: {req.target_path}")
         job_id = await dataset_ops_service.split_and_merge(
-            source_path=req.source_path,
+            source_path=str(source),
             episode_ids=req.episode_ids,
-            target_path=req.target_path,
+            target_path=str(target),
             target_name=req.target_name,
         )
         return JobResponse(job_id=job_id, operation="split_and_merge", status="queued")
@@ -162,13 +173,15 @@ async def split_into_dataset(req: SplitIntoRequest):
 async def merge_datasets(req: MergeRequest):
     """Merge multiple source datasets into a new derived dataset."""
     output_dir = _validate_optional_path(req.output_dir)
+    source_paths: list[str] = []
     for sp in req.source_paths:
         source = _validate_path(sp)
         if not source.exists():
             raise HTTPException(status_code=404, detail=f"Source path not found: {sp}")
+        source_paths.append(str(source))
 
     job_id = await dataset_ops_service.merge_datasets(
-        source_paths=req.source_paths,
+        source_paths=source_paths,
         target_name=req.target_name,
         output_dir=output_dir,
     )
@@ -184,7 +197,7 @@ async def delete_episodes(req: DeleteRequest):
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
 
     job_id = await dataset_ops_service.delete_episodes(
-        source_path=req.source_path,
+        source_path=str(source),
         episode_ids=req.episode_ids,
         output_dir=output_dir,
     )
@@ -205,7 +218,7 @@ async def stamp_cycles(req: StampCyclesRequest):
     return JobResponse(job_id=job_id, operation="stamp_cycles", status="queued")
 
 
-@router.get("/stamp-cycles/status")
+@router.get("/stamp-cycles/status", response_model=StampCyclesStatusResponse)
 async def get_stamp_cycles_status(path: str = Query(..., description="Dataset path to inspect")):
     """Describe whether cycle stamps exist for a dataset."""
     source = _validate_path(path)
