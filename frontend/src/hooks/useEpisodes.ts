@@ -46,8 +46,9 @@ export function useEpisodes(): UseEpisodesReturn {
   }, [])
 
   const updateEpisode = useCallback(
-    async (index: number, grade: string | null, tags: string[], reason: string | null = null) => {
-      const update: EpisodeUpdate = { grade, tags, reason }
+    async (index: number, grade: string | null, tags: string[], reason?: string | null) => {
+      const update: EpisodeUpdate = { grade, tags }
+      if (reason !== undefined) update.reason = reason
       const response = await client.patch<Episode>(`/episodes/${index}`, update)
       const updated = response.data
       setEpisodes(prev => prev.map(e => e.episode_index === index ? updated : e))
