@@ -3,15 +3,28 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
+from backend.config import settings
+from backend.datasets.services.cycle_stamp_service import describe_stamp_state
 from backend.datasets.services.dataset_ops_service import dataset_ops_service
 
 
 def _validate_path(path_str: str) -> Path:
-    """Resolve and return the path."""
-    return Path(path_str).resolve()
+    """Resolve a dataset path and ensure it stays under an allowed root."""
+    resolved = Path(path_str).resolve()
+    allowed_roots = [Path(root).resolve() for root in settings.allowed_dataset_roots]
+    if not any(resolved == root or root in resolved.parents for root in allowed_roots):
+        raise HTTPException(status_code=400, detail=f"Path outside allowed roots: {path_str}")
+    return resolved
+
+
+def _validate_optional_path(path_str: str | None) -> str | None:
+    """Resolve an optional dataset path when present."""
+    if path_str is None:
+        return None
+    return str(_validate_path(path_str))
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +84,11 @@ class MergeRequest(BaseModel):
     output_dir: str | None = None  # If omitted, sibling of first source_path
 
 
+class StampCyclesRequest(BaseModel):
+    source_path: str
+    overwrite: bool = False
+
+
 class JobResponse(BaseModel):
     job_id: str
     operation: str
@@ -96,6 +114,7 @@ class JobStatusResponse(BaseModel):
 async def split_dataset(req: SplitRequest):
     """Split episodes from a source dataset into a new derived dataset."""
     source = _validate_path(req.source_path)
+    output_dir = _validate_optional_path(req.output_dir)
     if not source.exists():
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
 
@@ -103,7 +122,7 @@ async def split_dataset(req: SplitRequest):
         source_path=req.source_path,
         episode_ids=req.episode_ids,
         target_name=req.target_name,
-        output_dir=req.output_dir,
+        output_dir=output_dir,
     )
     return JobResponse(job_id=job_id, operation="split", status="queued")
 
@@ -117,11 +136,12 @@ async def split_into_dataset(req: SplitIntoRequest):
 
     if req.target_path is None:
         # New dataset mode — create new derived dataset
+        output_dir = _validate_optional_path(req.output_dir)
         job_id = await dataset_ops_service.split_dataset(
             source_path=req.source_path,
             episode_ids=req.episode_ids,
             target_name=req.target_name,
-            output_dir=req.output_dir,
+            output_dir=output_dir,
         )
         return JobResponse(job_id=job_id, operation="split", status="queued")
     else:
@@ -141,15 +161,16 @@ async def split_into_dataset(req: SplitIntoRequest):
 @router.post("/merge", response_model=JobResponse, status_code=202)
 async def merge_datasets(req: MergeRequest):
     """Merge multiple source datasets into a new derived dataset."""
+    output_dir = _validate_optional_path(req.output_dir)
     for sp in req.source_paths:
-        _validate_path(sp)
-        if not Path(sp).exists():
+        source = _validate_path(sp)
+        if not source.exists():
             raise HTTPException(status_code=404, detail=f"Source path not found: {sp}")
 
     job_id = await dataset_ops_service.merge_datasets(
         source_paths=req.source_paths,
         target_name=req.target_name,
-        output_dir=req.output_dir,
+        output_dir=output_dir,
     )
     return JobResponse(job_id=job_id, operation="merge", status="queued")
 
@@ -158,15 +179,39 @@ async def merge_datasets(req: MergeRequest):
 async def delete_episodes(req: DeleteRequest):
     """Delete specified episodes from a dataset, producing a new dataset."""
     source = _validate_path(req.source_path)
+    output_dir = _validate_optional_path(req.output_dir)
     if not source.exists():
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
 
     job_id = await dataset_ops_service.delete_episodes(
         source_path=req.source_path,
         episode_ids=req.episode_ids,
-        output_dir=req.output_dir,
+        output_dir=output_dir,
     )
     return JobResponse(job_id=job_id, operation="delete", status="queued")
+
+
+@router.post("/stamp-cycles", response_model=JobResponse, status_code=202)
+async def stamp_cycles(req: StampCyclesRequest):
+    """Queue cycle stamping for a dataset under an allowed root."""
+    source = _validate_path(req.source_path)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
+
+    job_id = await dataset_ops_service.stamp_cycles(
+        source_path=str(source),
+        overwrite=req.overwrite,
+    )
+    return JobResponse(job_id=job_id, operation="stamp_cycles", status="queued")
+
+
+@router.get("/stamp-cycles/status")
+async def get_stamp_cycles_status(path: str = Query(..., description="Dataset path to inspect")):
+    """Describe whether cycle stamps exist for a dataset."""
+    source = _validate_path(path)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"Source path not found: {path}")
+    return describe_stamp_state(source)
 
 
 @router.get("/ops/status/{job_id}", response_model=JobStatusResponse)
