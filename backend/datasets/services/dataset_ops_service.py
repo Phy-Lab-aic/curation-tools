@@ -119,6 +119,28 @@ class DatasetOpsService:
         loop.run_in_executor(None, self._run_merge, job_id, sources, out_dir)
         return job_id
 
+    async def stamp_cycles(
+        self,
+        source_path: str | Path,
+        overwrite: bool,
+    ) -> str:
+        """Queue a cycle-stamping job. Returns the job ID."""
+        job = self._create_job("stamp_cycles")
+        job_id = job["id"]
+
+        source = Path(source_path)
+
+        loop = asyncio.get_running_loop()
+        loop.call_soon(
+            loop.run_in_executor,
+            None,
+            self._run_stamp_cycles,
+            job_id,
+            source,
+            overwrite,
+        )
+        return job_id
+
     # ------------------------------------------------------------------
     # Blocking workers (run in thread executor)
     # ------------------------------------------------------------------
@@ -219,6 +241,38 @@ class DatasetOpsService:
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
             job["error"] = str(exc)
             logger.exception("Merge job %s failed", job_id)
+
+    def _run_stamp_cycles(
+        self,
+        job_id: str,
+        source_path: Path,
+        overwrite: bool,
+    ) -> None:
+        job = self._jobs[job_id]
+        job["status"] = "running"
+
+        try:
+            from backend.datasets.services import cycle_stamp_service
+
+            def stamp_into_copy(src: Path, dst: Path) -> None:
+                shutil.copytree(src, dst)
+                cycle_stamp_service.stamp_dataset_cycles(dst, overwrite=overwrite)
+
+            self._run_with_backup(
+                source_path,
+                stamp_into_copy,
+            )
+
+            job["status"] = "complete"
+            job["completed_at"] = datetime.now(timezone.utc).isoformat()
+            job["result_path"] = str(source_path)
+            logger.info("Stamp-cycles job %s complete: %s", job_id, source_path)
+
+        except Exception as exc:
+            job["status"] = "failed"
+            job["completed_at"] = datetime.now(timezone.utc).isoformat()
+            job["error"] = str(exc)
+            logger.exception("Stamp-cycles job %s failed", job_id)
 
     def _run_split_and_merge(
         self,
