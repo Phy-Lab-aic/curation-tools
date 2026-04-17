@@ -1,5 +1,7 @@
 """Tests for pure gripper cycle-boundary detection and dataset stamping."""
 
+import asyncio
+import builtins
 import json
 from pathlib import Path
 
@@ -346,3 +348,100 @@ class TestStampDatasetCycles:
         assert combined.column("frame_index").to_pylist() == [2, 0, 3, 1]
         assert combined.column("is_terminal").to_pylist() == [False, False, True, False]
         assert combined.column("is_last").to_pylist() == [False, False, True, False]
+
+
+class TestOpsServiceIntegration:
+    @staticmethod
+    async def _wait_for_job(dataset_ops_service, job_id: str) -> dict:
+        for _ in range(200):
+            job = dataset_ops_service.get_job_status(job_id)
+            assert job is not None
+            if job["status"] in {"complete", "failed"}:
+                return job
+            await asyncio.sleep(0.01)
+
+        pytest.fail(f"Job {job_id} did not settle")
+
+    @pytest.mark.asyncio
+    async def test_stamp_cycles_queues_and_completes(self, tmp_path: Path):
+        from backend.datasets.services.dataset_ops_service import DatasetOpsService
+
+        ds = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+            ],
+        )
+        dataset_ops_service = DatasetOpsService()
+
+        job_id = await dataset_ops_service.stamp_cycles(source_path=ds, overwrite=False)
+        job = await self._wait_for_job(dataset_ops_service, job_id)
+
+        assert job["operation"] == "stamp_cycles"
+        assert job["status"] == "complete"
+        assert job["completed_at"] is not None
+        assert job["error"] is None
+        assert job["result_path"] == str(ds)
+
+        combined = pa.concat_tables(
+            [
+                pq.read_table(path)
+                for path in sorted((ds / "data" / "chunk-000").glob("file-*.parquet"))
+            ]
+        )
+        assert combined.column("is_terminal").to_pylist() == [False, False, False, False, False, True]
+        assert combined.column("is_last").to_pylist() == [False, False, False, False, False, True]
+
+    @pytest.mark.asyncio
+    async def test_stamp_cycles_reports_already_stamped(self, tmp_path: Path):
+        from backend.datasets.services.dataset_ops_service import DatasetOpsService
+
+        ds = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+            ],
+        )
+        dataset_ops_service = DatasetOpsService()
+
+        first_job_id = await dataset_ops_service.stamp_cycles(source_path=ds, overwrite=False)
+        first_job = await self._wait_for_job(dataset_ops_service, first_job_id)
+        assert first_job["status"] == "complete"
+
+        second_job_id = await dataset_ops_service.stamp_cycles(source_path=ds, overwrite=False)
+        second_job = await self._wait_for_job(dataset_ops_service, second_job_id)
+
+        assert second_job["status"] == "failed"
+        assert second_job["completed_at"] is not None
+        assert second_job["error"] == "already_stamped"
+
+    @pytest.mark.asyncio
+    async def test_stamp_cycles_import_failure_marks_job_failed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from backend.datasets.services.dataset_ops_service import DatasetOpsService
+
+        ds = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+            ],
+        )
+        dataset_ops_service = DatasetOpsService()
+        real_import = builtins.__import__
+
+        def failing_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "backend.datasets.services" and "cycle_stamp_service" in fromlist:
+                raise ImportError("cycle import boom")
+            return real_import(name, globals, locals, fromlist, level)
+
+        monkeypatch.setattr(builtins, "__import__", failing_import)
+
+        job_id = await dataset_ops_service.stamp_cycles(source_path=ds, overwrite=False)
+        job = await self._wait_for_job(dataset_ops_service, job_id)
+
+        assert job["status"] == "failed"
+        assert job["completed_at"] is not None
+        assert job["error"] == "cycle import boom"
