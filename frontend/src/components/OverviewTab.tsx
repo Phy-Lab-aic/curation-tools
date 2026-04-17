@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import type { BarRectangleItem } from 'recharts/types/cartesian/Bar'
 import { useDistribution } from '../hooks/useDistribution'
 import client from '../api/client'
-import type { CurateFilter, DistributionResult, Episode } from '../types'
+import type { CurateFilter, DistributionResult, Episode, GradeFilter } from '../types'
 
 interface ContextMenuState {
   x: number
@@ -266,11 +267,11 @@ function GradeSummary({ chart, fps, episodes, onNavigateCurate }: {
     return durations
   }, [episodes, fps])
 
-  const items = [
-    { label: 'Good', key: 'good', color: 'var(--c-green)' },
-    { label: 'Normal', key: 'normal', color: 'var(--c-yellow)' },
-    { label: 'Bad', key: 'bad', color: 'var(--c-red)' },
-    { label: 'Ungraded', key: '(ungraded)', color: 'var(--text-dim)' },
+  const items: { label: string; key: string; filterKey: GradeFilter; color: string }[] = [
+    { label: 'Good', key: 'good', filterKey: 'good', color: 'var(--c-green)' },
+    { label: 'Normal', key: 'normal', filterKey: 'normal', color: 'var(--c-yellow)' },
+    { label: 'Bad', key: 'bad', filterKey: 'bad', color: 'var(--c-red)' },
+    { label: 'Ungraded', key: '(ungraded)', filterKey: 'ungraded', color: 'var(--text-dim)' },
   ]
 
   return (
@@ -293,7 +294,7 @@ function GradeSummary({ chart, fps, episodes, onNavigateCurate }: {
               cursor: 'pointer',
               transition: 'transform 0.15s, border-color 0.15s',
             }}
-              onClick={() => onNavigateCurate({ grade: item.key === '(ungraded)' ? 'ungraded' : item.key })}
+              onClick={() => onNavigateCurate({ grade: item.filterKey })}
               onMouseEnter={e => {
                 (e.currentTarget as HTMLElement).style.transform = 'scale(1.02)'
                 ;(e.currentTarget as HTMLElement).style.borderColor = item.color
@@ -374,13 +375,12 @@ const GRADE_DOTS: { key: string; label: string; color: string }[] = [
   { key: 'bad', label: 'Bad', color: 'var(--c-red)' },
 ]
 
-function GradeTooltip({ active, payload, label, field, episodes, fps, formatLabel }: {
+function GradeTooltip({ active, payload, label, field, episodes, formatLabel }: {
   active?: boolean
   payload?: { value: number }[]
   label?: string
   field: string
   episodes?: Episode[]
-  fps?: number
   formatLabel: (label: string) => string
 }) {
   if (!active || !payload?.length || label == null) return null
@@ -488,7 +488,7 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
               width={30}
             />
             <Tooltip
-              content={<GradeTooltip field={chart.field} episodes={episodes} fps={fps} formatLabel={formatLabel} />}
+              content={<GradeTooltip field={chart.field} episodes={episodes} formatLabel={formatLabel} />}
               cursor={false}
             />
             <Bar
@@ -498,11 +498,15 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
               strokeOpacity={intensity * 0.8}
               radius={[2, 2, 0, 0]}
               cursor={onBarClick ? 'pointer' : undefined}
-              onClick={onBarClick ? (data: { label?: string }) => {
-                if (data.label) onBarClick(data.label)
+              onClick={onBarClick ? (data: BarRectangleItem) => {
+                const label = data.payload?.label
+                if (typeof label === 'string') onBarClick(label)
               } : undefined}
               activeBar={onBarClick ? { strokeOpacity: 0.8 } : undefined}
-              onMouseEnter={(data: { label?: string }) => { hoveredLabelRef.current = data.label ?? null }}
+              onMouseEnter={(data: BarRectangleItem) => {
+                const label = data.payload?.label
+                hoveredLabelRef.current = typeof label === 'string' ? label : null
+              }}
               onMouseLeave={() => { hoveredLabelRef.current = null }}
             />
           </BarChart>
