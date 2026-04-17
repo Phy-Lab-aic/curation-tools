@@ -89,6 +89,19 @@ export type AppState =
 
 export type ConverterState = 'running' | 'stopped' | 'building' | 'error' | 'unknown'
 
+export type ValidationStatus = 'not_run' | 'running' | 'passed' | 'failed' | 'partial'
+
+export interface ConverterValidationResult {
+  status: ValidationStatus
+  summary: string
+  checked_at: string | null
+}
+
+export interface ConverterValidationPayload {
+  quick: ConverterValidationResult
+  full: ConverterValidationResult
+}
+
 export interface ConverterTaskProgress {
   cell_task: string
   total: number
@@ -96,6 +109,7 @@ export interface ConverterTaskProgress {
   pending: number
   failed: number
   retry: number
+  validation: ConverterValidationPayload
 }
 
 export interface ConverterStatus {
