@@ -31,7 +31,7 @@ function formatDuration(totalSeconds: number): string {
 }
 
 export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filter, onSetTab }: DatasetPageProps) {
-  const { dataset, loadDataset } = useDataset()
+  const { dataset, loading: datasetLoading, error: datasetError, loadDataset } = useDataset()
   const { episodes, loading: epLoading, error: epError, fetchEpisodes, updateEpisode } = useEpisodes()
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null)
   const [currentFrame, setCurrentFrame] = useState(0)
@@ -49,14 +49,49 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
   useEffect(() => {
     let cancelled = false
     async function init() {
-      await loadDataset(datasetPath)
-      if (!cancelled) {
-        await fetchEpisodes()
+      try {
+        await loadDataset(datasetPath)
+        if (!cancelled) {
+          await fetchEpisodes()
+        }
+      } catch {
+        // DatasetPage renders the dataset error state instead of continuing with stale content.
       }
     }
     void init()
     return () => { cancelled = true }
   }, [datasetPath, loadDataset, fetchEpisodes])
+
+  useEffect(() => {
+    setSelectedEpisode(null)
+    setCurrentFrame(0)
+    setTerminalFrames([])
+    setTerminalTimestamps([])
+  }, [datasetPath])
+
+  const datasetReady = dataset?.path === datasetPath
+
+  if (datasetError && !datasetLoading && !datasetReady) {
+    return (
+      <div className="dataset-page">
+        <div className="dataset-status">
+          <div className="dataset-status-copy error">{datasetError}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!datasetReady) {
+    return (
+      <div className="dataset-page">
+        <div className="dataset-status">
+          <div className={`dataset-status-copy${datasetLoading ? ' loading-pulse' : ''}`}>
+            Loading dataset...
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const fps = dataset?.fps ?? 30
 
@@ -89,7 +124,18 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
     return null
   }, [filter, fps, onSetTab])
 
-  const ungradedEpisodes = useMemo(() => curateEpisodes.filter(e => !e.grade), [curateEpisodes])
+  const initialGradeFilter = useMemo(() => {
+    switch (filter?.grade) {
+      case 'all':
+      case 'good':
+      case 'normal':
+      case 'bad':
+      case 'ungraded':
+        return filter.grade
+      default:
+        return undefined
+    }
+  }, [filter?.grade])
 
   const handleSaveEpisode = useCallback(
     async (
@@ -214,7 +260,7 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
             error={epError}
             onEpisodeSelect={setSelectedEpisode}
             selectedIndex={selectedEpisode?.episode_index ?? null}
-            initialGradeFilter={filter?.grade ?? undefined}
+            initialGradeFilter={initialGradeFilter}
             filterChip={filterChip}
           />
         </div>

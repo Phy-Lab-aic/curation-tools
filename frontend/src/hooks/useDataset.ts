@@ -17,6 +17,7 @@ export function useDataset(): UseDatasetReturn {
 
   const loadDataset = useCallback(async (path: string) => {
     setLoading(true)
+    setDataset(null)
     setError(null)
     try {
       const response = await client.post<DatasetInfo>('/datasets/load', { path })
@@ -25,6 +26,7 @@ export function useDataset(): UseDatasetReturn {
       const message = axios.isAxiosError(err)
         ? (typeof err.response?.data?.detail === 'string' ? err.response.data.detail : err.message)
         : (err instanceof Error ? err.message : 'Failed to load dataset')
+      setDataset(null)
       setError(message)
       throw err
     } finally {
