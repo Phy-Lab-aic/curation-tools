@@ -66,7 +66,10 @@ function EventRow({ event }: { event: LogEvent }) {
           <span className="log-recording" style={{ fontFamily: 'var(--font-mono)' }}>
             {recordingName(event.recording!)}
           </span>
-          <span className="log-meta">{event.frames} frames · {formatDuration(event.duration!)}</span>
+          <span className="log-meta">
+            {event.frames} frames
+            {typeof event.duration === 'number' ? ` · ${formatDuration(event.duration)}` : ''}
+          </span>
         </div>
       )
 

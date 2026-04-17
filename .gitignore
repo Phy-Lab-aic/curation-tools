@@ -12,6 +12,10 @@ dist/
 # Local
 .backups/
 .omc/
+**/.omc/
+.claude/
+.superpowers/
+graphify-out/
 logs/
 *.log
 .env
@@ -19,3 +23,4 @@ logs/
 
 # Conversion config profiles (user-local, not committed)
 conversion_configs/*.json
+.omx/

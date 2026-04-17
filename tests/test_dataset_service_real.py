@@ -71,10 +71,12 @@ class TestLoadDataset:
         with pytest.raises(ValueError, match="not under any allowed root"):
             ds.load_dataset(tmp_path)
 
-    def test_rejects_nonexistent_path(self):
+    def test_rejects_nonexistent_path(self, tmp_path, monkeypatch):
         ds = DatasetService()
+        monkeypatch.setattr(settings, "allowed_dataset_roots", settings.allowed_dataset_roots + [str(tmp_path)])
+
         with pytest.raises(FileNotFoundError):
-            ds.load_dataset("/tmp/hf-mounts/nonexistent")
+            ds.load_dataset(tmp_path / "nonexistent")
 
     def test_raises_before_load(self):
         ds = DatasetService()

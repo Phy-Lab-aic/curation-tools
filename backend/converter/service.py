@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -29,6 +30,8 @@ LEROBOT_BASE = _DATA_ROOT / "lerobot"
 STATE_FILE = LEROBOT_BASE / "convert_state.json"
 
 SERIAL_RE = re.compile(r"^\d{8}_\d{6}(_\d+)?$")
+
+logger = logging.getLogger(__name__)
 
 # Module-level lock to guard concurrent build requests
 _build_lock = asyncio.Lock()
@@ -168,6 +171,35 @@ def read_state() -> dict:
 # Progress (state file based)
 # ---------------------------------------------------------------------------
 
+
+def _count_output_episodes(cell_task: str) -> int | None:
+    """Return the number of converted episodes written for *cell_task*."""
+    dataset_dir = LEROBOT_BASE / cell_task
+    episodes_dir = dataset_dir / "meta" / "episodes"
+    if not episodes_dir.is_dir():
+        return None
+
+    parquet_files = sorted(episodes_dir.glob("chunk-*/file-*.parquet"))
+    if parquet_files:
+        try:
+            import pyarrow.parquet as pq
+
+            return sum(pq.ParquetFile(path).metadata.num_rows for path in parquet_files)
+        except Exception as exc:
+            logger.warning("Failed to count episode parquet rows for %s: %s", cell_task, exc)
+
+    info_path = dataset_dir / "meta" / "info.json"
+    if not info_path.is_file():
+        return None
+
+    try:
+        info = json.loads(info_path.read_text(encoding="utf-8").rstrip("\x00"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to read %s: %s", info_path, exc)
+        return None
+    return int(info.get("total_episodes", 0))
+
+
 def build_progress() -> tuple[list[TaskProgress], str]:
     """Build progress from state file + NAS scan. No log parsing needed."""
     state = read_state()
@@ -180,7 +212,17 @@ def build_progress() -> tuple[list[TaskProgress], str]:
     for key in all_keys:
         total = totals.get(key, 0)
         entry = state.get(key, {})
-        done = entry.get("converted_count", 0)
+        state_done = int(entry.get("converted_count", 0))
+        actual_done = _count_output_episodes(key)
+        if actual_done is not None and actual_done != state_done:
+            logger.warning(
+                "Progress mismatch for %s: state converted_count=%s, output episodes=%s",
+                key,
+                state_done,
+                actual_done,
+            )
+        done = actual_done if actual_done is not None else state_done
+        done = max(0, min(total, done))
         failed = len(entry.get("failed_serials", []))
         retry = len(entry.get("transient_failed", {}))
         pending = max(0, total - done - failed)
@@ -289,8 +331,12 @@ async def build_image(on_line: Callable[[str], None] | None = None) -> int:
         return proc.returncode or 0
 
 
-async def start_converter() -> tuple[bool, str]:
-    """Check state and start container atomically. Returns (ok, message)."""
+async def start_converter(cell_task: str | None = None) -> tuple[bool, str]:
+    """Check state and start container atomically. Returns (ok, message).
+
+    When *cell_task* is provided, the container runs in single-shot mode:
+    only that task is converted and the container exits on completion.
+    """
     state = await get_container_state()
     if state == "running":
         return False, "Container already running"
@@ -300,8 +346,16 @@ async def start_converter() -> tuple[bool, str]:
     # Remove old container if it exists (safe — not running)
     await _run(["docker", "rm", "-f", CONTAINER_NAME], timeout=10.0)
 
+    env_args: list[str] = []
+    if cell_task:
+        env_args = [
+            "-e", f"ONLY_CELL_TASK={cell_task}",
+            "-e", "SINGLE_SHOT=1",
+        ]
+
     cmd = _compose_cmd(
         "run", "-d", "--build",
+        *env_args,
         "--name", CONTAINER_NAME,
         "convert-server",
         "python3", "/app/auto_converter.py",

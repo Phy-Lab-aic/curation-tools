@@ -4,6 +4,7 @@ import { EpisodeEditor } from './EpisodeEditor'
 import { VideoPlayer, type VideoPlayerHandle } from './VideoPlayer'
 import { ScalarChart } from './ScalarChart'
 import { TrimPanel } from './TrimPanel'
+import { RerunViewer } from './RerunViewer'
 import { useDataset } from '../hooks/useDataset'
 import { useEpisodes } from '../hooks/useEpisodes'
 import { OverviewTab } from './OverviewTab'
@@ -37,13 +38,45 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
   const [currentFrame, setCurrentFrame] = useState(0)
   const [terminalFrames, setTerminalFrames] = useState<number[]>([])
   const [terminalTimestamps, setTerminalTimestamps] = useState<number[]>([])
-  const [rightTab, setRightTab] = useState<'details' | 'trim'>('details')
+  const [rightTab, setRightTab] = useState<'details' | 'rerun' | 'trim'>('details')
+  const [rightWidth, setRightWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('curate-right-width')
+    const n = saved ? parseInt(saved, 10) : 220
+    return Number.isFinite(n) ? Math.max(220, Math.min(800, n)) : 220
+  })
   const [reasonModal, setReasonModal] = useState<{
     grade: 'normal' | 'bad'
     initialReason: string
     pendingTags: string[]
   } | null>(null)
   const videoRef = useRef<VideoPlayerHandle>(null)
+  const resizingRef = useRef(false)
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizingRef.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      const next = window.innerWidth - ev.clientX
+      const clamped = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.6), next))
+      setRightWidth(clamped)
+    }
+    const onUp = () => {
+      resizingRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setRightWidth(w => {
+        localStorage.setItem('curate-right-width', String(w))
+        return w
+      })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
 
   // Load dataset when path changes
   useEffect(() => {
@@ -70,28 +103,6 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
   }, [datasetPath])
 
   const datasetReady = dataset?.path === datasetPath
-
-  if (datasetError && !datasetLoading && !datasetReady) {
-    return (
-      <div className="dataset-page">
-        <div className="dataset-status">
-          <div className="dataset-status-copy error">{datasetError}</div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!datasetReady) {
-    return (
-      <div className="dataset-page">
-        <div className="dataset-status">
-          <div className={`dataset-status-copy${datasetLoading ? ' loading-pulse' : ''}`}>
-            Loading dataset...
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   const fps = dataset?.fps ?? 30
 
@@ -218,6 +229,12 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
           e.preventDefault(); videoRef.current?.stepFrame(1); break
         case ' ':
           e.preventDefault(); videoRef.current?.togglePlay(); break
+        case 'q':
+        case 'Q':
+          e.preventDefault(); videoRef.current?.cycleSpeed(1); break
+        case 'w':
+        case 'W':
+          e.preventDefault(); videoRef.current?.cycleSpeed(-1); break
         case '1':
         case '2':
         case '3':
@@ -227,6 +244,28 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [navigateEpisode, quickGrade, reasonModal])
+
+  if (datasetError && !datasetLoading && !datasetReady) {
+    return (
+      <div className="dataset-page">
+        <div className="dataset-status">
+          <div className="dataset-status-copy error">{datasetError}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!datasetReady) {
+    return (
+      <div className="dataset-page">
+        <div className="dataset-status">
+          <div className={`dataset-status-copy${datasetLoading ? ' loading-pulse' : ''}`}>
+            Loading dataset...
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (tab === 'overview') {
     return (
@@ -326,14 +365,33 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
           )}
         </div>
 
+        {/* Resizer handle */}
+        <div
+          className="curate-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          onMouseDown={handleResizeStart}
+          onDoubleClick={() => {
+            setRightWidth(220)
+            localStorage.setItem('curate-right-width', '220')
+          }}
+          title="Drag to resize (double-click to reset)"
+        />
+
         {/* Right: details / split-merge */}
-        <div className="curate-right">
+        <div className="curate-right" style={{ width: rightWidth }}>
           <div className="right-tabs">
             <button
               className={`right-tab${rightTab === 'details' ? ' active' : ''}`}
               onClick={() => setRightTab('details')}
             >
               Details
+            </button>
+            <button
+              className={`right-tab${rightTab === 'rerun' ? ' active' : ''}`}
+              onClick={() => setRightTab('rerun')}
+            >
+              Rerun
             </button>
             <button
               className={`right-tab${rightTab === 'trim' ? ' active' : ''}`}
@@ -355,6 +413,15 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
                 }}
               />
             </div>
+          )}
+          {rightTab === 'rerun' && (
+            selectedEpisode ? (
+              <RerunViewer episodeIndex={selectedEpisode.episode_index} />
+            ) : (
+              <div className="dataset-status">
+                <div className="dataset-status-copy">Select an episode to open Rerun.</div>
+              </div>
+            )
           )}
           {rightTab === 'trim' && (
             <TrimPanel

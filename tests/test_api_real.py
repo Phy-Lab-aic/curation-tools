@@ -5,6 +5,7 @@ import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 from backend.main import app
+from backend.core.config import settings
 from backend.datasets.services.dataset_service import DatasetService
 import backend.datasets.services.dataset_service as ds_mod
 import backend.datasets.services.episode_service as ep_mod
@@ -79,9 +80,13 @@ class TestLoadDatasetAPI:
         assert data["total_tasks"] == 1
 
     @pytest.mark.asyncio
-    async def test_load_nonexistent_returns_404(self, client, reset_singleton):
-        resp = await client.post("/api/datasets/load", json={"path": "/tmp/hf-mounts/nonexistent"})
-        assert resp.status_code == 404
+    async def test_load_missing_out_of_root_returns_400(self, client, reset_singleton, tmp_path, monkeypatch):
+        monkeypatch.setattr(settings, "allowed_dataset_roots", [str(tmp_path)])
+        out_of_root_path = tmp_path.parent / f"{tmp_path.name}-outside" / "missing-dataset"
+
+        resp = await client.post("/api/datasets/load", json={"path": str(out_of_root_path)})
+        assert resp.status_code == 400
+        assert "not under any allowed root" in resp.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_load_disallowed_path_returns_400(self, client, reset_singleton):

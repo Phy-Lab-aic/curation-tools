@@ -139,12 +139,12 @@ class DatasetService:
     def load_dataset(self, path: str | Path) -> None:
         root = Path(path).resolve()
 
+        if not self._is_path_allowed(root):
+            raise ValueError(f"Dataset path is not under any allowed root: {root}")
         if not root.exists():
             raise FileNotFoundError(f"Dataset path does not exist: {root}")
         if not root.is_dir():
             raise ValueError(f"Dataset path is not a directory: {root}")
-        if not self._is_path_allowed(root):
-            raise ValueError(f"Dataset path is not under any allowed root: {root}")
 
         self._clear()
         self._info = self._load_info(root)

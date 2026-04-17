@@ -591,6 +591,22 @@ code, .mono { font-family: var(--font-mono); }
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+/* Drag handle between center and right panel */
+.curate-resizer {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+  transition: background 120ms ease;
+}
+.curate-resizer:hover,
+.curate-resizer:active {
+  background: var(--accent);
 }
 
 .right-tabs {
@@ -1266,6 +1282,20 @@ code, .mono { font-family: var(--font-mono); }
 .cvp-card-failed {
   font-size: 10px;
   color: var(--c-red);
+}
+
+.cvp-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.cvp-card-convert {
+  padding: 3px 10px;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 /* ── Activity panel (toggleable) ── */

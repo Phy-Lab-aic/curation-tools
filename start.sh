@@ -31,14 +31,20 @@ fi
 DATASET_ROOT="${CURATION_DATASET_PATH:-/mnt/synology/data/data_div/2026_1/lerobot}"
 export CURATION_DATASET_PATH="$DATASET_ROOT"
 
+# Ports (override via env to run multiple instances)
+BACKEND_PORT="${BACKEND_PORT:-8001}"
+FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+export VITE_PORT="$FRONTEND_PORT"
+export VITE_BACKEND_URL="${VITE_BACKEND_URL:-http://localhost:${BACKEND_PORT}}"
+
 echo "Starting robodata-studio..."
 echo "  Dataset:  $DATASET_ROOT"
-echo "  Backend:  http://localhost:8001"
-echo "  Frontend: http://localhost:5173"
+echo "  Backend:  http://localhost:${BACKEND_PORT}"
+echo "  Frontend: http://localhost:${FRONTEND_PORT}"
 echo ""
 
 # Start backend
-uvicorn backend.main:app --host 0.0.0.0 --port 8001 --reload &
+uvicorn backend.main:app --host 0.0.0.0 --port "$BACKEND_PORT" &
 BACKEND_PID=$!
 
 # Start frontend dev server

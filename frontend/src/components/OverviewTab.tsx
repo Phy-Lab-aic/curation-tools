@@ -402,13 +402,12 @@ const GRADE_DOTS: { key: string; label: string; color: string }[] = [
   { key: 'bad', label: 'Bad', color: 'var(--c-red)' },
 ]
 
-function GradeTooltip({ active, payload, label, field, episodes, fps, formatLabel }: {
+function GradeTooltip({ active, payload, label, field, episodes, formatLabel }: {
   active?: boolean
   payload?: { value: number }[]
   label?: string
   field: string
   episodes?: Episode[]
-  fps?: number
   formatLabel: (label: string) => string
 }) {
   if (!active || !payload?.length || label == null) return null
@@ -516,7 +515,7 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
               width={30}
             />
             <Tooltip
-              content={<GradeTooltip field={chart.field} episodes={episodes} fps={fps} formatLabel={formatLabel} />}
+              content={<GradeTooltip field={chart.field} episodes={episodes} formatLabel={formatLabel} />}
               cursor={false}
             />
             <Bar
@@ -526,11 +525,14 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
               strokeOpacity={intensity * 0.8}
               radius={[2, 2, 0, 0]}
               cursor={onBarClick ? 'pointer' : undefined}
-              onClick={onBarClick ? (data: { label?: string }) => {
-                if (data.label) onBarClick(data.label)
+              onClick={onBarClick ? (data) => {
+                const label = typeof data.payload?.label === 'string' ? data.payload.label : null
+                if (label) onBarClick(label)
               } : undefined}
               activeBar={onBarClick ? { strokeOpacity: 0.8 } : undefined}
-              onMouseEnter={(data: { label?: string }) => { hoveredLabelRef.current = data.label ?? null }}
+              onMouseEnter={(data) => {
+                hoveredLabelRef.current = typeof data.payload?.label === 'string' ? data.payload.label : null
+              }}
               onMouseLeave={() => { hoveredLabelRef.current = null }}
             />
           </BarChart>

@@ -1,8 +1,14 @@
-import type { ConverterTaskProgress } from '../types'
+import { useState } from 'react'
+import type { ConverterState, ConverterTaskProgress } from '../types'
 
 interface Props {
   tasks: ConverterTaskProgress[]
+  containerState: ConverterState
+  dockerAvailable: boolean
+  onRefresh: () => void
 }
+
+const API = '/api/converter'
 
 function taskLabel(cell_task: string) {
   const parts = cell_task.split('/')
@@ -14,7 +20,27 @@ function taskCell(cell_task: string) {
   return parts[0] || ''
 }
 
-export function ConverterProgress({ tasks }: Props) {
+export function ConverterProgress({ tasks, containerState, dockerAvailable, onRefresh }: Props) {
+  const [starting, setStarting] = useState<string | null>(null)
+
+  const startTask = async (cell_task: string) => {
+    setStarting(cell_task)
+    try {
+      const res = await fetch(`${API}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cell_task }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        console.error('start(task) failed:', body)
+      }
+      onRefresh()
+    } finally {
+      setStarting(null)
+    }
+  }
+
   if (tasks.length === 0) {
     return (
       <div className="cvp-empty">No conversion data</div>
@@ -32,6 +58,10 @@ export function ConverterProgress({ tasks }: Props) {
   )
 
   const overallPct = totals.total > 0 ? Math.round((totals.done / totals.total) * 100) : 0
+  const canStart = dockerAvailable
+    && containerState !== 'running'
+    && containerState !== 'building'
+    && starting === null
 
   return (
     <div className="cvp-root">
@@ -68,6 +98,9 @@ export function ConverterProgress({ tasks }: Props) {
       <div className="cvp-cards">
         {tasks.map(t => {
           const pct = t.total > 0 ? Math.round((t.done / t.total) * 100) : 0
+          const hasPending = t.pending > 0
+          const disabled = !canStart || !hasPending
+          const isStartingThis = starting === t.cell_task
           return (
             <div key={t.cell_task} className="cvp-card">
               <div className="cvp-card-header">
@@ -80,9 +113,21 @@ export function ConverterProgress({ tasks }: Props) {
               <div className="cvp-card-bar">
                 <div className="cvp-card-bar-fill" style={{ width: `${pct}%` }} />
               </div>
-              {t.failed > 0 && (
-                <div className="cvp-card-failed">{t.failed} failed</div>
-              )}
+              <div className="cvp-card-footer">
+                {t.failed > 0 ? (
+                  <div className="cvp-card-failed">{t.failed} failed</div>
+                ) : (
+                  <div />
+                )}
+                <button
+                  type="button"
+                  className="btn-secondary cvp-card-convert"
+                  disabled={disabled}
+                  onClick={() => startTask(t.cell_task)}
+                >
+                  {isStartingThis ? 'Starting...' : 'Convert'}
+                </button>
+              </div>
             </div>
           )
         })}

@@ -26,7 +26,12 @@ export function ConverterPage({ status, onRefresh }: Props) {
         onRefresh={onRefresh}
       />
       <div className="converter-body">
-        <ConverterProgress tasks={status.tasks} />
+        <ConverterProgress
+          tasks={status.tasks}
+          containerState={status.container_state}
+          dockerAvailable={status.docker_available}
+          onRefresh={onRefresh}
+        />
       </div>
       <ConverterLogs
         containerState={status.container_state}

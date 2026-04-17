@@ -2,6 +2,7 @@
 
 import pytest
 from backend.services.dataset_service import DatasetService
+from backend.core.config import settings
 
 
 @pytest.fixture
@@ -32,14 +33,33 @@ class TestPathTraversalSecurity:
         with pytest.raises(ValueError, match="not under any allowed root"):
             service.load_dataset("/tmp/hf-mounts-evil/dataset")
 
-    def test_valid_path_under_allowed_root(self, service):
+    def test_valid_path_under_allowed_root(self, service, tmp_path, monkeypatch):
         """A path under an allowed root should pass the path validation.
 
         It may raise FileNotFoundError because the directory doesn't exist,
         but it must NOT raise ValueError for the path check.
         """
+        monkeypatch.setattr(
+            settings,
+            "allowed_dataset_roots",
+            settings.allowed_dataset_roots + [str(tmp_path)],
+        )
+
         with pytest.raises(FileNotFoundError):
-            service.load_dataset("/tmp/hf-mounts/valid-dataset")
+            service.load_dataset(tmp_path / "valid-dataset")
+
+    def test_file_under_allowed_root_still_raises_directory_error(self, service, tmp_path, monkeypatch):
+        """An existing non-directory under an allowed root should keep its current error."""
+        dataset_file = tmp_path / "dataset.txt"
+        dataset_file.write_text("not a dataset", encoding="utf-8")
+        monkeypatch.setattr(
+            settings,
+            "allowed_dataset_roots",
+            settings.allowed_dataset_roots + [str(tmp_path)],
+        )
+
+        with pytest.raises(ValueError, match="not a directory"):
+            service.load_dataset(dataset_file)
 
     def test_empty_path(self, service):
         """An empty path resolves to cwd, which should not be under allowed roots."""

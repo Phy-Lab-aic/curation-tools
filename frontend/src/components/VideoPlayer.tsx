@@ -14,7 +14,10 @@ export interface VideoPlayerHandle {
   seekToFrame: (frame: number) => void
   seekToTimestamp: (ts: number) => void
   togglePlay: () => void
+  cycleSpeed: (direction: 1 | -1) => void
 }
+
+const SPEED_LADDER = [0.5, 1, 2, 4]
 
 interface VideoPlayerProps {
   episodeIndex: number | null
@@ -170,19 +173,32 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     seek(videoStartTime + ts)
   }, [seek, videoStartTime])
 
-  useImperativeHandle(ref, () => ({
-    stepFrame,
-    seekToFrame,
-    seekToTimestamp,
-    togglePlay,
-  }), [stepFrame, seekToFrame, seekToTimestamp, togglePlay])
-
   const changeSpeed = useCallback((rate: number) => {
     setPlaybackRate(rate)
     videoRefs.current.forEach(v => {
       v.playbackRate = rate
     })
   }, [])
+
+  const cycleSpeed = useCallback((direction: 1 | -1) => {
+    setPlaybackRate(prev => {
+      const idx = SPEED_LADDER.indexOf(prev)
+      const nextIdx = idx === -1
+        ? SPEED_LADDER.indexOf(1)
+        : Math.max(0, Math.min(SPEED_LADDER.length - 1, idx + direction))
+      const rate = SPEED_LADDER[nextIdx]
+      videoRefs.current.forEach(v => { v.playbackRate = rate })
+      return rate
+    })
+  }, [])
+
+  useImperativeHandle(ref, () => ({
+    stepFrame,
+    seekToFrame,
+    seekToTimestamp,
+    togglePlay,
+    cycleSpeed,
+  }), [stepFrame, seekToFrame, seekToTimestamp, togglePlay, cycleSpeed])
 
   const handleVideoEnd = useCallback(() => {
     setPlaying(false)
@@ -267,7 +283,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
 
       <div style={styles.controls}>
         <div style={styles.controlsRow}>
-          <button style={styles.ctrlBtn} onClick={() => stepFrame(-1)} title="Previous frame (,)">
+          <button style={styles.ctrlBtn} onClick={() => stepFrame(-1)} title="Previous frame (←)">
             &#9664;&#9664;
           </button>
           <button
@@ -281,7 +297,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
           >
             {playing ? '\u23F8' : '\u25B6'}
           </button>
-          <button style={styles.ctrlBtn} onClick={() => stepFrame(1)} title="Next frame (.)">
+          <button style={styles.ctrlBtn} onClick={() => stepFrame(1)} title="Next frame (→)">
             &#9654;&#9654;
           </button>
 
@@ -344,8 +360,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
             {Math.max(0, currentTime - videoStartTime).toFixed(1)}s / {((videoEndTime || duration) - videoStartTime).toFixed(1)}s
           </span>
 
-          <div style={styles.speedGroup}>
-            {[0.5, 1, 2, 4].map(rate => (
+          <div style={styles.speedGroup} title="Q: faster · W: slower">
+            {SPEED_LADDER.map(rate => (
               <button
                 key={rate}
                 style={{
@@ -355,7 +371,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
                 }}
                 onClick={() => changeSpeed(rate)}
                 onDoubleClick={() => setAsDefault(rate)}
-                title={`${rate}x${defaultRate === rate ? ' (default)' : ''} — double-click to set as default`}
+                title={`${rate}x${defaultRate === rate ? ' (default)' : ''} — Q faster, W slower · double-click to set as default`}
               >
                 {rate}x
               </button>

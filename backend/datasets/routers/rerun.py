@@ -13,4 +13,6 @@ async def visualize_episode(episode_index: int):
         raise HTTPException(status_code=404, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     return {"status": "ok", "episode_index": episode_index}

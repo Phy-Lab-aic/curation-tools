@@ -19,15 +19,26 @@ except ImportError:
 from backend.datasets.services.dataset_service import dataset_service
 
 logger = logging.getLogger(__name__)
+_RERUN_READY = False
+
+
+def ensure_rerun_ready() -> None:
+    """Raise a user-facing error when the Rerun viewer is unavailable."""
+    if not HAS_RERUN:
+        raise RuntimeError("Rerun viewer is not available")
+    if not _RERUN_READY:
+        raise RuntimeError("Rerun viewer is not ready")
 
 
 def init_rerun(grpc_port: int, web_port: int) -> None:
     """Initialize Rerun with gRPC server and web viewer."""
+    global _RERUN_READY
     if not HAS_RERUN:
         raise ImportError("rerun package not installed — install with: pip install rerun-sdk")
     rr.init("curation_tools")
     server_uri = rr.serve_grpc(grpc_port=grpc_port)
     rr.serve_web_viewer(open_browser=False, web_port=web_port, connect_to=server_uri)
+    _RERUN_READY = True
     logger.info("Rerun initialized — gRPC port %d, web port %d", grpc_port, web_port)
 
 
@@ -74,6 +85,7 @@ async def visualize_episode(episode_index: int) -> None:
     """Visualize a single episode in Rerun."""
     import asyncio
 
+    ensure_rerun_ready()
     loc = dataset_service.get_episode_file_location(episode_index)
     dataset_path = Path(dataset_service.get_dataset_path())
     features = dataset_service.get_features()

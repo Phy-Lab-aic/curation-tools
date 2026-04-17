@@ -40,6 +40,32 @@ MOCK_DATASET = {
     "bad_duration_sec": 0,
 }
 
+MOCK_OK_DATASET = {
+    "name": "working-dataset",
+    "path": "/mock/cell/working-dataset",
+    "robot_type": "testbot",
+    "total_episodes": 0,
+    "graded_count": 0,
+    "good_count": 0,
+    "normal_count": 0,
+    "bad_count": 0,
+    "fps": 30,
+    "total_duration_sec": 0,
+    "good_duration_sec": 0,
+    "normal_duration_sec": 0,
+    "bad_duration_sec": 0,
+}
+
+MOCK_DATASET_INFO = {
+    "path": "/mock/cell/working-dataset",
+    "name": "testbot",
+    "fps": 30,
+    "total_episodes": 0,
+    "total_tasks": 0,
+    "robot_type": "testbot",
+    "features": {},
+}
+
 
 def _fulfill_json(route, payload, status: int = 200):
     route.fulfill(
@@ -76,6 +102,37 @@ def _mock_dataset_load_failure(page: Page):
             return
         if url.endswith("/api/episodes"):
             pytest.fail("Unexpected /api/episodes request after dataset load failure")
+        route.continue_()
+
+    page.route("**/api/**", handler)
+
+
+def _mock_dataset_load_success(page: Page):
+    def handler(route):
+        url = route.request.url
+        if url.endswith("/api/converter/status"):
+            _fulfill_json(route, {
+                "container_state": "stopped",
+                "docker_available": False,
+                "tasks": [],
+                "summary": "",
+            })
+            return
+        if url.endswith("/api/cells"):
+            _fulfill_json(route, [MOCK_CELL])
+            return
+        if "/api/cells/" in url and url.endswith("/datasets"):
+            _fulfill_json(route, [MOCK_OK_DATASET])
+            return
+        if url.endswith("/api/datasets/load"):
+            _fulfill_json(route, MOCK_DATASET_INFO)
+            return
+        if url.endswith("/api/episodes"):
+            _fulfill_json(route, [])
+            return
+        if "/api/datasets/fields" in url:
+            _fulfill_json(route, [])
+            return
         route.continue_()
 
     page.route("**/api/**", handler)
@@ -137,6 +194,18 @@ class TestDatasetSelection:
         _select_dataset(page, "broken-dataset")
 
         expect(page.get_by_text("Dataset mount unavailable", exact=True)).to_be_visible(timeout=5000)
+
+    def test_dataset_navigation_renders_overview(self, page: Page):
+        _mock_dataset_load_success(page)
+
+        page.goto(BASE_URL)
+        page.get_by_text("mock-cell", exact=True).click()
+        _select_dataset(page, "working-dataset")
+
+        expect(page.get_by_text("Overview", exact=True)).to_be_visible(timeout=5000)
+        expect(page.get_by_text("Curate", exact=True)).to_be_visible(timeout=5000)
+        expect(page.get_by_text("Fields", exact=True)).to_be_visible(timeout=5000)
+        expect(page.get_by_text("Select fields from the left panel", exact=True)).to_be_visible(timeout=5000)
 
 
 # ---------------------------------------------------------------------------

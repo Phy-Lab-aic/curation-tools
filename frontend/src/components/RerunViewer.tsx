@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import axios from 'axios'
 import client from '../api/client'
 
 interface RerunViewerProps {
@@ -9,6 +10,9 @@ export function RerunViewer({ episodeIndex }: RerunViewerProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const prevIndexRef = useRef<number | null>(null)
+  const rerunUrl = (
+    import.meta as ImportMeta & { env?: { VITE_RERUN_URL?: string } }
+  ).env?.VITE_RERUN_URL ?? 'http://localhost:9090'
 
   useEffect(() => {
     if (episodeIndex === null || episodeIndex === prevIndexRef.current) return
@@ -22,7 +26,10 @@ export function RerunViewer({ episodeIndex }: RerunViewerProps) {
         setLoading(false)
       })
       .catch(err => {
-        setError(err instanceof Error ? err.message : 'Visualization failed')
+        const message = axios.isAxiosError(err)
+          ? (typeof err.response?.data?.detail === 'string' ? err.response.data.detail : err.message)
+          : (err instanceof Error ? err.message : 'Visualization failed')
+        setError(message)
         setLoading(false)
       })
   }, [episodeIndex])
@@ -39,7 +46,7 @@ export function RerunViewer({ episodeIndex }: RerunViewerProps) {
       </div>
       <iframe
         style={styles.iframe}
-        src={import.meta.env.VITE_RERUN_URL ?? "http://localhost:9090"}
+        src={rerunUrl}
         title="Rerun Viewer"
         sandbox="allow-scripts allow-same-origin"
         allowFullScreen

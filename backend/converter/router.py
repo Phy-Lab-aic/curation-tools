@@ -6,8 +6,13 @@ import logging
 import re
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
 from backend.converter import service as converter_service
+
+
+class StartRequest(BaseModel):
+    cell_task: str | None = None
 
 # ---------------------------------------------------------------------------
 # Log line parser — extracts structured events from raw container output
@@ -20,7 +25,7 @@ _TS_RE = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\[(\w+)]\s*(.*)"
 )
 _CONVERTED_RE = re.compile(
-    r"Converted:\s+(.+?)\s+\((\d+)\s+frames,\s+([\d.]+)s\)"
+    r"Converted:\s+(.+?)\s+\((\d+)\s+frames(?:,\s+([\d.]+)s)?\)"
 )
 _FAILED_RE = re.compile(
     r"Failed\s+\[(\w+)]:\s+(.+?):\s+(.*)"
@@ -53,7 +58,7 @@ def _parse_log_line(raw: str) -> dict | None:
             "type": "converted", "ts": ts,
             "recording": conv_m.group(1),
             "frames": int(conv_m.group(2)),
-            "duration": float(conv_m.group(3)),
+            "duration": float(conv_m.group(3)) if conv_m.group(3) is not None else None,
         }
 
     fail_m = _FAILED_RE.search(msg)
@@ -178,16 +183,22 @@ async def build_result():
 
 
 @router.post("/start")
-async def start():
-    """Start auto_converter container."""
+async def start(req: StartRequest | None = None):
+    """Start auto_converter container.
+
+    Body is optional. When ``{"cell_task": "cell/task"}`` is provided, the
+    converter runs in single-shot mode for just that task and exits on
+    completion.
+    """
     docker_ok = await converter_service.check_docker()
     if not docker_ok:
         raise HTTPException(503, "Docker daemon not available")
 
-    ok, msg = await converter_service.start_converter()
+    cell_task = req.cell_task if req else None
+    ok, msg = await converter_service.start_converter(cell_task=cell_task)
     if not ok:
         raise HTTPException(409, msg)
-    return {"status": "started", "message": msg}
+    return {"status": "started", "message": msg, "cell_task": cell_task}
 
 
 @router.post("/stop")
