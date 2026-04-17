@@ -37,6 +37,7 @@ async def update_episode(episode_index: int, update: EpisodeUpdate):
             episode_index=episode_index,
             grade=update.grade,
             tags=tags,
+            reason=update.reason,
         )
     except EpisodeNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -47,7 +48,9 @@ async def update_episode(episode_index: int, update: EpisodeUpdate):
 @router.post("/bulk-grade")
 async def bulk_grade_episodes(req: BulkGradeRequest):
     try:
-        count = await episode_service.bulk_grade(req.episode_indices, req.grade)
+        count = await episode_service.bulk_grade(
+            req.episode_indices, req.grade, reason=req.reason,
+        )
         return {"updated": count}
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))

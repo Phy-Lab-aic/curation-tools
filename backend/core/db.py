@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS dataset_stats (
 );
 """
 
+SCHEMA_V2 = """
+ALTER TABLE episode_annotations ADD COLUMN reason TEXT;
+"""
+
 
 def _get_db_path() -> Path:
     if _db_path_override:
@@ -84,6 +88,12 @@ async def init_db() -> None:
         await db.execute("PRAGMA user_version = 1")
         await db.commit()
         logger.info("Database initialized (v1) at %s", _get_db_path())
+        version = 1
+    if version < 2:
+        await db.executescript(SCHEMA_V2)
+        await db.execute("PRAGMA user_version = 2")
+        await db.commit()
+        logger.info("Database upgraded to v2 (reason column) at %s", _get_db_path())
 
 
 async def close_db() -> None:

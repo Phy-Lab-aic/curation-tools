@@ -1469,3 +1469,115 @@ code, .mono { font-family: var(--font-mono); }
 .converter-dot-stopped .converter-nav-dot { background: var(--text-dim); }
 .converter-dot-building .converter-nav-dot { background: var(--c-yellow); animation: pulse 1.5s ease-in-out infinite; }
 .converter-dot-error .converter-nav-dot { background: var(--c-red); }
+
+/* Grade reason modal */
+.grade-reason-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.grade-reason-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--text-dim);
+  border-radius: 8px;
+  padding: 16px 18px 14px;
+  width: min(440px, 90vw);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grade-reason-header {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.grade-reason-subheader {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.grade-reason-textarea {
+  width: 100%;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 90px;
+}
+
+.grade-reason-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.grade-reason-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.grade-reason-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.grade-reason-hint kbd {
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 2px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin: 0 2px;
+}
+
+.grade-reason-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.grade-reason-btn {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.grade-reason-btn:hover:not(:disabled) {
+  background: var(--border2);
+}
+
+.grade-reason-btn.primary {
+  color: #000;
+  border: none;
+  font-weight: 600;
+}
+
+.grade-reason-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.grade-reason-display {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 6px 12px 0;
+  font-style: italic;
+}

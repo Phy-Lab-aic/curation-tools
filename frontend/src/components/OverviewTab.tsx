@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import type { BarRectangleItem } from 'recharts/types/cartesian/Bar'
 import { useDistribution } from '../hooks/useDistribution'
 import client from '../api/client'
+import { GradeReasonModal } from './GradeReasonModal'
 import type { CurateFilter, DistributionResult, Episode, GradeFilter } from '../types'
 
 interface ContextMenuState {
@@ -35,6 +36,11 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
   const [chartIntensity, setChartIntensity] = useState(1)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [bulkReasonModal, setBulkReasonModal] = useState<{
+    episodeIndices: number[]
+    field: string
+    label: string
+  } | null>(null)
   const initializedRef = useRef(false)
 
   // Close context menu on click anywhere
@@ -45,7 +51,7 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
     return () => window.removeEventListener('click', close)
   }, [contextMenu])
 
-  const handleBulkBad = useCallback(async (menu: ContextMenuState) => {
+  const openBulkBadModal = useCallback((menu: ContextMenuState) => {
     const indices: number[] = []
     if (menu.field === 'length') {
       const parts = menu.label.split('-').map(Number)
@@ -60,12 +66,25 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
       }
     }
     if (indices.length === 0) return
-    await client.post('/episodes/bulk-grade', { episode_indices: indices, grade: 'bad' })
-    // Refresh charts
-    void addChart(datasetPath, menu.field, menu.field === 'length' ? 'histogram' : 'auto')
-    void addChart(datasetPath, 'grade', 'auto')
+    setBulkReasonModal({ episodeIndices: indices, field: menu.field, label: menu.label })
     setContextMenu(null)
-  }, [episodes, datasetPath, addChart])
+  }, [episodes])
+
+  const submitBulkBad = useCallback(
+    async (reason: string) => {
+      const m = bulkReasonModal
+      if (!m) return
+      setBulkReasonModal(null)
+      await client.post('/episodes/bulk-grade', {
+        episode_indices: m.episodeIndices,
+        grade: 'bad',
+        reason,
+      })
+      void addChart(datasetPath, m.field, m.field === 'length' ? 'histogram' : 'auto')
+      void addChart(datasetPath, 'grade', 'auto')
+    },
+    [bulkReasonModal, datasetPath, addChart],
+  )
 
   useEffect(() => {
     initializedRef.current = false
@@ -213,12 +232,21 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
             }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--c-red-dim)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-            onClick={() => void handleBulkBad(contextMenu)}
+            onClick={() => openBulkBadModal(contextMenu)}
           >
             Mark as Bad
           </button>
         </div>
       )}
+
+      <GradeReasonModal
+        open={bulkReasonModal !== null}
+        grade="bad"
+        initialReason=""
+        episodeCount={bulkReasonModal?.episodeIndices.length}
+        onSave={(reason) => void submitBulkBad(reason)}
+        onCancel={() => setBulkReasonModal(null)}
+      />
     </div>
   )
 }

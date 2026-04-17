@@ -41,7 +41,7 @@ class TestInitDb:
         db = await get_db()
         async with db.execute("PRAGMA user_version") as cursor:
             row = await cursor.fetchone()
-        assert row[0] == 1
+        assert row[0] == 2
 
     @pytest.mark.asyncio
     async def test_idempotent(self, tmp_db):
@@ -50,7 +50,7 @@ class TestInitDb:
         db = await get_db()
         async with db.execute("PRAGMA user_version") as cursor:
             row = await cursor.fetchone()
-        assert row[0] == 1
+        assert row[0] == 2
 
 
 class TestGetDb:

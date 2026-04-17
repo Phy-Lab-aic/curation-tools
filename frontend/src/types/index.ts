@@ -24,6 +24,7 @@ export interface Episode {
   dataset_to_index: number
   grade: string | null
   tags: string[]
+  reason: string | null
   created_at: string | null
 }
 
@@ -35,6 +36,7 @@ export interface Task {
 export interface EpisodeUpdate {
   grade: string | null
   tags: string[]
+  reason?: string | null
 }
 
 export interface TaskUpdate {
