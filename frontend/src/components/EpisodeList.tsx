@@ -1,7 +1,5 @@
 import { useMemo, useEffect, useRef, memo, useState } from 'react'
-import type { Episode } from '../types'
-
-type GradeFilter = 'all' | 'good' | 'normal' | 'bad' | 'ungraded'
+import type { Episode, GradeFilter } from '../types'
 
 interface EpisodeListProps {
   episodes: Episode[]
@@ -25,6 +23,12 @@ export const EpisodeList = memo(function EpisodeList({
   initialGradeFilter, filterChip,
 }: EpisodeListProps) {
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>(initialGradeFilter ?? 'all')
+
+  // Sync filter when navigated to with a new initialGradeFilter (e.g., from Grade cards)
+  useEffect(() => {
+    if (initialGradeFilter) setGradeFilter(initialGradeFilter)
+  }, [initialGradeFilter])
+
   const gradedCount = useMemo(() => episodes.filter(e => e.grade).length, [episodes])
 
   const filteredEpisodes = useMemo(() => {

@@ -37,7 +37,39 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
   const [terminalFrames, setTerminalFrames] = useState<number[]>([])
   const [terminalTimestamps, setTerminalTimestamps] = useState<number[]>([])
   const [rightTab, setRightTab] = useState<'details' | 'trim'>('details')
+  const [rightWidth, setRightWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('curate-right-width')
+    const n = saved ? parseInt(saved, 10) : 220
+    return Number.isFinite(n) ? Math.max(220, Math.min(800, n)) : 220
+  })
   const videoRef = useRef<VideoPlayerHandle>(null)
+  const resizingRef = useRef(false)
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizingRef.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      const next = window.innerWidth - ev.clientX
+      const clamped = Math.max(220, Math.min(Math.floor(window.innerWidth * 0.6), next))
+      setRightWidth(clamped)
+    }
+    const onUp = () => {
+      resizingRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setRightWidth(w => {
+        localStorage.setItem('curate-right-width', String(w))
+        return w
+      })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
 
   // Load dataset when path changes
   useEffect(() => {
@@ -82,8 +114,6 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
     }
     return null
   }, [filter, fps, onSetTab])
-
-  const ungradedEpisodes = useMemo(() => curateEpisodes.filter(e => !e.grade), [curateEpisodes])
 
   const handleSaveEpisode = useCallback(async (index: number, grade: string | null, tags: string[]) => {
     await updateEpisode(index, grade, tags)
@@ -180,7 +210,7 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
             error={epError}
             onEpisodeSelect={setSelectedEpisode}
             selectedIndex={selectedEpisode?.episode_index ?? null}
-            initialGradeFilter={filter?.grade ?? undefined}
+            initialGradeFilter={filter?.grade}
             filterChip={filterChip}
           />
         </div>
@@ -241,8 +271,21 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
           )}
         </div>
 
+        {/* Resizer handle */}
+        <div
+          className="curate-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          onMouseDown={handleResizeStart}
+          onDoubleClick={() => {
+            setRightWidth(220)
+            localStorage.setItem('curate-right-width', '220')
+          }}
+          title="Drag to resize (double-click to reset)"
+        />
+
         {/* Right: details / split-merge */}
-        <div className="curate-right">
+        <div className="curate-right" style={{ width: rightWidth }}>
           <div className="right-tabs">
             <button
               className={`right-tab${rightTab === 'details' ? ' active' : ''}`}

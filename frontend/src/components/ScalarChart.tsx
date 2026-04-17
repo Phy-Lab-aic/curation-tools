@@ -190,69 +190,71 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
 
   return (
     <div style={chartStyles.container}>
-      {obsKeys.length > 0 && (
-        <div style={chartStyles.section}>
-          <div
-            role="button"
-            tabIndex={0}
-            style={chartStyles.sectionHeader}
-            onClick={() => setObsCollapsed(!obsCollapsed)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                setObsCollapsed(!obsCollapsed)
-              }
-            }}
-          >
-            <span style={chartStyles.sectionTitle}>
-              {obsCollapsed ? '\u25B6' : '\u25BC'} Observations
-            </span>
-            <span style={chartStyles.sectionCount}>{obsKeys.length}</span>
+      <div style={chartStyles.columns}>
+        {obsKeys.length > 0 && (
+          <div style={chartStyles.column}>
+            <div
+              role="button"
+              tabIndex={0}
+              style={chartStyles.sectionHeader}
+              onClick={() => setObsCollapsed(!obsCollapsed)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setObsCollapsed(!obsCollapsed)
+                }
+              }}
+            >
+              <span style={chartStyles.sectionTitle}>
+                {obsCollapsed ? '\u25B6' : '\u25BC'} Observation.state
+              </span>
+              <span style={chartStyles.sectionCount}>{obsKeys.length}</span>
+            </div>
+            {obsKeys.map((key, i) => (
+              <MiniChart
+                key={key}
+                label={key.replace('observation.', '').replace('state.', '')}
+                series={data.observations[key]}
+                color={COLORS[i % COLORS.length]}
+                currentFrame={currentFrame}
+                collapsed={obsCollapsed}
+              />
+            ))}
           </div>
-          {obsKeys.map((key, i) => (
-            <MiniChart
-              key={key}
-              label={key.replace('observation.', '').replace('state.', '')}
-              series={data.observations[key]}
-              color={COLORS[i % COLORS.length]}
-              currentFrame={currentFrame}
-              collapsed={obsCollapsed}
-            />
-          ))}
-        </div>
-      )}
+        )}
 
-      {actKeys.length > 0 && (
-        <div style={chartStyles.section}>
-          <div
-            role="button"
-            tabIndex={0}
-            style={chartStyles.sectionHeader}
-            onClick={() => setActCollapsed(!actCollapsed)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                setActCollapsed(!actCollapsed)
-              }
-            }}
-          >
-            <span style={chartStyles.sectionTitle}>
-              {actCollapsed ? '\u25B6' : '\u25BC'} Actions
-            </span>
-            <span style={chartStyles.sectionCount}>{actKeys.length}</span>
+        {actKeys.length > 0 && (
+          <div style={chartStyles.column}>
+            <div
+              role="button"
+              tabIndex={0}
+              style={chartStyles.sectionHeader}
+              onClick={() => setActCollapsed(!actCollapsed)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setActCollapsed(!actCollapsed)
+                }
+              }}
+            >
+              <span style={chartStyles.sectionTitle}>
+                {actCollapsed ? '\u25B6' : '\u25BC'} Action
+              </span>
+              <span style={chartStyles.sectionCount}>{actKeys.length}</span>
+            </div>
+            {actKeys.map((key, i) => (
+              <MiniChart
+                key={key}
+                label={key.replace('action.', '')}
+                series={data.actions[key]}
+                color={COLORS[(i + 5) % COLORS.length]}
+                currentFrame={currentFrame}
+                collapsed={actCollapsed}
+              />
+            ))}
           </div>
-          {actKeys.map((key, i) => (
-            <MiniChart
-              key={key}
-              label={key.replace('action.', '')}
-              series={data.actions[key]}
-              color={COLORS[(i + 5) % COLORS.length]}
-              currentFrame={currentFrame}
-              collapsed={actCollapsed}
-            />
-          ))}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
@@ -261,18 +263,19 @@ const chartStyles: Record<string, React.CSSProperties> = {
   container: { display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 1 },
   loading: { padding: '12px', fontSize: '12px', color: 'var(--text-muted)' as string },
   error: { padding: '12px', fontSize: '12px', color: 'var(--c-red)' as string },
-  section: { borderBottom: '1px solid var(--border)' as string },
+  columns: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, borderBottom: '1px solid var(--border)' as string },
+  column: { display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--border)' as string },
   sectionHeader: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '6px 12px', cursor: 'pointer',
+    padding: '6px 10px', cursor: 'pointer',
     background: 'var(--panel)' as string,
     borderBottom: '1px solid var(--border2)' as string,
   },
-  sectionTitle: { fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: 'var(--text-muted)' as string },
+  sectionTitle: { fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: 'var(--text-muted)' as string, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
   sectionCount: { fontSize: '11px', color: 'var(--text-dim)' as string, fontFamily: 'var(--font-mono)' },
-  chartItem: { padding: '3px 12px', borderBottom: '1px solid #1a1a1a' },
-  chartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' },
-  chartLabel: { fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, maxWidth: '180px' },
-  chartValue: { fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' as string },
+  chartItem: { padding: '3px 10px', borderBottom: '1px solid #1a1a1a', minWidth: 0 },
+  chartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px', gap: '6px' },
+  chartLabel: { fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 },
+  chartValue: { fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' as string, flexShrink: 0 },
   canvas: { width: '100%', height: '40px', borderRadius: '2px' },
 }

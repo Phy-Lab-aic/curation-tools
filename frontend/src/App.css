@@ -568,6 +568,22 @@ code, .mono { font-family: var(--font-mono); }
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+/* Drag handle between center and right panel */
+.curate-resizer {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+  transition: background 120ms ease;
+}
+.curate-resizer:hover,
+.curate-resizer:active {
+  background: var(--accent);
 }
 
 .right-tabs {
