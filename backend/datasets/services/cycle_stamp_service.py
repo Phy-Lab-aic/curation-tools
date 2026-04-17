@@ -95,41 +95,44 @@ def stamp_dataset_cycles(dataset_path: Path | str, *, overwrite: bool) -> dict:
     if stamped_files and not overwrite:
         raise ValueError("already_stamped")
 
-    file_episode_rows: dict[Path, list[int]] = {}
-    episode_states: dict[int, list[list[float]]] = {}
+    episode_rows: dict[int, list[tuple[int, int, Path, int, list[float]]]] = {}
+    file_terminal_flags: dict[Path, list[bool]] = {}
+    file_last_flags: dict[Path, list[bool]] = {}
+    physical_row_sequence = 0
 
     for parquet_path in parquet_files:
-        table = pq.read_table(parquet_path, columns=["episode_index", "observation.state"])
+        table = pq.read_table(parquet_path, columns=["episode_index", "frame_index", "observation.state"])
         episode_indices = [int(value) for value in table.column("episode_index").to_pylist()]
+        frame_indices = [int(value) for value in table.column("frame_index").to_pylist()]
         states = table.column("observation.state").to_pylist()
-        file_episode_rows[parquet_path] = episode_indices
 
-        for episode_index, state in zip(episode_indices, states):
-            episode_states.setdefault(episode_index, []).append(state)
+        file_terminal_flags[parquet_path] = [False] * len(episode_indices)
+        file_last_flags[parquet_path] = [False] * len(episode_indices)
 
-    episode_terminal_flags: dict[int, list[bool]] = {}
-    episode_last_flags: dict[int, list[bool]] = {}
+        for row_index, (episode_index, frame_index, state) in enumerate(
+            zip(episode_indices, frame_indices, states, strict=True)
+        ):
+            episode_rows.setdefault(episode_index, []).append(
+                (frame_index, physical_row_sequence, parquet_path, row_index, state)
+            )
+            physical_row_sequence += 1
+
     is_terminal_count = 0
     is_last_count = 0
 
-    for episode_index, rows in sorted(episode_states.items()):
-        states = np.asarray(rows, dtype=np.float32)
-        terminal_flags = np.zeros(len(states), dtype=bool)
-        for frame_index in detect_cycle_ends(states):
-            terminal_flags[frame_index] = True
+    for episode_index, rows in sorted(episode_rows.items()):
+        ordered_rows = sorted(rows, key=lambda row: (row[0], row[1]))
+        states = np.asarray([row[4] for row in ordered_rows], dtype=np.float32)
 
-        last_flags = np.zeros(len(states), dtype=bool)
-        if len(states):
-            last_flags[-1] = True
+        for local_index in detect_cycle_ends(states):
+            _, _, parquet_path, row_index, _ = ordered_rows[local_index]
+            file_terminal_flags[parquet_path][row_index] = True
+            is_terminal_count += 1
 
-        terminal_list = terminal_flags.tolist()
-        last_list = last_flags.tolist()
-        episode_terminal_flags[episode_index] = terminal_list
-        episode_last_flags[episode_index] = last_list
-        is_terminal_count += int(sum(terminal_list))
-        is_last_count += int(sum(last_list))
-
-    episode_offsets = {episode_index: 0 for episode_index in episode_states}
+        if ordered_rows:
+            _, _, parquet_path, row_index, _ = ordered_rows[-1]
+            file_last_flags[parquet_path][row_index] = True
+            is_last_count += 1
 
     for parquet_path in parquet_files:
         table = pq.read_table(parquet_path)
@@ -139,16 +142,8 @@ def stamp_dataset_cycles(dataset_path: Path | str, *, overwrite: bool) -> dict:
                 if column_index >= 0:
                     table = table.remove_column(column_index)
 
-        file_terminal_flags: list[bool] = []
-        file_last_flags: list[bool] = []
-        for episode_index in file_episode_rows[parquet_path]:
-            offset = episode_offsets[episode_index]
-            file_terminal_flags.append(episode_terminal_flags[episode_index][offset])
-            file_last_flags.append(episode_last_flags[episode_index][offset])
-            episode_offsets[episode_index] += 1
-
-        table = table.append_column(_TERMINAL_COL, pa.array(file_terminal_flags, type=pa.bool_()))
-        table = table.append_column(_LAST_COL, pa.array(file_last_flags, type=pa.bool_()))
+        table = table.append_column(_TERMINAL_COL, pa.array(file_terminal_flags[parquet_path], type=pa.bool_()))
+        table = table.append_column(_LAST_COL, pa.array(file_last_flags[parquet_path], type=pa.bool_()))
 
         tmp_path = parquet_path.with_suffix(f"{parquet_path.suffix}.tmp")
         try:
@@ -162,12 +157,12 @@ def stamp_dataset_cycles(dataset_path: Path | str, *, overwrite: bool) -> dict:
     logger.info(
         "Stamped dataset cycles for %s: episodes=%d terminal=%d last=%d",
         dataset_root,
-        len(episode_states),
+        len(episode_rows),
         is_terminal_count,
         is_last_count,
     )
     return {
-        "episodes_processed": len(episode_states),
+        "episodes_processed": len(episode_rows),
         "is_terminal_count": is_terminal_count,
         "is_last_count": is_last_count,
     }

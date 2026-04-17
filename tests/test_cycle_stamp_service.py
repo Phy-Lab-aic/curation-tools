@@ -26,7 +26,12 @@ def make_states(left_values, right_values):
     return states
 
 
-def _write_fake_dataset(root: Path, episodes: list[np.ndarray]) -> Path:
+def _write_fake_dataset(
+    root: Path,
+    episodes: list[np.ndarray],
+    *,
+    episode_frame_indices: list[list[int]] | None = None,
+) -> Path:
     """Create a minimal LeRobot-style dataset split across two parquet files."""
     meta_dir = root / "meta"
     data_dir = root / "data" / "chunk-000"
@@ -44,16 +49,23 @@ def _write_fake_dataset(root: Path, episodes: list[np.ndarray]) -> Path:
         "features": {
             "observation.state": {"dtype": "float32", "shape": [16], "names": None},
             "episode_index": {"dtype": "int64", "shape": [1], "names": None},
+            "frame_index": {"dtype": "int64", "shape": [1], "names": None},
         },
     }
     (meta_dir / "info.json").write_text(json.dumps(info, indent=2))
 
+    if episode_frame_indices is None:
+        episode_frame_indices = [list(range(len(episode))) for episode in episodes]
+
     rows: list[np.ndarray] = []
     episode_indices: list[int] = []
-    for episode_index, episode in enumerate(episodes):
-        for row in episode:
+    frame_indices: list[int] = []
+    for episode_index, (episode, logical_indices) in enumerate(zip(episodes, episode_frame_indices, strict=True)):
+        assert len(episode) == len(logical_indices)
+        for row, frame_index in zip(episode, logical_indices, strict=True):
             rows.append(np.asarray(row, dtype=np.float32))
             episode_indices.append(episode_index)
+            frame_indices.append(frame_index)
 
     split_at = min(len(episodes[0]) + 1, total_frames - 1)
     file_slices = [
@@ -71,6 +83,7 @@ def _write_fake_dataset(root: Path, episodes: list[np.ndarray]) -> Path:
                     16,
                 ),
                 "episode_index": pa.array(episode_indices[start:stop], type=pa.int64()),
+                "frame_index": pa.array(frame_indices[start:stop], type=pa.int64()),
             }
         )
         pq.write_table(table, data_dir / f"file-{file_index:03d}.parquet")
@@ -308,3 +321,28 @@ class TestStampDatasetCycles:
         assert second_file_episode_index == [1, 1, 1, 1]
         assert second_file_terminal == [False, False, True, False]
         assert second_file_last == [False, False, False, True]
+
+    def test_uses_logical_frame_index_order_when_rows_are_shuffled(self, tmp_path: Path):
+        dataset_root = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.3, 0.9, 0.81, 0.4], [0.9] * 4),
+            ],
+            episode_frame_indices=[[2, 0, 3, 1]],
+        )
+
+        result = stamp_dataset_cycles(dataset_root, overwrite=False)
+
+        assert result["episodes_processed"] == 1
+        assert result["is_terminal_count"] == 1
+        assert result["is_last_count"] == 1
+
+        combined = pa.concat_tables(
+            [
+                pq.read_table(path)
+                for path in sorted((dataset_root / "data" / "chunk-000").glob("file-*.parquet"))
+            ]
+        )
+        assert combined.column("frame_index").to_pylist() == [2, 0, 3, 1]
+        assert combined.column("is_terminal").to_pylist() == [False, False, True, False]
+        assert combined.column("is_last").to_pylist() == [False, False, True, False]
