@@ -144,8 +144,10 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
       // Divergence bands (paint moderate first so severe overlaps win)
       if (bands && bands.length > 0 && series.length > 1) {
         const denomBand = Math.max(series.length - 1, 1)
-        const moderateFill = cs.getPropertyValue('--c-yellow-dim').trim()
-        const severeFill = cs.getPropertyValue('--c-red-dim').trim()
+        const moderateFill = cs.getPropertyValue('--c-yellow').trim()
+        const severeFill = cs.getPropertyValue('--c-red').trim()
+        ctx.save()
+        ctx.globalAlpha = 0.28
         for (const level of ['moderate', 'severe'] as const) {
           const fill = level === 'moderate' ? moderateFill : severeFill
           if (!fill) continue
@@ -157,6 +159,7 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
             ctx.fillRect(x0, 0, Math.max(x1 - x0, 1), h)
           }
         }
+        ctx.restore()
       }
 
       // Grid lines
