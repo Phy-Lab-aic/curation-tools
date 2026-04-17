@@ -8,6 +8,7 @@ import { useDataset } from '../hooks/useDataset'
 import { useEpisodes } from '../hooks/useEpisodes'
 import { OverviewTab } from './OverviewTab'
 import { FieldsTab } from './FieldsTab'
+import { GradeReasonModal } from './GradeReasonModal'
 import type { CurateFilter, DatasetTab, Episode } from '../types'
 
 interface DatasetPageProps {
@@ -37,6 +38,11 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
   const [terminalFrames, setTerminalFrames] = useState<number[]>([])
   const [terminalTimestamps, setTerminalTimestamps] = useState<number[]>([])
   const [rightTab, setRightTab] = useState<'details' | 'trim'>('details')
+  const [reasonModal, setReasonModal] = useState<{
+    grade: 'normal' | 'bad'
+    initialReason: string
+    pendingTags: string[]
+  } | null>(null)
   const videoRef = useRef<VideoPlayerHandle>(null)
 
   // Load dataset when path changes
@@ -85,27 +91,52 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
 
   const ungradedEpisodes = useMemo(() => curateEpisodes.filter(e => !e.grade), [curateEpisodes])
 
-  const handleSaveEpisode = useCallback(async (index: number, grade: string | null, tags: string[]) => {
-    await updateEpisode(index, grade, tags)
-    if (grade) {
-      const currentIdx = curateEpisodes.findIndex(e => e.episode_index === index)
-      const ungradedInView = curateEpisodes.filter(e => !e.grade)
-      const nextUngraded = ungradedInView.find(e => {
-        const i = curateEpisodes.indexOf(e)
-        return i > currentIdx
-      }) ?? ungradedInView.find(e => {
-        const i = curateEpisodes.indexOf(e)
-        return i < currentIdx
-      })
-      if (nextUngraded) {
-        setSelectedEpisode(nextUngraded)
+  const handleSaveEpisode = useCallback(
+    async (
+      index: number,
+      grade: string | null,
+      tags: string[],
+      reason: string | null = null,
+    ) => {
+      await updateEpisode(index, grade, tags, reason)
+      if (grade) {
+        const currentIdx = curateEpisodes.findIndex(e => e.episode_index === index)
+        const ungradedInView = curateEpisodes.filter(e => !e.grade)
+        const nextUngraded = ungradedInView.find(e => {
+          const i = curateEpisodes.indexOf(e)
+          return i > currentIdx
+        }) ?? ungradedInView.find(e => {
+          const i = curateEpisodes.indexOf(e)
+          return i < currentIdx
+        })
+        if (nextUngraded) {
+          setSelectedEpisode(nextUngraded)
+          return
+        }
+      }
+      setSelectedEpisode(prev =>
+        prev?.episode_index === index ? { ...prev, grade, tags, reason } : prev,
+      )
+    },
+    [updateEpisode, curateEpisodes],
+  )
+
+  const requestGrade = useCallback(
+    (grade: 'good' | 'normal' | 'bad') => {
+      if (!selectedEpisode) return
+      if (grade === 'good') {
+        // good clears any prior reason (server enforces this too)
+        void handleSaveEpisode(selectedEpisode.episode_index, grade, selectedEpisode.tags, null)
         return
       }
-    }
-    setSelectedEpisode(prev =>
-      prev?.episode_index === index ? { ...prev, grade, tags } : prev
-    )
-  }, [updateEpisode, curateEpisodes])
+      setReasonModal({
+        grade,
+        initialReason: selectedEpisode.reason ?? '',
+        pendingTags: selectedEpisode.tags,
+      })
+    },
+    [selectedEpisode, handleSaveEpisode],
+  )
 
   const navigateEpisode = useCallback((direction: -1 | 1) => {
     if (!selectedEpisode || curateEpisodes.length === 0) return
@@ -114,17 +145,20 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
     if (next) setSelectedEpisode(next)
   }, [selectedEpisode, curateEpisodes])
 
-  const quickGrade = useCallback(async (key: string) => {
-    if (!selectedEpisode) return
-    const grade = GRADE_KEYS[key]
-    if (grade) await handleSaveEpisode(selectedEpisode.episode_index, grade, selectedEpisode.tags)
-  }, [selectedEpisode, handleSaveEpisode])
+  const quickGrade = useCallback(
+    (key: string) => {
+      const grade = GRADE_KEYS[key] as 'good' | 'normal' | 'bad' | undefined
+      if (grade) requestGrade(grade)
+    },
+    [requestGrade],
+  )
 
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (reasonModal) return  // Modal is open: let the textarea consume keys.
       switch (e.key) {
         case 'ArrowUp':
         case 'k':
@@ -141,12 +175,12 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
         case '1':
         case '2':
         case '3':
-          e.preventDefault(); void quickGrade(e.key); break
+          e.preventDefault(); quickGrade(e.key); break
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [navigateEpisode, quickGrade])
+  }, [navigateEpisode, quickGrade, reasonModal])
 
   if (tab === 'overview') {
     return (
@@ -225,7 +259,7 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
                 <button
                   key={g}
                   className={`grade-btn${selectedEpisode.grade === g ? ' active' : ''}`}
-                  onClick={() => handleSaveEpisode(selectedEpisode.episode_index, g, selectedEpisode.tags)}
+                  onClick={() => requestGrade(g)}
                   style={{
                     color: selectedEpisode.grade === g ? (g === 'good' ? 'var(--c-green)' : g === 'normal' ? 'var(--c-yellow)' : 'var(--c-red)') : undefined,
                     borderBottomColor: selectedEpisode.grade === g ? (g === 'good' ? 'var(--c-green)' : g === 'normal' ? 'var(--c-yellow)' : 'var(--c-red)') : undefined,
@@ -237,6 +271,11 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
               <div className="grade-kbd-hint">
                 <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>
               </div>
+            </div>
+          )}
+          {selectedEpisode && selectedEpisode.reason && (
+            <div className="grade-reason-display">
+              Reason: {selectedEpisode.reason}
             </div>
           )}
         </div>
@@ -279,6 +318,23 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
           )}
         </div>
       </div>
+      <GradeReasonModal
+        open={reasonModal !== null}
+        grade={reasonModal?.grade ?? 'bad'}
+        initialReason={reasonModal?.initialReason}
+        onSave={(reason) => {
+          if (!selectedEpisode || !reasonModal) return
+          const m = reasonModal
+          setReasonModal(null)
+          void handleSaveEpisode(
+            selectedEpisode.episode_index,
+            m.grade,
+            m.pendingTags,
+            reason,
+          )
+        }}
+        onCancel={() => setReasonModal(null)}
+      />
     </div>
   )
 }
