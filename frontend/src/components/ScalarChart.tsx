@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef, memo } from 'react'
 import client from '../api/client'
+import { useThemeVersion } from '../hooks/useThemeVersion'
 
 interface ScalarData {
   episode_index: number
@@ -16,23 +17,13 @@ interface ScalarChartProps {
   onTerminalFrames?: (frames: number[], timestamps: number[]) => void
 }
 
-function getChartColors(): string[] {
-  const s = getComputedStyle(document.documentElement)
-  const base = [
-    s.getPropertyValue('--chart-1'), s.getPropertyValue('--chart-2'),
-    s.getPropertyValue('--chart-3'), s.getPropertyValue('--chart-4'),
-    s.getPropertyValue('--chart-5'), s.getPropertyValue('--chart-6'),
-  ].map(c => c.trim()).filter(Boolean)
-  if (base.length >= 6) return base
-  return ['#5794f2','#73bf69','#fade2a','#f08080','#b877d9','#ff9830']
-}
-
-const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, collapsed }: {
+const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, collapsed, themeVersion }: {
   label: string
   series: number[]
   color: string
   currentFrame: number
   collapsed: boolean
+  themeVersion: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -58,13 +49,17 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
       const max = Math.max(...series)
       const range = max - min || 1
 
-      // Background
       const cs = getComputedStyle(document.documentElement)
-      ctx.fillStyle = cs.getPropertyValue('--bg-deep').trim() || '#0f0f0f'
+      const bg = cs.getPropertyValue('--bg-deep').trim()
+      const gridColor = cs.getPropertyValue('--border').trim()
+      const cursorColor = cs.getPropertyValue('--text').trim()
+
+      // Background
+      ctx.fillStyle = bg
       ctx.fillRect(0, 0, w, h)
 
       // Grid lines
-      ctx.strokeStyle = cs.getPropertyValue('--border').trim() || '#1e1e1e'
+      ctx.strokeStyle = gridColor
       ctx.lineWidth = 1
       for (let i = 0; i < 4; i++) {
         const y = (h / 4) * i
@@ -78,8 +73,9 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
       ctx.strokeStyle = color
       ctx.lineWidth = 1.5
       ctx.beginPath()
+      const denom = Math.max(series.length - 1, 1)
       for (let i = 0; i < series.length; i++) {
-        const x = (i / (series.length - 1)) * w
+        const x = (i / denom) * w
         const y = h - ((series[i] - min) / range) * (h - 4) - 2
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
@@ -88,8 +84,8 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
 
       // Current frame indicator
       if (currentFrame >= 0 && currentFrame < series.length) {
-        const x = (currentFrame / (series.length - 1)) * w
-        ctx.strokeStyle = '#fff'
+        const x = (currentFrame / denom) * w
+        ctx.strokeStyle = cursorColor
         ctx.lineWidth = 1
         ctx.setLineDash([2, 2])
         ctx.beginPath()
@@ -98,7 +94,6 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
         ctx.stroke()
         ctx.setLineDash([])
 
-        // Value dot
         const y = h - ((series[currentFrame] - min) / range) * (h - 4) - 2
         ctx.fillStyle = color
         ctx.beginPath()
@@ -111,7 +106,7 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [series, color, currentFrame, collapsed])
+  }, [series, color, currentFrame, collapsed, themeVersion])
 
   const currentVal = currentFrame >= 0 && currentFrame < series.length
     ? series[currentFrame].toFixed(3)
@@ -139,7 +134,7 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
   const [error, setError] = useState<string | null>(null)
   const [obsCollapsed, setObsCollapsed] = useState(false)
   const [actCollapsed, setActCollapsed] = useState(false)
-  const COLORS = useMemo(getChartColors, [])
+  const themeVersion = useThemeVersion()
 
   useEffect(() => {
     if (episodeIndex === null) {
@@ -210,14 +205,15 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
               </span>
               <span style={chartStyles.sectionCount}>{obsKeys.length}</span>
             </div>
-            {obsKeys.map((key, i) => (
+            {obsKeys.map(key => (
               <MiniChart
                 key={key}
                 label={key.replace('observation.', '').replace('state.', '')}
                 series={data.observations[key]}
-                color={COLORS[i % COLORS.length]}
+                color="var(--c-blue)"
                 currentFrame={currentFrame}
                 collapsed={obsCollapsed}
+                themeVersion={themeVersion}
               />
             ))}
           </div>
@@ -242,14 +238,15 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
               </span>
               <span style={chartStyles.sectionCount}>{actKeys.length}</span>
             </div>
-            {actKeys.map((key, i) => (
+            {actKeys.map(key => (
               <MiniChart
                 key={key}
                 label={key.replace('action.', '')}
                 series={data.actions[key]}
-                color={COLORS[(i + 5) % COLORS.length]}
+                color="var(--accent)"
                 currentFrame={currentFrame}
                 collapsed={actCollapsed}
+                themeVersion={themeVersion}
               />
             ))}
           </div>
@@ -273,7 +270,7 @@ const chartStyles: Record<string, React.CSSProperties> = {
   },
   sectionTitle: { fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: 'var(--text-muted)' as string, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
   sectionCount: { fontSize: '11px', color: 'var(--text-dim)' as string, fontFamily: 'var(--font-mono)' },
-  chartItem: { padding: '3px 10px', borderBottom: '1px solid #1a1a1a', minWidth: 0 },
+  chartItem: { padding: '3px 10px', borderBottom: '1px solid var(--border)', minWidth: 0 },
   chartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px', gap: '6px' },
   chartLabel: { fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 },
   chartValue: { fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' as string, flexShrink: 0 },
