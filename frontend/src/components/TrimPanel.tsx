@@ -7,6 +7,12 @@ interface TrimPanelProps {
   episodes: Episode[]
 }
 
+type SyncSummary = {
+  mode: string
+  created: number
+  skipped_duplicates: number
+}
+
 interface JobStatus {
   job_id: string
   operation: string
@@ -15,6 +21,7 @@ interface JobStatus {
   completed_at: string | null
   error: string | null
   result_path: string | null
+  summary?: SyncSummary | null
 }
 
 interface StampStatus {
@@ -91,7 +98,6 @@ function JobProgress({ jobStatus, polling }: { jobStatus: JobStatus | null; poll
 }
 
 type SplitMode = 'grade' | 'tag'
-type SplitDestination = 'new' | 'existing'
 
 const GRADE_OPTIONS = ['good', 'normal', 'bad', 'Ungraded'] as const
 
@@ -121,50 +127,19 @@ function SplitTab({
   datasetPath: string | null
   episodes: Episode[]
 }) {
-  const [splitMode, setSplitMode] = useState<SplitMode>('grade')
-  const [selectedGrades, setSelectedGrades] = useState<Set<string>>(new Set())
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
-  const [targetName, setTargetName] = useState('')
-  const [destination, setDestination] = useState<SplitDestination>('new')
-  const [availableDatasets, setAvailableDatasets] = useState<{ name: string; path: string }[]>([])
-  const [loadingDatasets, setLoadingDatasets] = useState(false)
-  const [selectedTargetPath, setSelectedTargetPath] = useState<string>('')
+  const [destinationPath, setDestinationPath] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { jobStatus, polling, startPolling, reset } = useJobPoller()
 
-  const fetchAvailableDatasets = useCallback(async () => {
-    setLoadingDatasets(true)
-    try {
-      const resp = await client.get<{ name: string; path: string }[]>('/datasets/list')
-      setAvailableDatasets(resp.data)
-    } catch {
-      setAvailableDatasets([])
-    } finally {
-      setLoadingDatasets(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (destination === 'existing') {
-      void fetchAvailableDatasets()
-    }
-  }, [destination, fetchAvailableDatasets])
-
-  const allTags = Array.from(new Set(episodes.flatMap(e => e.tags ?? []))).sort()
-
-  const matchingEpisodes = splitMode === 'grade'
-    ? episodes.filter(e => selectedGrades.has(e.grade ?? 'Ungraded'))
-    : episodes.filter(e => (e.tags ?? []).some(t => selectedTags.has(t)))
-
-  const toggleGrade = (grade: string) => {
-    setSelectedGrades(prev => {
-      const next = new Set(prev)
-      if (next.has(grade)) next.delete(grade)
-      else next.add(grade)
-      return next
-    })
-  }
+  const goodEpisodes = episodes.filter(e => e.grade === 'good')
+  const allTags = Array.from(
+    new Set(goodEpisodes.flatMap(e => e.tags ?? [])),
+  ).sort()
+  const matchingEpisodes = selectedTags.size === 0
+    ? goodEpisodes
+    : goodEpisodes.filter(e => (e.tags ?? []).some(tag => selectedTags.has(tag)))
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev => {
@@ -177,12 +152,13 @@ function SplitTab({
 
   const handleSubmit = async () => {
     if (!datasetPath) return
-    if (matchingEpisodes.length === 0) { setSubmitError('No episodes match the selected filter'); return }
-
-    if (destination === 'new') {
-      if (!targetName.trim()) { setSubmitError('Enter a target dataset name'); return }
-    } else {
-      if (!selectedTargetPath) { setSubmitError('Select a target dataset'); return }
+    if (matchingEpisodes.length === 0) {
+      setSubmitError('No good episodes match the selected tags')
+      return
+    }
+    if (!destinationPath.trim()) {
+      setSubmitError('Enter an absolute destination path')
+      return
     }
 
     setSubmitting(true)
@@ -190,27 +166,14 @@ function SplitTab({
     reset()
 
     try {
-      const episodeIds = matchingEpisodes.map(e => e.episode_index).sort((a, b) => a - b)
-
-      if (destination === 'new') {
-        const resp = await client.post<{ job_id: string; operation: string; status: string }>('/datasets/split-into', {
-          source_path: datasetPath,
-          episode_ids: episodeIds,
-          target_name: targetName.trim(),
-        })
-        startPolling(resp.data.job_id)
-      } else {
-        const targetDs = availableDatasets.find(ds => ds.path === selectedTargetPath)
-        const resp = await client.post<{ job_id: string; operation: string; status: string }>('/datasets/split-into', {
-          source_path: datasetPath,
-          episode_ids: episodeIds,
-          target_name: targetDs?.name ?? 'merged',
-          target_path: selectedTargetPath,
-        })
-        startPolling(resp.data.job_id)
-      }
+      const resp = await client.post<{ job_id: string; operation: string; status: string }>('/datasets/split-into', {
+        source_path: datasetPath,
+        episode_ids: matchingEpisodes.map(e => e.episode_index).sort((a, b) => a - b),
+        destination_path: destinationPath.trim(),
+      })
+      startPolling(resp.data.job_id)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Split failed'
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Sync failed'
       setSubmitError(msg)
     } finally {
       setSubmitting(false)
@@ -218,86 +181,42 @@ function SplitTab({
   }
 
   if (!datasetPath) {
-    return <div style={s.emptyState}>Load a dataset first to split episodes.</div>
+    return <div style={s.emptyState}>Load a dataset first to sync good episodes.</div>
   }
+
+  const syncComplete = jobStatus?.status === 'complete' || jobStatus?.status === 'completed'
+  const submitDisabled = submitting || polling || !destinationPath.trim() || matchingEpisodes.length === 0
 
   return (
     <div style={s.tabContent}>
-      {/* Split mode toggle */}
-      <div style={s.fieldLabel}>Split By</div>
-      <div style={s.modeToggle}>
-        {(['grade', 'tag'] as SplitMode[]).map(mode => (
-          <button
-            key={mode}
-            style={{ ...s.modeBtn, ...(splitMode === mode ? s.modeBtnActive : {}) }}
-            onClick={() => setSplitMode(mode)}
-          >
-            {mode === 'grade' ? 'Grade' : 'Tag'}
-          </button>
-        ))}
-      </div>
-
-      {/* Grade filter */}
-      {splitMode === 'grade' && (
-        <>
-          <div style={s.fieldLabel}>Select grades</div>
-          <div style={s.chipRow}>
-            {GRADE_OPTIONS.map(grade => {
-              const active = selectedGrades.has(grade)
-              const color = grade === 'good' ? 'var(--c-green)' : grade === 'bad' ? 'var(--c-red)' : grade === 'normal' ? 'var(--c-yellow)' : 'var(--text-muted)'
-              return (
-                <button
-                  key={grade}
-                  style={{
-                    ...s.chip,
-                    borderColor: active ? color : '#333',
-                    color: active ? color : '#666',
-                    background: active ? `${color}18` : 'transparent',
-                  }}
-                  onClick={() => toggleGrade(grade)}
-                >
-                  {grade}
-                </button>
-              )
-            })}
-          </div>
-        </>
+      <div style={s.fieldLabel}>Good Episode Filter</div>
+      {allTags.length === 0 ? (
+        <div style={s.empty}>No tags found on good episodes. All good episodes will be synced.</div>
+      ) : (
+        <div style={s.chipRow}>
+          {allTags.map(tag => {
+            const active = selectedTags.has(tag)
+            return (
+              <button
+                key={tag}
+                style={{
+                  ...s.chip,
+                  borderColor: active ? 'var(--interactive)' : 'var(--border3)',
+                  color: active ? 'var(--interactive)' : 'var(--text-dim)',
+                  background: active ? 'var(--interactive-dim)' : 'transparent',
+                }}
+                onClick={() => toggleTag(tag)}
+              >
+                {tag}
+              </button>
+            )
+          })}
+        </div>
       )}
 
-      {/* Tag filter */}
-      {splitMode === 'tag' && (
-        <>
-          <div style={s.fieldLabel}>Select tags</div>
-          {allTags.length === 0 ? (
-            <div style={s.empty}>No tags found in this dataset.</div>
-          ) : (
-            <div style={s.chipRow}>
-              {allTags.map(tag => {
-                const active = selectedTags.has(tag)
-                return (
-                  <button
-                    key={tag}
-                    style={{
-                      ...s.chip,
-                      borderColor: active ? 'var(--interactive)' : 'var(--border3)',
-                      color: active ? 'var(--interactive)' : 'var(--text-dim)',
-                      background: active ? 'var(--interactive-dim)' : 'transparent',
-                    }}
-                    onClick={() => toggleTag(tag)}
-                  >
-                    {tag}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Match preview */}
       <div style={s.matchPreview}>
         <span style={{ color: matchingEpisodes.length > 0 ? 'var(--interactive)' : 'var(--text-dim)' }}>
-          {matchingEpisodes.length} episode{matchingEpisodes.length !== 1 ? 's' : ''} match
+          {matchingEpisodes.length} good episode{matchingEpisodes.length !== 1 ? 's' : ''} selected
         </span>
         {matchingEpisodes.length > 0 && (
           <div style={s.matchRanges}>
@@ -306,66 +225,35 @@ function SplitTab({
         )}
       </div>
 
-      {/* Destination toggle */}
-      <div style={s.fieldLabel}>Destination</div>
-      <div style={s.modeToggle}>
-        {(['new', 'existing'] as SplitDestination[]).map(mode => (
-          <button
-            key={mode}
-            style={{ ...s.modeBtn, ...(destination === mode ? s.modeBtnActive : {}) }}
-            onClick={() => setDestination(mode)}
-          >
-            {mode === 'new' ? 'New Dataset' : 'Existing Dataset'}
-          </button>
-        ))}
-      </div>
-
-      {destination === 'new' ? (
-        <>
-          <div style={s.fieldLabel}>Target dataset name</div>
-          <input
-            style={s.textInput}
-            type="text"
-            placeholder="e.g. my_dataset_split"
-            value={targetName}
-            onChange={e => setTargetName(e.target.value)}
-            disabled={submitting || polling}
-          />
-        </>
-      ) : (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <div style={s.fieldLabel}>Target dataset</div>
-            <button style={s.refreshBtn} onClick={fetchAvailableDatasets} disabled={loadingDatasets}>
-              {loadingDatasets ? '...' : 'Refresh'}
-            </button>
-          </div>
-          {availableDatasets.length === 0 && !loadingDatasets ? (
-            <div style={s.empty}>No datasets available.</div>
-          ) : (
-            <select
-              style={{ ...s.textInput, cursor: 'pointer' }}
-              value={selectedTargetPath}
-              onChange={e => setSelectedTargetPath(e.target.value)}
-              disabled={submitting || polling || loadingDatasets}
-            >
-              <option value="">-- Select a dataset --</option>
-              {availableDatasets.map(ds => (
-                <option key={ds.path} value={ds.path}>{ds.name}</option>
-              ))}
-            </select>
-          )}
-        </>
-      )}
+      <div style={s.fieldLabel}>Destination Path</div>
+      <input
+        style={s.textInput}
+        type="text"
+        placeholder="/absolute/path/to/good-sync"
+        value={destinationPath}
+        onChange={e => setDestinationPath(e.target.value)}
+        disabled={submitting || polling}
+      />
 
       {submitError && <div style={s.errorText}>{submitError}</div>}
 
+      {syncComplete && jobStatus?.summary && (
+        <div style={s.matchPreview}>
+          <span style={{ color: 'var(--c-green)' }}>
+            {jobStatus.summary.created} copied, {jobStatus.summary.skipped_duplicates} skipped as duplicates
+          </span>
+          <span style={{ color: 'var(--text-muted)' }}>
+            Mode: {jobStatus.summary.mode}
+          </span>
+        </div>
+      )}
+
       <button
-        style={{ ...s.actionBtn, opacity: submitting || polling ? 0.6 : 1 }}
+        style={{ ...s.actionBtn, opacity: submitDisabled ? 0.6 : 1 }}
         onClick={handleSubmit}
-        disabled={submitting || polling}
+        disabled={submitDisabled}
       >
-        {submitting ? 'Submitting...' : destination === 'new' ? 'Split Dataset' : 'Split & Merge Into'}
+        {submitting ? 'Submitting...' : 'Sync Good Episodes'}
       </button>
 
       <JobProgress jobStatus={jobStatus} polling={polling} />

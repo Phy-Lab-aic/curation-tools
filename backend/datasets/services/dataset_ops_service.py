@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.datasets.services import dataset_ops_engine as engine
+from backend.datasets.services.rosbag_dataset_sync import load_sync_selected_episodes
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class DatasetOpsService:
             "completed_at": None,
             "error": None,
             "result_path": None,
+            "summary": None,
         }
         self._jobs[job["id"]] = job
         return job
@@ -84,21 +86,24 @@ class DatasetOpsService:
         loop.run_in_executor(None, self._run_split, job_id, source, episode_ids, out_dir)
         return job_id
 
-    async def split_and_merge(
+    async def sync_good_episodes(
         self,
         source_path: str | Path,
         episode_ids: list[int],
-        target_path: str | Path,
-        target_name: str,
+        destination_path: str | Path,
     ) -> str:
-        """Queue a split-into-existing job. Returns the job ID."""
-        job = self._create_job("split_and_merge")
+        """Queue a good-only sync job. Returns the job ID."""
+        job = self._create_job("sync_good_episodes")
         job_id = job["id"]
 
         loop = asyncio.get_running_loop()
         loop.run_in_executor(
-            None, self._run_split_and_merge,
-            job_id, Path(source_path), episode_ids, Path(target_path), target_name,
+            None,
+            self._run_sync_good_episodes,
+            job_id,
+            Path(source_path),
+            episode_ids,
+            Path(destination_path),
         )
         return job_id
 
@@ -274,43 +279,35 @@ class DatasetOpsService:
             job["error"] = str(exc)
             logger.exception("Stamp-cycles job %s failed", job_id)
 
-    def _run_split_and_merge(
+    def _run_sync_good_episodes(
         self,
         job_id: str,
         source_path: Path,
         episode_ids: list[int],
-        target_path: Path,
-        target_name: str,
+        destination_path: Path,
     ) -> None:
         job = self._jobs[job_id]
         job["status"] = "running"
-        split_tmp: Path | None = None
 
         try:
-            import tempfile
-
-            split_tmp = Path(tempfile.mkdtemp(prefix="split-tmp-"))
-            engine.split_dataset(source_path, episode_ids, split_tmp)
-
-            self._run_with_backup(
-                target_path,
-                lambda src, dst: engine.merge_datasets([src, split_tmp], dst),
-            )
+            sync_selected_episodes = load_sync_selected_episodes()
+            result = sync_selected_episodes(source_path, episode_ids, destination_path)
 
             job["status"] = "complete"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
-            job["result_path"] = str(target_path)
-            logger.info("Split-and-merge job %s complete: %s", job_id, target_path)
+            job["result_path"] = result.destination_path
+            job["summary"] = {
+                "mode": result.mode,
+                "created": result.created,
+                "skipped_duplicates": result.skipped_duplicates,
+            }
+            logger.info("Sync-good-episodes job %s complete: %s", job_id, result.destination_path)
 
         except Exception as exc:
             job["status"] = "failed"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
             job["error"] = str(exc)
-            logger.exception("Split-and-merge job %s failed", job_id)
-
-        finally:
-            if split_tmp is not None and split_tmp.exists():
-                shutil.rmtree(split_tmp, ignore_errors=True)
+            logger.exception("Sync-good-episodes job %s failed", job_id)
 
 
 dataset_ops_service = DatasetOpsService()
