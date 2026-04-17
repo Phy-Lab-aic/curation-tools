@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -83,6 +83,9 @@ if _frontend_dist.is_dir():
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
         """Serve index.html for all non-API routes (SPA routing)."""
+        # Unknown /api/* routes must 404, not silently return the SPA shell
+        if full_path.startswith("api/") or full_path == "api":
+            raise HTTPException(status_code=404, detail="Not Found")
         file = _frontend_dist / full_path
         if file.is_file():
             return FileResponse(file)

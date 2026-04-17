@@ -71,8 +71,10 @@ export interface DatasetSummary {
 
 export type DatasetTab = 'overview' | 'curate' | 'fields'
 
+export type GradeFilter = 'all' | 'good' | 'normal' | 'bad' | 'ungraded'
+
 export interface CurateFilter {
-  grade?: string
+  grade?: GradeFilter
   lengthRange?: [number, number]
   tag?: string
 }

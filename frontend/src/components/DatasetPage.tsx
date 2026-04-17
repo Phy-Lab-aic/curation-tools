@@ -148,6 +148,7 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
     }
   }, [filter?.grade])
 
+
   const handleSaveEpisode = useCallback(
     async (
       index: number,
@@ -181,7 +182,7 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
   const requestGrade = useCallback(
     (grade: 'good' | 'normal' | 'bad') => {
       if (!selectedEpisode) return
-      if (grade === 'good') {
+        if (grade === 'good') {
         // good clears any prior reason (server enforces this too)
         void handleSaveEpisode(selectedEpisode.episode_index, grade, selectedEpisode.tags, null)
         return
