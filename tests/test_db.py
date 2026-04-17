@@ -41,7 +41,7 @@ class TestInitDb:
         db = await get_db()
         async with db.execute("PRAGMA user_version") as cursor:
             row = await cursor.fetchone()
-        assert row[0] == 2
+        assert row[0] == 3
 
     @pytest.mark.asyncio
     async def test_idempotent(self, tmp_db):
@@ -50,7 +50,7 @@ class TestInitDb:
         db = await get_db()
         async with db.execute("PRAGMA user_version") as cursor:
             row = await cursor.fetchone()
-        assert row[0] == 2
+        assert row[0] == 3
 
 
 class TestGetDb:
@@ -83,7 +83,7 @@ class TestSchema:
         async with db.execute("PRAGMA table_info(datasets)") as cursor:
             rows = await cursor.fetchall()
         col_names = [r[1] for r in rows]
-        for col in ["id", "path", "name", "cell_name", "fps", "total_episodes", "robot_type", "features", "synced_at"]:
+        for col in ["id", "path", "name", "cell_name", "fps", "total_episodes", "robot_type", "features", "synced_at", "auto_graded_at"]:
             assert col in col_names
 
     @pytest.mark.asyncio
