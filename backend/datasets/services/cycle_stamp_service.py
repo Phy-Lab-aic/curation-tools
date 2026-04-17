@@ -53,18 +53,33 @@ def _data_parquet_files(dataset_root: Path) -> list[Path]:
     return [Path(path) for path in sorted(glob(pattern))]
 
 
+def _stamped_data_parquet_files(parquet_files: list[Path]) -> list[Path]:
+    """Return parquet files that already carry either cycle-stamp column."""
+    stamped_files: list[Path] = []
+    for parquet_path in parquet_files:
+        schema = pq.read_schema(parquet_path)
+        if _TERMINAL_COL in schema.names or _LAST_COL in schema.names:
+            stamped_files.append(parquet_path)
+    return stamped_files
+
+
 def describe_stamp_state(dataset_path: Path | str) -> dict:
-    """Probe the first parquet file to determine whether cycle stamps already exist."""
+    """Probe dataset parquet schemas to determine whether cycle stamps already exist."""
     dataset_root = Path(dataset_path)
     parquet_files = _data_parquet_files(dataset_root)
     if not parquet_files:
         return {"stamped": False, "is_terminal_count_sample": 0}
 
-    schema = pq.read_schema(parquet_files[0])
-    if _TERMINAL_COL not in schema.names:
+    stamped_files = _stamped_data_parquet_files(parquet_files)
+    if not stamped_files:
         return {"stamped": False, "is_terminal_count_sample": 0}
 
-    sample = pq.read_table(parquet_files[0], columns=[_TERMINAL_COL])
+    sample_path = stamped_files[0]
+    sample_schema = pq.read_schema(sample_path)
+    if _TERMINAL_COL not in sample_schema.names:
+        return {"stamped": True, "is_terminal_count_sample": 0}
+
+    sample = pq.read_table(sample_path, columns=[_TERMINAL_COL])
     count = sum(bool(value) for value in sample.column(_TERMINAL_COL).to_pylist())
     return {"stamped": True, "is_terminal_count_sample": count}
 
@@ -76,8 +91,8 @@ def stamp_dataset_cycles(dataset_path: Path | str, *, overwrite: bool) -> dict:
     if not parquet_files:
         raise FileNotFoundError(f"No data parquet files found under {dataset_root}")
 
-    stamp_state = describe_stamp_state(dataset_root)
-    if stamp_state["stamped"] and not overwrite:
+    stamped_files = _stamped_data_parquet_files(parquet_files)
+    if stamped_files and not overwrite:
         raise ValueError("already_stamped")
 
     file_episode_rows: dict[Path, list[int]] = {}

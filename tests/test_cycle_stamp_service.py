@@ -78,6 +78,16 @@ def _write_fake_dataset(root: Path, episodes: list[np.ndarray]) -> Path:
     return root
 
 
+def _add_stamp_column(parquet_path: Path, column_name: str, values: list[bool]) -> None:
+    """Inject a single stamp column into one parquet file for repair-path tests."""
+    table = pq.read_table(parquet_path)
+    col_idx = table.schema.get_field_index(column_name)
+    if col_idx >= 0:
+        table = table.remove_column(col_idx)
+    table = table.append_column(column_name, pa.array(values, type=pa.bool_()))
+    pq.write_table(table, parquet_path)
+
+
 class TestDetectCycleEnds:
     """Verify cycle-end detection across the two gripper traces."""
 
@@ -182,6 +192,20 @@ class TestStampDatasetCycles:
         with pytest.raises(ValueError, match="already_stamped"):
             stamp_dataset_cycles(dataset_root, overwrite=False)
 
+    def test_refuses_partial_prior_stamp_without_overwrite(self, tmp_path: Path):
+        dataset_root = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+                make_states([0.9, 0.9, 0.9, 0.9], [0.9] * 4),
+            ],
+        )
+        first_file = dataset_root / "data" / "chunk-000" / "file-000.parquet"
+        _add_stamp_column(first_file, "is_last", [False] * 7)
+
+        with pytest.raises(ValueError, match="already_stamped"):
+            stamp_dataset_cycles(dataset_root, overwrite=False)
+
     def test_overwrite_replaces_existing_columns(self, tmp_path: Path):
         dataset_root = _write_fake_dataset(
             tmp_path / "dataset",
@@ -217,6 +241,34 @@ class TestStampDatasetCycles:
         assert sum(combined.column("is_terminal").to_pylist()) == 1
         assert sum(combined.column("is_last").to_pylist()) == 2
 
+    def test_overwrite_repairs_partial_prior_stamp_and_keeps_files_readable(self, tmp_path: Path):
+        dataset_root = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+                make_states([0.9, 0.9, 0.9, 0.9], [0.9] * 4),
+            ],
+        )
+        first_file = dataset_root / "data" / "chunk-000" / "file-000.parquet"
+        _add_stamp_column(first_file, "is_last", [True] * 7)
+
+        result = stamp_dataset_cycles(dataset_root, overwrite=True)
+
+        assert result["episodes_processed"] == 2
+        assert result["is_terminal_count"] == 1
+        assert result["is_last_count"] == 2
+
+        tables = [
+            pq.read_table(path)
+            for path in sorted((dataset_root / "data" / "chunk-000").glob("file-*.parquet"))
+        ]
+        combined = pa.concat_tables(tables)
+        assert all("is_terminal" in table.schema.names for table in tables)
+        assert all("is_last" in table.schema.names for table in tables)
+        assert sum(combined.column("is_terminal").to_pylist()) == 1
+        assert sum(combined.column("is_last").to_pylist()) == 2
+        assert [idx for idx, value in enumerate(combined.column("is_last").to_pylist()) if value] == [5, 9]
+
     def test_describe_stamp_state(self, tmp_path: Path):
         dataset_root = _write_fake_dataset(
             tmp_path / "dataset",
@@ -234,3 +286,25 @@ class TestStampDatasetCycles:
         after = describe_stamp_state(dataset_root)
         assert after["stamped"] is True
         assert after["is_terminal_count_sample"] == 1
+
+    def test_marks_cycle_end_when_split_episode_reopens_in_second_file(self, tmp_path: Path):
+        dataset_root = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.9, 0.9, 0.9], [0.9] * 4),
+                make_states([0.9, 0.4, 0.3, 0.81, 0.9], [0.9] * 5),
+            ],
+        )
+
+        result = stamp_dataset_cycles(dataset_root, overwrite=False)
+
+        assert result["episodes_processed"] == 2
+        assert result["is_terminal_count"] == 1
+        second_file = pq.read_table(dataset_root / "data" / "chunk-000" / "file-001.parquet")
+        second_file_terminal = second_file.column("is_terminal").to_pylist()
+        second_file_last = second_file.column("is_last").to_pylist()
+        second_file_episode_index = second_file.column("episode_index").to_pylist()
+
+        assert second_file_episode_index == [1, 1, 1, 1]
+        assert second_file_terminal == [False, False, True, False]
+        assert second_file_last == [False, False, False, True]
