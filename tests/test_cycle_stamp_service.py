@@ -12,7 +12,7 @@ from backend.datasets.services.cycle_stamp_service import (
 def make_states(left_values, right_values):
     """Build a state array with only the gripper columns populated."""
     assert len(left_values) == len(right_values)
-    states = np.zeros((len(left_values), RIGHT_GRIPPER_IDX + 1), dtype=np.float32)
+    states = np.zeros((len(left_values), 16), dtype=np.float32)
     states[:, LEFT_GRIPPER_IDX] = left_values
     states[:, RIGHT_GRIPPER_IDX] = right_values
     return states
@@ -20,6 +20,10 @@ def make_states(left_values, right_values):
 
 class TestDetectCycleEnds:
     """Verify cycle-end detection across the two gripper traces."""
+
+    def test_locks_expected_gripper_indices(self):
+        assert LEFT_GRIPPER_IDX == 7
+        assert RIGHT_GRIPPER_IDX == 15
 
     def test_detects_two_cycles_from_left_gripper_only(self):
         states = make_states(
@@ -44,6 +48,14 @@ class TestDetectCycleEnds:
         )
 
         assert detect_cycle_ends(states) == [2, 4]
+
+    def test_deduplicates_reopenings_on_same_frame(self):
+        states = make_states(
+            [0.9, 0.2, 0.81, 0.9],
+            [0.9, 0.3, 0.81, 0.9],
+        )
+
+        assert detect_cycle_ends(states) == [2]
 
     def test_returns_empty_when_grippers_are_always_open(self):
         states = make_states([0.9, 0.95, 0.85], [0.82, 0.9, 0.99])

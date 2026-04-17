@@ -33,4 +33,4 @@ def detect_cycle_ends(states: np.ndarray) -> list[int]:
     """Detect and merge cycle-end frame indices from the left and right grippers."""
     left_cycle_ends = _detect_arm_cycle_ends(states[:, LEFT_GRIPPER_IDX])
     right_cycle_ends = _detect_arm_cycle_ends(states[:, RIGHT_GRIPPER_IDX])
-    return sorted(left_cycle_ends + right_cycle_ends)
+    return sorted(set(left_cycle_ends + right_cycle_ends))
