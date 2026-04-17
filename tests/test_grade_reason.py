@@ -242,3 +242,69 @@ class TestEpisodeServiceReason:
         pq_file = ds / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
         table = pq.read_table(pq_file)
         assert "reason" not in table.schema.names
+
+
+class TestRouter:
+    @pytest.mark.asyncio
+    async def test_patch_with_reason_persists(self, loaded_service):
+        from fastapi.testclient import TestClient
+
+        from backend.main import app
+        with TestClient(app) as client:
+            r = client.patch(
+                "/api/episodes/0",
+                json={"grade": "bad", "tags": [], "reason": "lighting bad"},
+            )
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert body["grade"] == "bad"
+            assert body["reason"] == "lighting bad"
+
+    @pytest.mark.asyncio
+    async def test_patch_bad_without_reason_rejected(self, loaded_service):
+        from fastapi.testclient import TestClient
+
+        from backend.main import app
+        with TestClient(app) as client:
+            r = client.patch("/api/episodes/0", json={"grade": "bad", "tags": []})
+            assert r.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_patch_good_clears_reason(self, loaded_service):
+        from fastapi.testclient import TestClient
+
+        from backend.main import app
+        with TestClient(app) as client:
+            r = client.patch("/api/episodes/0", json={"grade": "bad", "tags": [], "reason": "x"})
+            assert r.status_code == 200
+            r = client.patch("/api/episodes/0", json={"grade": "good", "tags": []})
+            assert r.status_code == 200
+            assert r.json()["reason"] is None
+
+    @pytest.mark.asyncio
+    async def test_bulk_grade_with_reason(self, loaded_service):
+        from fastapi.testclient import TestClient
+
+        from backend.main import app
+        with TestClient(app) as client:
+            r = client.post(
+                "/api/episodes/bulk-grade",
+                json={"episode_indices": [0, 1], "grade": "bad", "reason": "batch fail"},
+            )
+            assert r.status_code == 200
+            assert r.json()["updated"] == 2
+            # Confirm via GET
+            r = client.get("/api/episodes/0")
+            assert r.json()["reason"] == "batch fail"
+
+    @pytest.mark.asyncio
+    async def test_bulk_grade_bad_without_reason_rejected(self, loaded_service):
+        from fastapi.testclient import TestClient
+
+        from backend.main import app
+        with TestClient(app) as client:
+            r = client.post(
+                "/api/episodes/bulk-grade",
+                json={"episode_indices": [0, 1], "grade": "bad"},
+            )
+            assert r.status_code == 422
