@@ -104,6 +104,8 @@ export function ConverterProgress({
     && containerState !== 'building'
     && starting === null
 
+  const canValidate = canStart
+
   return (
     <div className="cvp-root">
       <div className="cvp-hero">
@@ -139,6 +141,7 @@ export function ConverterProgress({
           const pct = t.total > 0 ? Math.round((t.done / t.total) * 100) : 0
           const hasPending = t.pending > 0
           const disabled = !canStart || !hasPending
+          const validateDisabled = !canValidate
           const isStartingThis = starting === t.cell_task
           const quick = t.validation.quick
           const full = t.validation.full
@@ -185,7 +188,7 @@ export function ConverterProgress({
                   <button
                     type="button"
                     className="btn-secondary cvp-card-validate"
-                    disabled={disabled || isQuickRunning}
+                    disabled={validateDisabled || isQuickRunning}
                     onClick={() => runValidation(t.cell_task, 'quick')}
                   >
                     {isQuickRunning ? 'Checking...' : 'Quick Check'}
@@ -203,7 +206,7 @@ export function ConverterProgress({
                   <button
                     type="button"
                     className="btn-secondary cvp-card-validate"
-                    disabled={disabled || isFullRunning}
+                    disabled={validateDisabled || isFullRunning}
                     onClick={() => runValidation(t.cell_task, 'full')}
                   >
                     {isFullRunning ? 'Checking...' : 'Full Check'}
