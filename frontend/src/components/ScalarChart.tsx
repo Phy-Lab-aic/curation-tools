@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef, memo } from 'react'
 import client from '../api/client'
+import { useThemeVersion } from '../hooks/useThemeVersion'
 
 interface ScalarData {
   episode_index: number
@@ -16,23 +17,114 @@ interface ScalarChartProps {
   onTerminalFrames?: (frames: number[], timestamps: number[]) => void
 }
 
-function getChartColors(): string[] {
-  const s = getComputedStyle(document.documentElement)
-  const base = [
-    s.getPropertyValue('--chart-1'), s.getPropertyValue('--chart-2'),
-    s.getPropertyValue('--chart-3'), s.getPropertyValue('--chart-4'),
-    s.getPropertyValue('--chart-5'), s.getPropertyValue('--chart-6'),
-  ].map(c => c.trim()).filter(Boolean)
-  if (base.length >= 6) return base
-  return ['#5794f2','#73bf69','#fade2a','#f08080','#b877d9','#ff9830']
+type BandLevel = 'moderate' | 'severe'
+
+interface RatioBand {
+  start: number  // inclusive frame index
+  end: number    // inclusive frame index
+  level: BandLevel
 }
 
-const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, collapsed }: {
+// Tuned against labelled good/normal/bad episodes:
+// - >0.30 for a sustained stretch distinguishes bad-grade joints (e.g. joint[13])
+//   from good-grade noise; good episodes stay at 0% above this ratio.
+// - 0.15–0.30 flags "worth inspecting" without over-firing on fast-motion lag.
+// - MIN_SEVERE_RUN filters single-frame gripper transitions (action 0→1 step vs
+//   physical gripper lag) which spike >0.30 but aren't a data-quality concern.
+const MODERATE_RATIO = 0.15
+const SEVERE_RATIO = 0.30
+const MIN_SEVERE_RUN = 5
+
+function classify(ratio: number): BandLevel | null {
+  if (ratio > SEVERE_RATIO) return 'severe'
+  if (ratio > MODERATE_RATIO) return 'moderate'
+  return null
+}
+
+function rangeOf(series: number[]): number {
+  if (series.length === 0) return 0
+  let min = series[0]
+  let max = series[0]
+  for (let i = 1; i < series.length; i++) {
+    const v = series[i]
+    if (v < min) min = v
+    if (v > max) max = v
+  }
+  return max - min
+}
+
+/**
+ * Pairwise obs/action divergence bands for a single joint.
+ * Returns merged runs of consecutive frames at the same band level.
+ * Returns [] if either input is empty or combined range is 0.
+ */
+function computeBands(obs: number[], act: number[]): RatioBand[] {
+  const len = Math.min(obs.length, act.length)
+  if (len === 0) return []
+  const range = Math.max(rangeOf(obs), rangeOf(act))
+  if (range === 0) return []
+
+  const bands: RatioBand[] = []
+  let curLevel: BandLevel | null = null
+  let curStart = 0
+
+  for (let i = 0; i < len; i++) {
+    const ratio = Math.abs(act[i] - obs[i]) / range
+    const level = classify(ratio)
+    if (level !== curLevel) {
+      if (curLevel !== null) {
+        bands.push({ start: curStart, end: i - 1, level: curLevel })
+      }
+      curLevel = level
+      curStart = i
+    }
+  }
+  if (curLevel !== null) {
+    bands.push({ start: curStart, end: len - 1, level: curLevel })
+  }
+
+  // Downgrade short severe runs to moderate so transient gripper spikes
+  // don't read as "data-quality problem". Then re-merge adjacent same-level runs.
+  for (const b of bands) {
+    if (b.level === 'severe' && b.end - b.start + 1 < MIN_SEVERE_RUN) {
+      b.level = 'moderate'
+    }
+  }
+  const merged: RatioBand[] = []
+  for (const b of bands) {
+    const last = merged[merged.length - 1]
+    if (last && last.level === b.level && last.end + 1 === b.start) {
+      last.end = b.end
+    } else {
+      merged.push({ ...b })
+    }
+  }
+  return merged
+}
+
+/**
+ * Reduce an observation/action key to its pair-matching identifier.
+ * Handles two forms produced by /api/scalars/:idx:
+ *   observation.state[0] <-> action[0]       → "[0]"
+ *   observation.state.joint1 <-> action.joint1 → "joint1"
+ */
+function unifyKey(key: string): string {
+  const idxMatch = /\[(\d+)\]$/.exec(key)
+  if (idxMatch) return idxMatch[0]
+  return key
+    .replace(/^observation\.state\.?/, '')
+    .replace(/^observation\./, '')
+    .replace(/^action\.?/, '')
+}
+
+const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, collapsed, themeVersion, bands }: {
   label: string
   series: number[]
   color: string
   currentFrame: number
   collapsed: boolean
+  themeVersion: number
+  bands?: RatioBand[]
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -58,13 +150,44 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
       const max = Math.max(...series)
       const range = max - min || 1
 
-      // Background
       const cs = getComputedStyle(document.documentElement)
-      ctx.fillStyle = cs.getPropertyValue('--bg-deep').trim() || '#0f0f0f'
+      const bg = cs.getPropertyValue('--bg-deep').trim()
+      const gridColor = cs.getPropertyValue('--border').trim()
+      const cursorColor = cs.getPropertyValue('--text').trim()
+      const resolvedColor = (() => {
+        const m = /^var\((--[\w-]+)\)$/.exec(color.trim())
+        if (!m) return color
+        const v = cs.getPropertyValue(m[1]).trim()
+        return v || color
+      })()
+
+      // Background
+      ctx.fillStyle = bg
       ctx.fillRect(0, 0, w, h)
 
+      // Divergence bands (paint moderate first so severe overlaps win)
+      if (bands && bands.length > 0 && series.length > 1) {
+        const denomBand = Math.max(series.length - 1, 1)
+        const moderateFill = cs.getPropertyValue('--c-yellow').trim()
+        const severeFill = cs.getPropertyValue('--c-red').trim()
+        ctx.save()
+        ctx.globalAlpha = 0.28
+        for (const level of ['moderate', 'severe'] as const) {
+          const fill = level === 'moderate' ? moderateFill : severeFill
+          if (!fill) continue
+          ctx.fillStyle = fill
+          for (const b of bands) {
+            if (b.level !== level) continue
+            const x0 = (b.start / denomBand) * w
+            const x1 = ((b.end + 1) / denomBand) * w
+            ctx.fillRect(x0, 0, Math.max(x1 - x0, 1), h)
+          }
+        }
+        ctx.restore()
+      }
+
       // Grid lines
-      ctx.strokeStyle = cs.getPropertyValue('--border').trim() || '#1e1e1e'
+      ctx.strokeStyle = gridColor
       ctx.lineWidth = 1
       for (let i = 0; i < 4; i++) {
         const y = (h / 4) * i
@@ -75,11 +198,12 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
       }
 
       // Data line
-      ctx.strokeStyle = color
+      ctx.strokeStyle = resolvedColor
       ctx.lineWidth = 1.5
       ctx.beginPath()
+      const denom = Math.max(series.length - 1, 1)
       for (let i = 0; i < series.length; i++) {
-        const x = (i / (series.length - 1)) * w
+        const x = (i / denom) * w
         const y = h - ((series[i] - min) / range) * (h - 4) - 2
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
@@ -88,8 +212,8 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
 
       // Current frame indicator
       if (currentFrame >= 0 && currentFrame < series.length) {
-        const x = (currentFrame / (series.length - 1)) * w
-        ctx.strokeStyle = '#fff'
+        const x = (currentFrame / denom) * w
+        ctx.strokeStyle = cursorColor
         ctx.lineWidth = 1
         ctx.setLineDash([2, 2])
         ctx.beginPath()
@@ -98,9 +222,8 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
         ctx.stroke()
         ctx.setLineDash([])
 
-        // Value dot
         const y = h - ((series[currentFrame] - min) / range) * (h - 4) - 2
-        ctx.fillStyle = color
+        ctx.fillStyle = resolvedColor
         ctx.beginPath()
         ctx.arc(x, y, 3, 0, Math.PI * 2)
         ctx.fill()
@@ -111,7 +234,7 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [series, color, currentFrame, collapsed])
+  }, [series, color, currentFrame, collapsed, themeVersion, bands])
 
   const currentVal = currentFrame >= 0 && currentFrame < series.length
     ? series[currentFrame].toFixed(3)
@@ -139,7 +262,7 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
   const [error, setError] = useState<string | null>(null)
   const [obsCollapsed, setObsCollapsed] = useState(false)
   const [actCollapsed, setActCollapsed] = useState(false)
-  const COLORS = useMemo(getChartColors, [])
+  const themeVersion = useThemeVersion()
 
   useEffect(() => {
     if (episodeIndex === null) {
@@ -162,6 +285,21 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
       })
       .finally(() => setLoading(false))
   }, [episodeIndex]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const bandsByName = useMemo(() => {
+    const map = new Map<string, RatioBand[]>()
+    if (!data) return map
+    const actByName = new Map<string, number[]>()
+    for (const k of Object.keys(data.actions)) actByName.set(unifyKey(k), data.actions[k])
+    for (const k of Object.keys(data.observations)) {
+      const name = unifyKey(k)
+      const act = actByName.get(name)
+      if (!act) continue
+      const bands = computeBands(data.observations[k], act)
+      if (bands.length > 0) map.set(name, bands)
+    }
+    return map
+  }, [data])
 
   if (episodeIndex === null) return null
 
@@ -210,16 +348,21 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
               </span>
               <span style={chartStyles.sectionCount}>{obsKeys.length}</span>
             </div>
-            {obsKeys.map((key, i) => (
-              <MiniChart
-                key={key}
-                label={key.replace('observation.', '').replace('state.', '')}
-                series={data.observations[key]}
-                color={COLORS[i % COLORS.length]}
-                currentFrame={currentFrame}
-                collapsed={obsCollapsed}
-              />
-            ))}
+            {obsKeys.map(key => {
+              const name = key.replace('observation.', '').replace('state.', '')
+              return (
+                <MiniChart
+                  key={key}
+                  label={name}
+                  series={data.observations[key]}
+                  color="var(--c-blue)"
+                  currentFrame={currentFrame}
+                  collapsed={obsCollapsed}
+                  themeVersion={themeVersion}
+                  bands={bandsByName.get(unifyKey(key))}
+                />
+              )
+            })}
           </div>
         )}
 
@@ -242,16 +385,21 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
               </span>
               <span style={chartStyles.sectionCount}>{actKeys.length}</span>
             </div>
-            {actKeys.map((key, i) => (
-              <MiniChart
-                key={key}
-                label={key.replace('action.', '')}
-                series={data.actions[key]}
-                color={COLORS[(i + 5) % COLORS.length]}
-                currentFrame={currentFrame}
-                collapsed={actCollapsed}
-              />
-            ))}
+            {actKeys.map(key => {
+              const name = key.replace('action.', '')
+              return (
+                <MiniChart
+                  key={key}
+                  label={name}
+                  series={data.actions[key]}
+                  color="var(--accent)"
+                  currentFrame={currentFrame}
+                  collapsed={actCollapsed}
+                  themeVersion={themeVersion}
+                  bands={bandsByName.get(unifyKey(key))}
+                />
+              )
+            })}
           </div>
         )}
       </div>
@@ -273,7 +421,7 @@ const chartStyles: Record<string, React.CSSProperties> = {
   },
   sectionTitle: { fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.06em', color: 'var(--text-muted)' as string, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
   sectionCount: { fontSize: '11px', color: 'var(--text-dim)' as string, fontFamily: 'var(--font-mono)' },
-  chartItem: { padding: '3px 10px', borderBottom: '1px solid #1a1a1a', minWidth: 0 },
+  chartItem: { padding: '3px 10px', borderBottom: '1px solid var(--border)', minWidth: 0 },
   chartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px', gap: '6px' },
   chartLabel: { fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, minWidth: 0 },
   chartValue: { fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' as string, flexShrink: 0 },

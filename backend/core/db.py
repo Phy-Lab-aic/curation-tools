@@ -55,6 +55,11 @@ SCHEMA_V2 = """
 ALTER TABLE episode_annotations ADD COLUMN reason TEXT;
 """
 
+SCHEMA_V3 = """
+ALTER TABLE datasets ADD COLUMN auto_graded_at TEXT;
+UPDATE datasets SET auto_graded_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE auto_graded_at IS NULL;
+"""
+
 
 def _get_db_path() -> Path:
     if _db_path_override:
@@ -94,6 +99,11 @@ async def init_db() -> None:
         await db.execute("PRAGMA user_version = 2")
         await db.commit()
         logger.info("Database upgraded to v2 (reason column) at %s", _get_db_path())
+    if version < 3:
+        await db.executescript(SCHEMA_V3)
+        await db.execute("PRAGMA user_version = 3")
+        await db.commit()
+        logger.info("Database upgraded to v3 (auto_graded_at column) at %s", _get_db_path())
 
 
 async def close_db() -> None:
