@@ -1,11 +1,19 @@
-"""Tests for pure gripper cycle-boundary detection."""
+"""Tests for pure gripper cycle-boundary detection and dataset stamping."""
+
+import json
+from pathlib import Path
 
 import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
+import pytest
 
 from backend.datasets.services.cycle_stamp_service import (
     LEFT_GRIPPER_IDX,
     RIGHT_GRIPPER_IDX,
+    describe_stamp_state,
     detect_cycle_ends,
+    stamp_dataset_cycles,
 )
 
 
@@ -16,6 +24,58 @@ def make_states(left_values, right_values):
     states[:, LEFT_GRIPPER_IDX] = left_values
     states[:, RIGHT_GRIPPER_IDX] = right_values
     return states
+
+
+def _write_fake_dataset(root: Path, episodes: list[np.ndarray]) -> Path:
+    """Create a minimal LeRobot-style dataset split across two parquet files."""
+    meta_dir = root / "meta"
+    data_dir = root / "data" / "chunk-000"
+    meta_dir.mkdir(parents=True)
+    data_dir.mkdir(parents=True)
+
+    total_frames = sum(len(episode) for episode in episodes)
+    info = {
+        "codebase_version": "v3.0",
+        "robot_type": "test_robot",
+        "total_episodes": len(episodes),
+        "total_frames": total_frames,
+        "chunks_size": 1000,
+        "data_path": "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet",
+        "features": {
+            "observation.state": {"dtype": "float32", "shape": [16], "names": None},
+            "episode_index": {"dtype": "int64", "shape": [1], "names": None},
+        },
+    }
+    (meta_dir / "info.json").write_text(json.dumps(info, indent=2))
+
+    rows: list[np.ndarray] = []
+    episode_indices: list[int] = []
+    for episode_index, episode in enumerate(episodes):
+        for row in episode:
+            rows.append(np.asarray(row, dtype=np.float32))
+            episode_indices.append(episode_index)
+
+    split_at = min(len(episodes[0]) + 1, total_frames - 1)
+    file_slices = [
+        (0, split_at),
+        (split_at, total_frames),
+    ]
+
+    for file_index, (start, stop) in enumerate(file_slices):
+        frame_rows = rows[start:stop]
+        flat_values = np.concatenate(frame_rows).astype(np.float32, copy=False)
+        table = pa.table(
+            {
+                "observation.state": pa.FixedSizeListArray.from_arrays(
+                    pa.array(flat_values.tolist(), type=pa.float32()),
+                    16,
+                ),
+                "episode_index": pa.array(episode_indices[start:stop], type=pa.int64()),
+            }
+        )
+        pq.write_table(table, data_dir / f"file-{file_index:03d}.parquet")
+
+    return root
 
 
 class TestDetectCycleEnds:
@@ -74,3 +134,103 @@ class TestDetectCycleEnds:
         )
 
         assert detect_cycle_ends(states) == []
+
+
+class TestStampDatasetCycles:
+    def test_adds_is_terminal_and_is_last(self, tmp_path: Path):
+        dataset_root = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+                make_states([0.9, 0.9, 0.9, 0.9], [0.9] * 4),
+            ],
+        )
+
+        result = stamp_dataset_cycles(dataset_root, overwrite=False)
+
+        assert result["episodes_processed"] == 2
+        assert result["is_terminal_count"] == 1
+        assert result["is_last_count"] == 2
+
+        tables = [
+            pq.read_table(dataset_root / "data" / "chunk-000" / "file-000.parquet"),
+            pq.read_table(dataset_root / "data" / "chunk-000" / "file-001.parquet"),
+        ]
+        for table in tables:
+            assert "is_terminal" in table.schema.names
+            assert "is_last" in table.schema.names
+
+        combined = pa.concat_tables(tables)
+        is_terminal = combined.column("is_terminal").to_pylist()
+        is_last = combined.column("is_last").to_pylist()
+
+        assert sum(is_terminal) == 1
+        assert sum(is_last) == 2
+        assert [idx for idx, value in enumerate(is_last) if value] == [5, 9]
+
+    def test_refuses_to_restamp_without_overwrite(self, tmp_path: Path):
+        dataset_root = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+                make_states([0.9, 0.9, 0.9, 0.9], [0.9] * 4),
+            ],
+        )
+
+        stamp_dataset_cycles(dataset_root, overwrite=False)
+
+        with pytest.raises(ValueError, match="already_stamped"):
+            stamp_dataset_cycles(dataset_root, overwrite=False)
+
+    def test_overwrite_replaces_existing_columns(self, tmp_path: Path):
+        dataset_root = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+                make_states([0.9, 0.9, 0.9, 0.9], [0.9] * 4),
+            ],
+        )
+
+        stamp_dataset_cycles(dataset_root, overwrite=False)
+
+        for parquet_path in sorted((dataset_root / "data" / "chunk-000").glob("file-*.parquet")):
+            table = pq.read_table(parquet_path)
+            for name in ("is_terminal", "is_last"):
+                col_idx = table.schema.get_field_index(name)
+                table = table.remove_column(col_idx)
+            table = table.append_column("is_terminal", pa.array([True] * len(table), type=pa.bool_()))
+            table = table.append_column("is_last", pa.array([True] * len(table), type=pa.bool_()))
+            pq.write_table(table, parquet_path)
+
+        result = stamp_dataset_cycles(dataset_root, overwrite=True)
+
+        assert result["episodes_processed"] == 2
+        assert result["is_terminal_count"] == 1
+        assert result["is_last_count"] == 2
+
+        combined = pa.concat_tables(
+            [
+                pq.read_table(path)
+                for path in sorted((dataset_root / "data" / "chunk-000").glob("file-*.parquet"))
+            ]
+        )
+        assert sum(combined.column("is_terminal").to_pylist()) == 1
+        assert sum(combined.column("is_last").to_pylist()) == 2
+
+    def test_describe_stamp_state(self, tmp_path: Path):
+        dataset_root = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+                make_states([0.9, 0.9, 0.9, 0.9], [0.9] * 4),
+            ],
+        )
+
+        before = describe_stamp_state(dataset_root)
+        assert before == {"stamped": False, "is_terminal_count_sample": 0}
+
+        stamp_dataset_cycles(dataset_root, overwrite=False)
+
+        after = describe_stamp_state(dataset_root)
+        assert after["stamped"] is True
+        assert after["is_terminal_count_sample"] == 1
