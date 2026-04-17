@@ -160,7 +160,7 @@ async def _ensure_migrated(dataset_id: int, dataset_path: Path) -> None:
         return
     for idx_str, ann in sidecar.items():
         await db.execute(
-            "INSERT OR IGNORE INTO episode_annotations (dataset_id, episode_index, grade, tags) VALUES (?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO episode_annotations (dataset_id, episode_index, grade, tags, reason) VALUES (?, ?, ?, ?, NULL)",
             (dataset_id, int(idx_str), ann.get("grade"), _json.dumps(ann.get("tags", []))),
         )
     await db.commit()
@@ -170,22 +170,36 @@ async def _ensure_migrated(dataset_id: int, dataset_path: Path) -> None:
 
 async def _load_annotations_from_db(dataset_id: int) -> dict[int, dict]:
     db = await get_db()
-    async with db.execute("SELECT episode_index, grade, tags FROM episode_annotations WHERE dataset_id = ?", (dataset_id,)) as cursor:
+    async with db.execute(
+        "SELECT episode_index, grade, tags, reason FROM episode_annotations WHERE dataset_id = ?",
+        (dataset_id,),
+    ) as cursor:
         rows = await cursor.fetchall()
     return {
-        row[0]: {"grade": row[1], "tags": _json.loads(row[2]) if row[2] else []}
+        row[0]: {
+            "grade": row[1],
+            "tags": _json.loads(row[2]) if row[2] else [],
+            "reason": row[3],
+        }
         for row in rows
     }
 
 
-async def _save_annotation_to_db(dataset_id: int, episode_index: int, grade: str | None, tags: list[str]) -> None:
+async def _save_annotation_to_db(
+    dataset_id: int,
+    episode_index: int,
+    grade: str | None,
+    tags: list[str],
+    reason: str | None,
+) -> None:
     db = await get_db()
     await db.execute(
-        """INSERT INTO episode_annotations (dataset_id, episode_index, grade, tags, updated_at)
-           VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        """INSERT INTO episode_annotations (dataset_id, episode_index, grade, tags, reason, updated_at)
+           VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
            ON CONFLICT(dataset_id, episode_index) DO UPDATE SET
-             grade=excluded.grade, tags=excluded.tags, updated_at=excluded.updated_at""",
-        (dataset_id, episode_index, grade, _json.dumps(tags)),
+             grade=excluded.grade, tags=excluded.tags, reason=excluded.reason,
+             updated_at=excluded.updated_at""",
+        (dataset_id, episode_index, grade, _json.dumps(tags), reason),
     )
     await db.commit()
 
@@ -288,6 +302,7 @@ class EpisodeService:
                 if ann:
                     ep["grade"] = ann.get("grade")
                     ep["tags"] = ann.get("tags", [])
+                    ep["reason"] = ann.get("reason")
                 episodes[ep["episode_index"]] = ep
 
         dataset_service.episodes_cache = episodes
@@ -322,6 +337,7 @@ class EpisodeService:
                 if ann:
                     ep["grade"] = ann.get("grade")
                     ep["tags"] = ann.get("tags", [])
+                    ep["reason"] = ann.get("reason")
                 return ep
 
         raise EpisodeNotFoundError(
@@ -333,80 +349,77 @@ class EpisodeService:
         episode_index: int,
         grade: str | None,
         tags: list[str],
+        reason: str | None = None,
     ) -> dict[str, Any]:
-        """Persist grade and tags to the SQLite DB."""
-        # Verify episode exists
+        """Persist grade, tags, and reason to the SQLite DB."""
         if dataset_service.episodes_cache is not None:
             if episode_index not in dataset_service.episodes_cache:
-                raise EpisodeNotFoundError(
-                    f"Episode {episode_index} not found."
-                )
+                raise EpisodeNotFoundError(f"Episode {episode_index} not found.")
         else:
             file_path = dataset_service.get_file_for_episode(episode_index)
             if file_path is None:
-                raise EpisodeNotFoundError(
-                    f"Episode {episode_index} not found."
-                )
+                raise EpisodeNotFoundError(f"Episode {episode_index} not found.")
+
+        # Reason is meaningless without bad/normal grade; null it out for good or unset.
+        effective_reason = reason if grade in ("bad", "normal") else None
 
         dataset_id = await _ensure_dataset_registered(dataset_service.dataset_path)
         await _ensure_migrated(dataset_id, dataset_service.dataset_path)
-        await _save_annotation_to_db(dataset_id, episode_index, grade, tags)
+        await _save_annotation_to_db(dataset_id, episode_index, grade, tags, effective_reason)
         await _refresh_dataset_stats(dataset_id)
 
-        # Write back to the original parquet file
+        # Parquet write does NOT include reason — by design.
         await _write_annotations_to_parquet({episode_index: (grade, tags)})
 
-        # Invalidate distribution cache for annotation fields
         dataset_service.distribution_cache.pop("grade:auto", None)
         dataset_service.distribution_cache.pop("grade:bar", None)
         dataset_service.distribution_cache.pop("tags:auto", None)
         dataset_service.distribution_cache.pop("tags:bar", None)
 
-        # Update cache
         if dataset_service.episodes_cache is not None:
             ep = dataset_service.episodes_cache.get(episode_index)
             if ep:
                 ep["grade"] = grade
                 ep["tags"] = tags
+                ep["reason"] = effective_reason
                 return ep
 
-        # Fallback: re-read the episode
         return await self.get_episode(episode_index)
 
     async def bulk_grade(
         self,
         episode_indices: list[int],
         grade: str,
+        reason: str | None = None,
     ) -> int:
-        """Set grade for multiple episodes at once. Returns count updated."""
+        """Set grade and reason for multiple episodes at once. Returns count updated."""
         dataset_id = await _ensure_dataset_registered(dataset_service.dataset_path)
         await _ensure_migrated(dataset_id, dataset_service.dataset_path)
 
-        # Preserve existing tags when only updating grade
+        effective_reason = reason if grade in ("bad", "normal") else None
+
         existing_annotations = await _load_annotations_from_db(dataset_id)
         parquet_updates: dict[int, tuple[str | None, list[str]]] = {}
         for idx in episode_indices:
             existing = existing_annotations.get(idx, {})
             tags = existing.get("tags", [])
-            await _save_annotation_to_db(dataset_id, idx, grade, tags)
+            await _save_annotation_to_db(dataset_id, idx, grade, tags, effective_reason)
             parquet_updates[idx] = (grade, tags)
         await _refresh_dataset_stats(dataset_id)
 
-        # Write back to parquet files
         await _write_annotations_to_parquet(parquet_updates)
 
-        # Invalidate distribution cache
         dataset_service.distribution_cache.pop("grade:auto", None)
         dataset_service.distribution_cache.pop("grade:bar", None)
         dataset_service.distribution_cache.pop("tags:auto", None)
         dataset_service.distribution_cache.pop("tags:bar", None)
 
-        # Update cache
         if dataset_service.episodes_cache is not None:
             for idx in episode_indices:
                 ep = dataset_service.episodes_cache.get(idx)
                 if ep:
                     ep["grade"] = grade
+                    ep["reason"] = effective_reason
 
         return len(episode_indices)
 

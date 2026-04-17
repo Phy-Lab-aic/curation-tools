@@ -141,3 +141,104 @@ class TestSchemas:
     def test_bulk_grade_good_does_not_require_reason(self):
         from backend.datasets.schemas import BulkGradeRequest
         BulkGradeRequest(episode_indices=[0], grade="good")
+
+
+import json as _json
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+
+def _create_mock_dataset(root: Path) -> Path:
+    ds = root / "mock_ds"
+    (ds / "meta" / "episodes" / "chunk-000").mkdir(parents=True, exist_ok=True)
+    (ds / "data" / "chunk-000").mkdir(parents=True, exist_ok=True)
+    (ds / "meta" / "info.json").write_text(_json.dumps({
+        "fps": 30, "total_episodes": 3, "total_tasks": 1,
+        "robot_type": "test_robot", "features": {},
+    }))
+    pq.write_table(
+        pa.table({
+            "task_index": pa.array([0], type=pa.int64()),
+            "task": pa.array(["test"], type=pa.string()),
+        }),
+        ds / "meta" / "tasks.parquet",
+    )
+    pq.write_table(
+        pa.table({
+            "episode_index": pa.array([0, 1, 2], type=pa.int64()),
+            "task_index": pa.array([0, 0, 0], type=pa.int64()),
+            "data/chunk_index": pa.array([0, 0, 0], type=pa.int64()),
+            "data/file_index": pa.array([0, 0, 0], type=pa.int64()),
+            "dataset_from_index": pa.array([0, 100, 200], type=pa.int64()),
+            "dataset_to_index": pa.array([100, 200, 300], type=pa.int64()),
+        }),
+        ds / "meta" / "episodes" / "chunk-000" / "file-000.parquet",
+    )
+    pq.write_table(
+        pa.table({
+            "episode_index": pa.array([0, 1, 2], type=pa.int64()),
+            "timestamp": pa.array([0.0, 0.0, 0.0], type=pa.float32()),
+        }),
+        ds / "data" / "chunk-000" / "file-000.parquet",
+    )
+    return ds
+
+
+@pytest_asyncio.fixture
+async def loaded_service(tmp_db, tmp_path):
+    """Create a fresh EpisodeService pointing at a mock dataset."""
+    from backend.core.config import settings
+    from backend.datasets.services.dataset_service import DatasetService
+    from backend.datasets.services.episode_service import EpisodeService
+
+    await init_db()
+
+    ds_path = _create_mock_dataset(tmp_path)
+    original_roots = settings.allowed_dataset_roots
+    if str(ds_path.parent) not in original_roots:
+        settings.allowed_dataset_roots = original_roots + [str(ds_path.parent)]
+
+    # Replace module-level singletons
+    import backend.datasets.services.dataset_service as ds_mod
+    import backend.datasets.services.episode_service as ep_mod
+    ds_mod.dataset_service = DatasetService()
+    ds_mod.dataset_service.load_dataset(str(ds_path))
+    ep_mod.dataset_service = ds_mod.dataset_service
+    ep_mod.episode_service = EpisodeService()
+    yield ep_mod.episode_service
+    settings.allowed_dataset_roots = original_roots
+
+
+class TestEpisodeServiceReason:
+    @pytest.mark.asyncio
+    async def test_update_persists_reason(self, loaded_service):
+        await loaded_service.update_episode(0, "bad", [], reason="motor jitter")
+        ep = await loaded_service.get_episode(0)
+        assert ep["grade"] == "bad"
+        assert ep["reason"] == "motor jitter"
+
+    @pytest.mark.asyncio
+    async def test_switch_to_good_clears_reason(self, loaded_service):
+        await loaded_service.update_episode(0, "bad", [], reason="too dark")
+        await loaded_service.update_episode(0, "good", [], reason=None)
+        ep = await loaded_service.get_episode(0)
+        assert ep["grade"] == "good"
+        assert ep["reason"] is None
+
+    @pytest.mark.asyncio
+    async def test_bulk_grade_applies_same_reason(self, loaded_service):
+        await loaded_service.bulk_grade([0, 1, 2], "bad", reason="bad batch")
+        for idx in (0, 1, 2):
+            ep = await loaded_service.get_episode(idx)
+            assert ep["grade"] == "bad"
+            assert ep["reason"] == "bad batch"
+
+    @pytest.mark.asyncio
+    async def test_parquet_does_not_get_reason_column(self, loaded_service, tmp_path):
+        await loaded_service.update_episode(0, "bad", [], reason="should-not-appear")
+        # Read the parquet directly
+        ds = next(tmp_path.glob("mock_ds"))
+        pq_file = ds / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+        table = pq.read_table(pq_file)
+        assert "reason" not in table.schema.names
