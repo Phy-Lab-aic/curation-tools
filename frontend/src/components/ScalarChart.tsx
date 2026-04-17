@@ -25,8 +25,15 @@ interface RatioBand {
   level: BandLevel
 }
 
-const MODERATE_RATIO = 0.05
-const SEVERE_RATIO = 0.15
+// Tuned against labelled good/normal/bad episodes:
+// - >0.30 for a sustained stretch distinguishes bad-grade joints (e.g. joint[13])
+//   from good-grade noise; good episodes stay at 0% above this ratio.
+// - 0.15–0.30 flags "worth inspecting" without over-firing on fast-motion lag.
+// - MIN_SEVERE_RUN filters single-frame gripper transitions (action 0→1 step vs
+//   physical gripper lag) which spike >0.30 but aren't a data-quality concern.
+const MODERATE_RATIO = 0.15
+const SEVERE_RATIO = 0.30
+const MIN_SEVERE_RUN = 5
 
 function classify(ratio: number): BandLevel | null {
   if (ratio > SEVERE_RATIO) return 'severe'
@@ -75,7 +82,24 @@ function computeBands(obs: number[], act: number[]): RatioBand[] {
   if (curLevel !== null) {
     bands.push({ start: curStart, end: len - 1, level: curLevel })
   }
-  return bands
+
+  // Downgrade short severe runs to moderate so transient gripper spikes
+  // don't read as "data-quality problem". Then re-merge adjacent same-level runs.
+  for (const b of bands) {
+    if (b.level === 'severe' && b.end - b.start + 1 < MIN_SEVERE_RUN) {
+      b.level = 'moderate'
+    }
+  }
+  const merged: RatioBand[] = []
+  for (const b of bands) {
+    const last = merged[merged.length - 1]
+    if (last && last.level === b.level && last.end + 1 === b.start) {
+      last.end = b.end
+    } else {
+      merged.push({ ...b })
+    }
+  }
+  return merged
 }
 
 /**
