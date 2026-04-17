@@ -9,7 +9,12 @@ interface UseEpisodesReturn {
   error: string | null
   fetchEpisodes: () => Promise<void>
   selectEpisode: (index: number) => void
-  updateEpisode: (index: number, grade: string | null, tags: string[]) => Promise<void>
+  updateEpisode: (
+    index: number,
+    grade: string | null,
+    tags: string[],
+    reason?: string | null,
+  ) => Promise<void>
 }
 
 export function useEpisodes(): UseEpisodesReturn {
@@ -40,13 +45,16 @@ export function useEpisodes(): UseEpisodesReturn {
     })
   }, [])
 
-  const updateEpisode = useCallback(async (index: number, grade: string | null, tags: string[]) => {
-    const update: EpisodeUpdate = { grade, tags }
-    const response = await client.patch<Episode>(`/episodes/${index}`, update)
-    const updated = response.data
-    setEpisodes(prev => prev.map(e => e.episode_index === index ? updated : e))
-    setSelectedEpisode(prev => prev?.episode_index === index ? updated : prev)
-  }, [])
+  const updateEpisode = useCallback(
+    async (index: number, grade: string | null, tags: string[], reason: string | null = null) => {
+      const update: EpisodeUpdate = { grade, tags, reason }
+      const response = await client.patch<Episode>(`/episodes/${index}`, update)
+      const updated = response.data
+      setEpisodes(prev => prev.map(e => e.episode_index === index ? updated : e))
+      setSelectedEpisode(prev => prev?.episode_index === index ? updated : prev)
+    },
+    [],
+  )
 
   return { episodes, selectedEpisode, loading, error, fetchEpisodes, selectEpisode, updateEpisode }
 }
