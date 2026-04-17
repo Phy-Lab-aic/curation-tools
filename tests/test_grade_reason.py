@@ -81,3 +81,63 @@ class TestMigrationV2:
             row = await cursor.fetchone()
         assert row[0] == "bad"
         assert row[1] is None
+
+
+class TestSchemas:
+    def test_episode_response_includes_reason(self):
+        from backend.datasets.schemas import Episode
+        ep = Episode(
+            episode_index=0, length=100, task_index=0,
+            dataset_from_index=0, dataset_to_index=100,
+            grade="bad", reason="camera shake",
+        )
+        assert ep.reason == "camera shake"
+        assert ep.model_dump()["reason"] == "camera shake"
+
+    def test_episode_response_default_reason_is_none(self):
+        from backend.datasets.schemas import Episode
+        ep = Episode(episode_index=0, length=0, task_index=0)
+        assert ep.reason is None
+
+    def test_update_requires_reason_for_bad(self):
+        from pydantic import ValidationError
+
+        from backend.datasets.schemas import EpisodeUpdate
+        with pytest.raises(ValidationError):
+            EpisodeUpdate(grade="bad", tags=[])
+        with pytest.raises(ValidationError):
+            EpisodeUpdate(grade="bad", tags=[], reason="   ")
+        # Non-empty reason is fine
+        EpisodeUpdate(grade="bad", tags=[], reason="too dark")
+
+    def test_update_requires_reason_for_normal(self):
+        from pydantic import ValidationError
+
+        from backend.datasets.schemas import EpisodeUpdate
+        with pytest.raises(ValidationError):
+            EpisodeUpdate(grade="normal", tags=[])
+        EpisodeUpdate(grade="normal", tags=[], reason="acceptable but slow")
+
+    def test_update_good_does_not_require_reason(self):
+        from backend.datasets.schemas import EpisodeUpdate
+        u = EpisodeUpdate(grade="good", tags=[])
+        assert u.reason is None
+
+    def test_update_good_clears_reason_when_provided(self):
+        # Reason supplied with grade=good should be allowed but ignored downstream;
+        # at the schema level we accept it (service layer will null it out).
+        from backend.datasets.schemas import EpisodeUpdate
+        u = EpisodeUpdate(grade="good", tags=[], reason="ignored")
+        assert u.grade == "good"
+
+    def test_bulk_grade_requires_reason_for_bad(self):
+        from pydantic import ValidationError
+
+        from backend.datasets.schemas import BulkGradeRequest
+        with pytest.raises(ValidationError):
+            BulkGradeRequest(episode_indices=[0, 1], grade="bad")
+        BulkGradeRequest(episode_indices=[0, 1], grade="bad", reason="bad batch")
+
+    def test_bulk_grade_good_does_not_require_reason(self):
+        from backend.datasets.schemas import BulkGradeRequest
+        BulkGradeRequest(episode_indices=[0], grade="good")

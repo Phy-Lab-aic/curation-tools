@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class DatasetInfo(BaseModel):
@@ -22,6 +22,7 @@ class Episode(BaseModel):
     dataset_to_index: int = 0
     grade: str | None = None
     tags: list[str] = []
+    reason: str | None = None
     created_at: str | None = None
 
 
@@ -33,6 +34,7 @@ class Task(BaseModel):
 class EpisodeUpdate(BaseModel):
     grade: str | None = None
     tags: list[str] | None = None
+    reason: str | None = None
 
     @field_validator("grade")
     @classmethod
@@ -48,10 +50,18 @@ class EpisodeUpdate(BaseModel):
             v = [t.strip() for t in v if t.strip()]
         return v
 
+    @model_validator(mode="after")
+    def _reason_required_for_bad_or_normal(self):
+        if self.grade in ("bad", "normal"):
+            if self.reason is None or not self.reason.strip():
+                raise ValueError("reason is required when grade is 'bad' or 'normal'")
+        return self
+
 
 class BulkGradeRequest(BaseModel):
     episode_indices: list[int]
     grade: str
+    reason: str | None = None
 
     @field_validator("grade")
     @classmethod
@@ -59,6 +69,13 @@ class BulkGradeRequest(BaseModel):
         if v not in ("good", "normal", "bad"):
             raise ValueError("Grade must be one of: good, normal, bad")
         return v
+
+    @model_validator(mode="after")
+    def _reason_required_for_bad_or_normal(self):
+        if self.grade in ("bad", "normal"):
+            if self.reason is None or not self.reason.strip():
+                raise ValueError("reason is required when grade is 'bad' or 'normal'")
+        return self
 
 
 class TaskUpdate(BaseModel):
