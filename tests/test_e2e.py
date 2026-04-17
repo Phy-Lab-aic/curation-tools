@@ -138,6 +138,71 @@ def _mock_dataset_load_success(page: Page):
     page.route("**/api/**", handler)
 
 
+def _mock_converter_validation(page: Page):
+    calls: list[tuple[str, str]] = []
+
+    def handler(route):
+        url = route.request.url
+        method = route.request.method
+
+        if url.endswith("/api/converter/status"):
+            _fulfill_json(route, {
+                "container_state": "stopped",
+                "docker_available": True,
+                "summary": "1 task | 5 recordings | 5 done | 0 pending | 0 failed",
+                "tasks": [
+                    {
+                        "cell_task": "cell001/task_a",
+                        "total": 5,
+                        "done": 5,
+                        "pending": 0,
+                        "failed": 0,
+                        "retry": 0,
+                        "validation": {
+                            "quick": {
+                                "status": "passed",
+                                "summary": "Quick passed: 5 episodes, 0 warnings",
+                                "checked_at": "2026-04-18T11:00:00+09:00",
+                            },
+                            "full": {
+                                "status": "partial",
+                                "summary": "Full partial: dataset OK, official loader skipped",
+                                "checked_at": "2026-04-18T11:03:00+09:00",
+                            },
+                        },
+                    }
+                ],
+            })
+            return
+
+        if url.endswith("/api/converter/validate/quick") and method == "POST":
+            calls.append(("POST", "quick"))
+            _fulfill_json(route, {
+                "status": "passed",
+                "summary": "Quick passed: 5 episodes, 0 warnings",
+                "checked_at": "2026-04-18T11:04:00+09:00",
+            })
+            return
+
+        if url.endswith("/api/converter/validate/full") and method == "POST":
+            calls.append(("POST", "full"))
+            _fulfill_json(route, {
+                "status": "partial",
+                "summary": "Full partial: dataset OK, official loader skipped",
+                "checked_at": "2026-04-18T11:05:00+09:00",
+            })
+            return
+
+        if url.endswith("/api/cells"):
+            _fulfill_json(route, [])
+            return
+
+        route.continue_()
+
+    page.route("**/api/**", handler)
+    return calls
+
+
 # ---------------------------------------------------------------------------
 # Page load
 # ---------------------------------------------------------------------------
@@ -227,3 +292,32 @@ class TestEpisodeInteraction:
         expect(page.get_by_text("#0", exact=True)).to_be_visible(timeout=5000)
         # Episodes should display frame counts
         expect(page.get_by_text("frames").first).to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# Converter validation card
+# ---------------------------------------------------------------------------
+
+class TestConverterValidation:
+    def test_converter_card_shows_validation_summary_and_buttons(self, page: Page):
+        _mock_converter_validation(page)
+
+        page.goto(BASE_URL)
+        page.get_by_title("Converter: stopped").click()
+
+        expect(page.get_by_text("Quick passed: 5 episodes, 0 warnings", exact=True)).to_be_visible()
+        expect(page.get_by_role("button", name="Quick Check")).to_be_visible()
+        expect(page.get_by_role("button", name="Full Check")).to_be_visible()
+        expect(page.get_by_text("passed", exact=True)).to_be_visible()
+        expect(page.get_by_text("partial", exact=True)).to_be_visible()
+
+    def test_converter_validation_buttons_post_to_api(self, page: Page):
+        calls = _mock_converter_validation(page)
+
+        page.goto(BASE_URL)
+        page.get_by_title("Converter: stopped").click()
+        page.get_by_role("button", name="Quick Check").click()
+        page.get_by_role("button", name="Full Check").click()
+
+        expect(page.get_by_text("Full partial: dataset OK, official loader skipped", exact=True)).to_be_visible(timeout=5000)
+        assert calls == [("POST", "quick"), ("POST", "full")]

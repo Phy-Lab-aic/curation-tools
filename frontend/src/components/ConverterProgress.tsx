@@ -1,14 +1,24 @@
 import { useState } from 'react'
 import type { ConverterState, ConverterTaskProgress } from '../types'
 
+type ValidationMode = 'quick' | 'full'
+
+const API = '/api/converter'
+
+const VALIDATION_STATUS_CLASS: Record<string, string> = {
+  not_run: 'cvp-val-not-run',
+  running: 'cvp-val-running',
+  passed: 'cvp-val-passed',
+  failed: 'cvp-val-failed',
+  partial: 'cvp-val-partial',
+}
+
 interface Props {
   tasks: ConverterTaskProgress[]
   containerState: ConverterState
   dockerAvailable: boolean
   onRefresh: () => void
 }
-
-const API = '/api/converter'
 
 function taskLabel(cell_task: string) {
   const parts = cell_task.split('/')
@@ -20,8 +30,14 @@ function taskCell(cell_task: string) {
   return parts[0] || ''
 }
 
-export function ConverterProgress({ tasks, containerState, dockerAvailable, onRefresh }: Props) {
+export function ConverterProgress({
+  tasks,
+  containerState,
+  dockerAvailable,
+  onRefresh,
+}: Props) {
   const [starting, setStarting] = useState<string | null>(null)
+  const [runningValidation, setRunningValidation] = useState<Set<string>>(new Set())
 
   const startTask = async (cell_task: string) => {
     setStarting(cell_task)
@@ -41,10 +57,35 @@ export function ConverterProgress({ tasks, containerState, dockerAvailable, onRe
     }
   }
 
+  const runValidation = async (cell_task: string, mode: ValidationMode) => {
+    const key = `${cell_task}:${mode}`
+    setRunningValidation(prev => {
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
+    try {
+      const res = await fetch(`${API}/validate/${mode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cell_task }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        console.error(`validate(${mode}) failed:`, body)
+      }
+      onRefresh()
+    } finally {
+      setRunningValidation(prev => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }
+  }
+
   if (tasks.length === 0) {
-    return (
-      <div className="cvp-empty">No conversion data</div>
-    )
+    return <div className="cvp-empty">No conversion data</div>
   }
 
   const totals = tasks.reduce(
@@ -63,9 +104,10 @@ export function ConverterProgress({ tasks, containerState, dockerAvailable, onRe
     && containerState !== 'building'
     && starting === null
 
+  const canValidate = canStart
+
   return (
     <div className="cvp-root">
-      {/* Hero */}
       <div className="cvp-hero">
         <div className="cvp-hero-left">
           <span className="cvp-pct">{overallPct}</span>
@@ -94,13 +136,18 @@ export function ConverterProgress({ tasks, containerState, dockerAvailable, onRe
         </div>
       </div>
 
-      {/* Task cards */}
       <div className="cvp-cards">
         {tasks.map(t => {
           const pct = t.total > 0 ? Math.round((t.done / t.total) * 100) : 0
           const hasPending = t.pending > 0
           const disabled = !canStart || !hasPending
+          const validateDisabled = !canValidate
           const isStartingThis = starting === t.cell_task
+          const quick = t.validation.quick
+          const full = t.validation.full
+          const isQuickRunning = runningValidation.has(`${t.cell_task}:quick`)
+          const isFullRunning = runningValidation.has(`${t.cell_task}:full`)
+
           return (
             <div key={t.cell_task} className="cvp-card">
               <div className="cvp-card-header">
@@ -127,6 +174,44 @@ export function ConverterProgress({ tasks, containerState, dockerAvailable, onRe
                 >
                   {isStartingThis ? 'Starting...' : 'Convert'}
                 </button>
+              </div>
+
+              <div className="cvp-card-validation-row">
+                <div className="cvp-card-validation">
+                  <div className="cvp-card-val-meta">
+                    <span className="cvp-card-val-title">Quick</span>
+                    <span className={`cvp-card-val-badge ${VALIDATION_STATUS_CLASS[quick.status] ?? 'cvp-val-not-run'}`}>
+                      {quick.status}
+                    </span>
+                  </div>
+                  <div className="cvp-card-val-summary">{quick.summary}</div>
+                  <button
+                    type="button"
+                    className="btn-secondary cvp-card-validate"
+                    disabled={validateDisabled || isQuickRunning}
+                    onClick={() => runValidation(t.cell_task, 'quick')}
+                  >
+                    {isQuickRunning ? 'Checking...' : 'Quick Check'}
+                  </button>
+                </div>
+
+                <div className="cvp-card-validation">
+                  <div className="cvp-card-val-meta">
+                    <span className="cvp-card-val-title">Full</span>
+                    <span className={`cvp-card-val-badge ${VALIDATION_STATUS_CLASS[full.status] ?? 'cvp-val-not-run'}`}>
+                      {full.status}
+                    </span>
+                  </div>
+                  <div className="cvp-card-val-summary">{full.summary}</div>
+                  <button
+                    type="button"
+                    className="btn-secondary cvp-card-validate"
+                    disabled={validateDisabled || isFullRunning}
+                    onClick={() => runValidation(t.cell_task, 'full')}
+                  >
+                    {isFullRunning ? 'Checking...' : 'Full Check'}
+                  </button>
+                </div>
               </div>
             </div>
           )

@@ -1298,6 +1298,78 @@ code, .mono { font-family: var(--font-mono); }
   line-height: 1.4;
 }
 
+.cvp-card-validation-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cvp-card-validation {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--panel3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cvp-card-val-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cvp-card-val-title {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cvp-card-val-summary {
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-word;
+  min-height: 1.2em;
+}
+
+.cvp-card-val-badge {
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+
+.cvp-card-validate {
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  align-self: flex-start;
+}
+
+.cvp-val-not-run { background: var(--text-faint); color: var(--text-dim); }
+.cvp-val-running {
+  background: var(--c-blue-dim);
+  color: var(--c-blue);
+}
+.cvp-val-passed {
+  background: var(--c-green-dim);
+  color: var(--c-green);
+}
+.cvp-val-failed {
+  background: var(--c-red-dim);
+  color: var(--c-red);
+}
+.cvp-val-partial {
+  background: var(--c-yellow-dim);
+  color: var(--c-yellow);
+}
+
 /* ── Activity panel (toggleable) ── */
 .cvl-wrapper {
   flex-shrink: 0;
