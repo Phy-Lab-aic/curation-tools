@@ -17,13 +17,83 @@ interface ScalarChartProps {
   onTerminalFrames?: (frames: number[], timestamps: number[]) => void
 }
 
-const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, collapsed, themeVersion }: {
+type BandLevel = 'moderate' | 'severe'
+
+interface RatioBand {
+  start: number  // inclusive frame index
+  end: number    // inclusive frame index
+  level: BandLevel
+}
+
+const MODERATE_RATIO = 0.05
+const SEVERE_RATIO = 0.15
+
+function classify(ratio: number): BandLevel | null {
+  if (ratio > SEVERE_RATIO) return 'severe'
+  if (ratio > MODERATE_RATIO) return 'moderate'
+  return null
+}
+
+function rangeOf(series: number[]): number {
+  if (series.length === 0) return 0
+  let min = series[0]
+  let max = series[0]
+  for (let i = 1; i < series.length; i++) {
+    const v = series[i]
+    if (v < min) min = v
+    if (v > max) max = v
+  }
+  return max - min
+}
+
+/**
+ * Pairwise obs/action divergence bands for a single joint.
+ * Returns merged runs of consecutive frames at the same band level.
+ * Returns [] if either input is empty or combined range is 0.
+ */
+function computeBands(obs: number[], act: number[]): RatioBand[] {
+  const len = Math.min(obs.length, act.length)
+  if (len === 0) return []
+  const range = Math.max(rangeOf(obs), rangeOf(act))
+  if (range === 0) return []
+
+  const bands: RatioBand[] = []
+  let curLevel: BandLevel | null = null
+  let curStart = 0
+
+  for (let i = 0; i < len; i++) {
+    const ratio = Math.abs(act[i] - obs[i]) / range
+    const level = classify(ratio)
+    if (level !== curLevel) {
+      if (curLevel !== null) {
+        bands.push({ start: curStart, end: i - 1, level: curLevel })
+      }
+      curLevel = level
+      curStart = i
+    }
+  }
+  if (curLevel !== null) {
+    bands.push({ start: curStart, end: len - 1, level: curLevel })
+  }
+  return bands
+}
+
+/**
+ * Given an obs key like `observation.state.joint1`, returns `joint1`.
+ * Given an act key like `action.joint1`, returns `joint1`.
+ */
+function unifyKey(key: string): string {
+  return key.replace('observation.', '').replace('state.', '').replace('action.', '')
+}
+
+const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, collapsed, themeVersion, bands }: {
   label: string
   series: number[]
   color: string
   currentFrame: number
   collapsed: boolean
   themeVersion: number
+  bands?: RatioBand[]
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -57,6 +127,24 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
       // Background
       ctx.fillStyle = bg
       ctx.fillRect(0, 0, w, h)
+
+      // Divergence bands (paint moderate first so severe overlaps win)
+      if (bands && bands.length > 0 && series.length > 1) {
+        const denomBand = Math.max(series.length - 1, 1)
+        const moderateFill = cs.getPropertyValue('--c-yellow-dim').trim()
+        const severeFill = cs.getPropertyValue('--c-red-dim').trim()
+        for (const level of ['moderate', 'severe'] as const) {
+          const fill = level === 'moderate' ? moderateFill : severeFill
+          if (!fill) continue
+          ctx.fillStyle = fill
+          for (const b of bands) {
+            if (b.level !== level) continue
+            const x0 = (b.start / denomBand) * w
+            const x1 = ((b.end + 1) / denomBand) * w
+            ctx.fillRect(x0, 0, Math.max(x1 - x0, 1), h)
+          }
+        }
+      }
 
       // Grid lines
       ctx.strokeStyle = gridColor
@@ -106,7 +194,7 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
     const ro = new ResizeObserver(draw)
     ro.observe(canvas)
     return () => ro.disconnect()
-  }, [series, color, currentFrame, collapsed, themeVersion])
+  }, [series, color, currentFrame, collapsed, themeVersion, bands])
 
   const currentVal = currentFrame >= 0 && currentFrame < series.length
     ? series[currentFrame].toFixed(3)
@@ -158,6 +246,21 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
       .finally(() => setLoading(false))
   }, [episodeIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const bandsByName = useMemo(() => {
+    const map = new Map<string, RatioBand[]>()
+    if (!data) return map
+    const actByName = new Map<string, number[]>()
+    for (const k of Object.keys(data.actions)) actByName.set(unifyKey(k), data.actions[k])
+    for (const k of Object.keys(data.observations)) {
+      const name = unifyKey(k)
+      const act = actByName.get(name)
+      if (!act) continue
+      const bands = computeBands(data.observations[k], act)
+      if (bands.length > 0) map.set(name, bands)
+    }
+    return map
+  }, [data])
+
   if (episodeIndex === null) return null
 
   if (loading) {
@@ -205,17 +308,21 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
               </span>
               <span style={chartStyles.sectionCount}>{obsKeys.length}</span>
             </div>
-            {obsKeys.map(key => (
-              <MiniChart
-                key={key}
-                label={key.replace('observation.', '').replace('state.', '')}
-                series={data.observations[key]}
-                color="var(--c-blue)"
-                currentFrame={currentFrame}
-                collapsed={obsCollapsed}
-                themeVersion={themeVersion}
-              />
-            ))}
+            {obsKeys.map(key => {
+              const name = key.replace('observation.', '').replace('state.', '')
+              return (
+                <MiniChart
+                  key={key}
+                  label={name}
+                  series={data.observations[key]}
+                  color="var(--c-blue)"
+                  currentFrame={currentFrame}
+                  collapsed={obsCollapsed}
+                  themeVersion={themeVersion}
+                  bands={bandsByName.get(name)}
+                />
+              )
+            })}
           </div>
         )}
 
@@ -238,17 +345,21 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
               </span>
               <span style={chartStyles.sectionCount}>{actKeys.length}</span>
             </div>
-            {actKeys.map(key => (
-              <MiniChart
-                key={key}
-                label={key.replace('action.', '')}
-                series={data.actions[key]}
-                color="var(--accent)"
-                currentFrame={currentFrame}
-                collapsed={actCollapsed}
-                themeVersion={themeVersion}
-              />
-            ))}
+            {actKeys.map(key => {
+              const name = key.replace('action.', '')
+              return (
+                <MiniChart
+                  key={key}
+                  label={name}
+                  series={data.actions[key]}
+                  color="var(--accent)"
+                  currentFrame={currentFrame}
+                  collapsed={actCollapsed}
+                  themeVersion={themeVersion}
+                  bands={bandsByName.get(name)}
+                />
+              )
+            })}
           </div>
         )}
       </div>
