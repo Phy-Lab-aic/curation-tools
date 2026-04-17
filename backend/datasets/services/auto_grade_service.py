@@ -259,7 +259,14 @@ async def ensure_auto_graded(dataset_id: int, dataset_path: Path) -> None:
 
     from backend.datasets.services.dataset_service import dataset_service
 
-    features = dataset_service.get_features()
+    try:
+        features = dataset_service.get_features()
+    except RuntimeError:
+        # dataset_service not loaded in this call path (e.g. update_episode
+        # round-trip before a load, or tests that stub services). Skip — no
+        # stamp, so a later load can still run the pass.
+        logger.info("auto_grade: dataset not loaded; skipping for dataset_id=%s", dataset_id)
+        return
     if not features:
         logger.info("auto_grade: no features loaded; skipping for dataset_id=%s", dataset_id)
         return  # Do NOT stamp — retry on next load when dataset is fully loaded.
