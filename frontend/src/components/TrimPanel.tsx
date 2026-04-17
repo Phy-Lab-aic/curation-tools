@@ -17,7 +17,12 @@ interface JobStatus {
   result_path: string | null
 }
 
-type TabId = 'split' | 'merge' | 'delete'
+interface StampStatus {
+  stamped: boolean
+  is_terminal_count_sample: number
+}
+
+type TabId = 'split' | 'merge' | 'delete' | 'cycles'
 
 function useJobPoller() {
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
@@ -32,7 +37,7 @@ function useJobPoller() {
         const resp = await client.get<JobStatus>(`/datasets/ops/status/${jobId}`)
         const s = resp.data
         setJobStatus(s)
-        if (s.status === 'completed' || s.status === 'failed') {
+        if (s.status === 'complete' || s.status === 'completed' || s.status === 'failed') {
           clearInterval(interval)
           setPolling(false)
         }
@@ -62,7 +67,7 @@ function JobProgress({ jobStatus, polling }: { jobStatus: JobStatus | null; poll
 
   if (!jobStatus) return null
 
-  const isOk = jobStatus.status === 'completed'
+  const isOk = jobStatus.status === 'complete' || jobStatus.status === 'completed'
   const isFail = jobStatus.status === 'failed'
 
   return (
@@ -653,6 +658,149 @@ function DeleteTab({
   )
 }
 
+function CyclesTab({ datasetPath }: { datasetPath: string | null }) {
+  const [status, setStatus] = useState<StampStatus | null>(null)
+  const [statusLoading, setStatusLoading] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const { jobStatus, polling, startPolling, reset } = useJobPoller()
+
+  const refreshStatus = useCallback(async () => {
+    if (!datasetPath) {
+      setStatus(null)
+      setStatusError(null)
+      return
+    }
+
+    setStatusLoading(true)
+    setStatusError(null)
+
+    try {
+      const resp = await client.get<StampStatus>('/datasets/stamp-cycles/status', {
+        params: { path: datasetPath },
+      })
+      setStatus(resp.data)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to read stamp status'
+      setStatusError(msg)
+      setStatus(null)
+    } finally {
+      setStatusLoading(false)
+    }
+  }, [datasetPath])
+
+  useEffect(() => {
+    void refreshStatus()
+  }, [refreshStatus])
+
+  useEffect(() => {
+    setConfirmOpen(false)
+  }, [datasetPath])
+
+  useEffect(() => {
+    const nextStatus = jobStatus?.status
+    if (nextStatus === 'complete' || nextStatus === 'completed') {
+      setConfirmOpen(false)
+      void refreshStatus()
+    }
+  }, [jobStatus?.status, refreshStatus])
+
+  const submit = useCallback(async (overwrite: boolean) => {
+    if (!datasetPath) return
+
+    setSubmitting(true)
+    setSubmitError(null)
+    reset()
+
+    try {
+      const resp = await client.post<{ job_id: string; operation: string; status: string }>(
+        '/datasets/stamp-cycles',
+        { source_path: datasetPath, overwrite },
+      )
+      startPolling(resp.data.job_id)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Stamp failed'
+      setSubmitError(msg)
+    } finally {
+      setSubmitting(false)
+    }
+  }, [datasetPath, reset, startPolling])
+
+  const handlePrimaryClick = () => {
+    if (status?.stamped) {
+      setConfirmOpen(true)
+      return
+    }
+
+    void submit(false)
+  }
+
+  if (!datasetPath) {
+    return <div style={s.emptyState}>Load a dataset first to stamp cycle markers.</div>
+  }
+
+  return (
+    <div style={s.tabContent}>
+      <div style={s.matchPreview}>
+        {statusLoading && <span style={{ color: 'var(--text-dim)' }}>Checking current stamp status...</span>}
+        {statusError && <span style={s.errorText}>{statusError}</span>}
+        {!statusLoading && !statusError && status && (
+          status.stamped ? (
+            <span style={{ color: 'var(--c-yellow)' }}>
+              Already stamped. Sampled first parquet shows {status.is_terminal_count_sample} `is_terminal` flags. Overwriting will rewrite the parquet files in place.
+            </span>
+          ) : (
+            <span style={{ color: 'var(--text-muted)' }}>
+              No cycle markers detected yet. Stamping rewrites the dataset parquet files in place.
+            </span>
+          )
+        )}
+      </div>
+
+      {submitError && <div style={s.errorText}>{submitError}</div>}
+
+      <button
+        style={{ ...s.actionBtn, opacity: submitting || polling || statusLoading ? 0.6 : 1 }}
+        onClick={handlePrimaryClick}
+        disabled={submitting || polling || statusLoading}
+      >
+        {submitting ? 'Submitting...' : status?.stamped ? 'Overwrite Cycle Markers' : 'Stamp Cycles'}
+      </button>
+
+      <JobProgress jobStatus={jobStatus} polling={polling} />
+
+      {confirmOpen && (
+        <div style={s.matchPreview}>
+          <span style={{ color: 'var(--c-yellow)' }}>
+            This dataset already has cycle markers. Overwrite will replace the existing `is_terminal` and `is_last` columns in place.
+          </span>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <button
+              style={{ ...s.actionBtn, background: 'var(--c-red)' }}
+              onClick={() => {
+                setConfirmOpen(false)
+                void submit(true)
+              }}
+              disabled={submitting || polling}
+            >
+              Overwrite In Place
+            </button>
+            <button
+              style={{ ...s.refreshBtn, padding: '6px 12px' }}
+              onClick={() => setConfirmOpen(false)}
+              disabled={submitting || polling}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function TrimPanel({ datasetPath, episodes }: TrimPanelProps) {
   const [tab, setTab] = useState<TabId>('split')
 
@@ -660,7 +808,7 @@ export function TrimPanel({ datasetPath, episodes }: TrimPanelProps) {
     <div style={s.container}>
       <div style={s.body}>
         <div style={s.tabs}>
-          {(['split', 'merge', 'delete'] as TabId[]).map(t => (
+          {(['split', 'merge', 'delete', 'cycles'] as TabId[]).map(t => (
             <button
               key={t}
               style={{ ...s.tabBtn, ...(tab === t ? (t === 'delete' ? { ...s.tabBtnActive, color: 'var(--c-red)' } : s.tabBtnActive) : {}) }}
@@ -674,6 +822,7 @@ export function TrimPanel({ datasetPath, episodes }: TrimPanelProps) {
         {tab === 'split' && <SplitTab datasetPath={datasetPath} episodes={episodes} />}
         {tab === 'merge' && <MergeTab />}
         {tab === 'delete' && <DeleteTab datasetPath={datasetPath} episodes={episodes} />}
+        {tab === 'cycles' && <CyclesTab datasetPath={datasetPath} />}
       </div>
     </div>
   )
