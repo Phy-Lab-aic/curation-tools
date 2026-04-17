@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import client from '../api/client'
 import type { Episode } from '../types/index'
 
@@ -666,14 +666,19 @@ function CyclesTab({ datasetPath }: { datasetPath: string | null }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { jobStatus, polling, startPolling, reset } = useJobPoller()
+  const datasetPathRef = useRef<string | null>(datasetPath)
+  const asyncScopeRef = useRef(0)
 
   const refreshStatus = useCallback(async () => {
     if (!datasetPath) {
       setStatus(null)
+      setStatusLoading(false)
       setStatusError(null)
       return
     }
 
+    const scopeId = asyncScopeRef.current
+    const requestPath = datasetPath
     setStatusLoading(true)
     setStatusError(null)
 
@@ -681,23 +686,33 @@ function CyclesTab({ datasetPath }: { datasetPath: string | null }) {
       const resp = await client.get<StampStatus>('/datasets/stamp-cycles/status', {
         params: { path: datasetPath },
       })
+      if (scopeId !== asyncScopeRef.current || datasetPathRef.current !== requestPath) return
       setStatus(resp.data)
     } catch (err: unknown) {
+      if (scopeId !== asyncScopeRef.current || datasetPathRef.current !== requestPath) return
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to read stamp status'
       setStatusError(msg)
       setStatus(null)
     } finally {
+      if (scopeId !== asyncScopeRef.current || datasetPathRef.current !== requestPath) return
       setStatusLoading(false)
     }
   }, [datasetPath])
 
   useEffect(() => {
-    void refreshStatus()
-  }, [refreshStatus])
-
-  useEffect(() => {
+    datasetPathRef.current = datasetPath
+    asyncScopeRef.current += 1
+    setStatus(null)
+    setStatusLoading(false)
+    setStatusError(null)
     setConfirmOpen(false)
-  }, [datasetPath])
+    setSubmitting(false)
+    setSubmitError(null)
+    reset()
+    if (datasetPath) {
+      void refreshStatus()
+    }
+  }, [datasetPath, refreshStatus, reset])
 
   useEffect(() => {
     const nextStatus = jobStatus?.status
@@ -710,6 +725,8 @@ function CyclesTab({ datasetPath }: { datasetPath: string | null }) {
   const submit = useCallback(async (overwrite: boolean) => {
     if (!datasetPath) return
 
+    const scopeId = asyncScopeRef.current
+    const requestPath = datasetPath
     setSubmitting(true)
     setSubmitError(null)
     reset()
@@ -719,16 +736,21 @@ function CyclesTab({ datasetPath }: { datasetPath: string | null }) {
         '/datasets/stamp-cycles',
         { source_path: datasetPath, overwrite },
       )
+      if (scopeId !== asyncScopeRef.current || datasetPathRef.current !== requestPath) return
       startPolling(resp.data.job_id)
     } catch (err: unknown) {
+      if (scopeId !== asyncScopeRef.current || datasetPathRef.current !== requestPath) return
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Stamp failed'
       setSubmitError(msg)
     } finally {
+      if (scopeId !== asyncScopeRef.current || datasetPathRef.current !== requestPath) return
       setSubmitting(false)
     }
   }, [datasetPath, reset, startPolling])
 
   const handlePrimaryClick = () => {
+    if (!status || statusLoading || statusError) return
+
     if (status?.stamped) {
       setConfirmOpen(true)
       return
@@ -736,6 +758,8 @@ function CyclesTab({ datasetPath }: { datasetPath: string | null }) {
 
     void submit(false)
   }
+
+  const canSubmit = Boolean(status) && !statusLoading && !statusError && !submitting && !polling
 
   if (!datasetPath) {
     return <div style={s.emptyState}>Load a dataset first to stamp cycle markers.</div>
@@ -757,17 +781,34 @@ function CyclesTab({ datasetPath }: { datasetPath: string | null }) {
             </span>
           )
         )}
+        {!statusLoading && !statusError && !status && (
+          <span style={{ color: 'var(--text-dim)' }}>
+            Stamp status is not available yet. Retry the status check before running this action.
+          </span>
+        )}
       </div>
 
       {submitError && <div style={s.errorText}>{submitError}</div>}
 
-      <button
-        style={{ ...s.actionBtn, opacity: submitting || polling || statusLoading ? 0.6 : 1 }}
-        onClick={handlePrimaryClick}
-        disabled={submitting || polling || statusLoading}
-      >
-        {submitting ? 'Submitting...' : status?.stamped ? 'Overwrite Cycle Markers' : 'Stamp Cycles'}
-      </button>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          style={{ ...s.actionBtn, opacity: canSubmit ? 1 : 0.6 }}
+          onClick={handlePrimaryClick}
+          disabled={!canSubmit}
+        >
+          {submitting ? 'Submitting...' : status?.stamped ? 'Overwrite Cycle Markers' : 'Stamp Cycles'}
+        </button>
+
+        {(statusError || !status) && !statusLoading && (
+          <button
+            style={{ ...s.refreshBtn, padding: '6px 12px' }}
+            onClick={() => { void refreshStatus() }}
+            disabled={submitting || polling}
+          >
+            Retry Status Check
+          </button>
+        )}
+      </div>
 
       <JobProgress jobStatus={jobStatus} polling={polling} />
 
