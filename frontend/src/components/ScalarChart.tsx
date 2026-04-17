@@ -123,6 +123,12 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
       const bg = cs.getPropertyValue('--bg-deep').trim()
       const gridColor = cs.getPropertyValue('--border').trim()
       const cursorColor = cs.getPropertyValue('--text').trim()
+      const resolvedColor = (() => {
+        const m = /^var\((--[\w-]+)\)$/.exec(color.trim())
+        if (!m) return color
+        const v = cs.getPropertyValue(m[1]).trim()
+        return v || color
+      })()
 
       // Background
       ctx.fillStyle = bg
@@ -158,7 +164,7 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
       }
 
       // Data line
-      ctx.strokeStyle = color
+      ctx.strokeStyle = resolvedColor
       ctx.lineWidth = 1.5
       ctx.beginPath()
       const denom = Math.max(series.length - 1, 1)
@@ -183,7 +189,7 @@ const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, 
         ctx.setLineDash([])
 
         const y = h - ((series[currentFrame] - min) / range) * (h - 4) - 2
-        ctx.fillStyle = color
+        ctx.fillStyle = resolvedColor
         ctx.beginPath()
         ctx.arc(x, y, 3, 0, Math.PI * 2)
         ctx.fill()
