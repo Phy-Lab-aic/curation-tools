@@ -79,11 +79,18 @@ function computeBands(obs: number[], act: number[]): RatioBand[] {
 }
 
 /**
- * Given an obs key like `observation.state.joint1`, returns `joint1`.
- * Given an act key like `action.joint1`, returns `joint1`.
+ * Reduce an observation/action key to its pair-matching identifier.
+ * Handles two forms produced by /api/scalars/:idx:
+ *   observation.state[0] <-> action[0]       → "[0]"
+ *   observation.state.joint1 <-> action.joint1 → "joint1"
  */
 function unifyKey(key: string): string {
-  return key.replace('observation.', '').replace('state.', '').replace('action.', '')
+  const idxMatch = /\[(\d+)\]$/.exec(key)
+  if (idxMatch) return idxMatch[0]
+  return key
+    .replace(/^observation\.state\.?/, '')
+    .replace(/^observation\./, '')
+    .replace(/^action\.?/, '')
 }
 
 const MiniChart = memo(function MiniChart({ label, series, color, currentFrame, collapsed, themeVersion, bands }: {
