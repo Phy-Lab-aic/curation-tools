@@ -1,9 +1,54 @@
 """Tests for DatasetService against real LeRobot v3.0 datasets at /tmp/hf-mounts/Phy-lab/dataset."""
 
-import pytest
+import json
 from pathlib import Path
 
+import pyarrow as pa
+import pyarrow.parquet as pq
+import pytest
+
 from backend.services.dataset_service import DatasetService
+from backend.core.config import settings
+
+
+def _write_temp_dataset_info(root: Path, total_episodes: int) -> None:
+    meta_dir = root / "meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    (meta_dir / "info.json").write_text(
+        json.dumps(
+            {
+                "codebase_version": "v3.0",
+                "robot_type": "test_robot",
+                "total_episodes": total_episodes,
+                "total_tasks": 0,
+                "fps": 30,
+                "features": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_episode_chunk(root: Path, chunk_index: int, file_index: int, serial_type: pa.DataType) -> None:
+    chunk_dir = root / "meta" / "episodes" / f"chunk-{chunk_index:03d}"
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    start = chunk_index * 2
+    table = pa.table(
+        {
+            "episode_index": pa.array([start, start + 1], type=pa.int64()),
+            "task_index": pa.array([0, 0], type=pa.int64()),
+            "length": pa.array([10, 11], type=pa.int64()),
+            "data/chunk_index": pa.array([0, 0], type=pa.int64()),
+            "data/file_index": pa.array([0, 0], type=pa.int64()),
+            "dataset_from_index": pa.array([start * 10, (start + 1) * 10], type=pa.int64()),
+            "dataset_to_index": pa.array([(start + 1) * 10, (start + 2) * 10], type=pa.int64()),
+            "Serial_number": pa.array(
+                [f"serial-{start}", f"serial-{start + 1}"],
+                type=serial_type,
+            ),
+        }
+    )
+    pq.write_table(table, chunk_dir / f"file-{file_index:03d}.parquet")
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +93,53 @@ class TestLoadDatasetRobustness:
         ds.load_dataset(hojun_path)
         info = ds.get_info()
         assert info["robot_type"] == "ur5e"
+
+    def test_loads_episode_parquet_chunks_with_mixed_string_width(self, tmp_path, monkeypatch):
+        dataset_path = tmp_path / "mixed_string_width"
+        _write_temp_dataset_info(dataset_path, total_episodes=4)
+        _write_episode_chunk(dataset_path, chunk_index=0, file_index=0, serial_type=pa.string())
+        _write_episode_chunk(dataset_path, chunk_index=1, file_index=1, serial_type=pa.large_string())
+        monkeypatch.setattr(settings, "allowed_dataset_roots", settings.allowed_dataset_roots + [str(tmp_path)])
+
+        ds = DatasetService()
+
+        ds.load_dataset(dataset_path)
+
+        episodes = ds.get_episodes()
+        assert len(episodes) == 4
+        assert [episode["episode_index"] for episode in episodes] == [0, 1, 2, 3]
+        assert [episode["Serial_number"] for episode in episodes] == [
+            "serial-0",
+            "serial-1",
+            "serial-2",
+            "serial-3",
+        ]
+
+    def test_still_fails_for_incompatible_episode_field_types(self, tmp_path, monkeypatch):
+        dataset_path = tmp_path / "incompatible_schema"
+        _write_temp_dataset_info(dataset_path, total_episodes=4)
+        _write_episode_chunk(dataset_path, chunk_index=0, file_index=0, serial_type=pa.string())
+        chunk_dir = dataset_path / "meta" / "episodes" / "chunk-001"
+        chunk_dir.mkdir(parents=True, exist_ok=True)
+        incompatible_table = pa.table(
+            {
+                "episode_index": pa.array([2, 3], type=pa.int64()),
+                "task_index": pa.array([0, 0], type=pa.int64()),
+                "length": pa.array([12, 13], type=pa.int64()),
+                "data/chunk_index": pa.array([0, 0], type=pa.int64()),
+                "data/file_index": pa.array([0, 0], type=pa.int64()),
+                "dataset_from_index": pa.array([20, 30], type=pa.int64()),
+                "dataset_to_index": pa.array([30, 40], type=pa.int64()),
+                "Serial_number": pa.array([200, 300], type=pa.int64()),
+            }
+        )
+        pq.write_table(incompatible_table, chunk_dir / "file-001.parquet")
+        monkeypatch.setattr(settings, "allowed_dataset_roots", settings.allowed_dataset_roots + [str(tmp_path)])
+
+        ds = DatasetService()
+
+        with pytest.raises(pa.ArrowTypeError, match="Serial_number"):
+            ds.load_dataset(dataset_path)
 
 
 class TestGetInfo:
