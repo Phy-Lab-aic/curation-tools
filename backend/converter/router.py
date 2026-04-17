@@ -9,10 +9,29 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from backend.converter import service as converter_service
+from backend.converter import validation_service
 
 
 class StartRequest(BaseModel):
     cell_task: str | None = None
+
+
+class ValidationRequest(BaseModel):
+    cell_task: str
+
+
+def _validation_payload(cell_task: str) -> dict:
+    state = validation_service.read_validation_state().get(cell_task, {})
+    return {
+        "quick": state.get(
+            "quick",
+            {"status": "not_run", "summary": "Not validated", "checked_at": None},
+        ),
+        "full": state.get(
+            "full",
+            {"status": "not_run", "summary": "Not validated", "checked_at": None},
+        ),
+    }
 
 # ---------------------------------------------------------------------------
 # Log line parser — extracts structured events from raw container output
@@ -117,6 +136,7 @@ async def get_status():
                 "pending": t.pending,
                 "failed": t.failed,
                 "retry": t.retry,
+                "validation": _validation_payload(t.cell_task),
             }
             for t in status.tasks
         ],
@@ -208,6 +228,34 @@ async def stop():
     if not ok:
         raise HTTPException(500, msg)
     return {"status": "stopped", "message": msg}
+
+
+@router.get("/validation")
+async def validation():
+    """Get all persisted converter validation state."""
+    return validation_service.read_validation_state()
+
+
+@router.post("/validate/quick")
+async def validate_quick(req: ValidationRequest):
+    """Run quick converter dataset validation."""
+    try:
+        validation_service.ensure_not_running(req.cell_task, "quick")
+    except validation_service.ValidationAlreadyRunningError as exc:
+        raise HTTPException(409, str(exc))
+
+    return validation_service.run_quick_validation_sync(req.cell_task)
+
+
+@router.post("/validate/full")
+async def validate_full(req: ValidationRequest):
+    """Run full converter dataset validation."""
+    try:
+        validation_service.ensure_not_running(req.cell_task, "full")
+    except validation_service.ValidationAlreadyRunningError as exc:
+        raise HTTPException(409, str(exc))
+
+    return validation_service.run_full_validation_sync(req.cell_task)
 
 
 @router.websocket("/logs")
