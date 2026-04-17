@@ -55,8 +55,6 @@ def _select_dataset(page: Page, name: str):
 
 
 def _mock_dataset_load_failure(page: Page):
-    requests = {"episodes": 0}
-
     def handler(route):
         url = route.request.url
         if url.endswith("/api/converter/status"):
@@ -77,13 +75,10 @@ def _mock_dataset_load_failure(page: Page):
             _fulfill_json(route, {"detail": "Dataset mount unavailable"}, status=500)
             return
         if url.endswith("/api/episodes"):
-            requests["episodes"] += 1
-            _fulfill_json(route, [])
-            return
+            pytest.fail("Unexpected /api/episodes request after dataset load failure")
         route.continue_()
 
     page.route("**/api/**", handler)
-    return requests
 
 
 # ---------------------------------------------------------------------------
@@ -135,15 +130,13 @@ class TestDatasetSelection:
         expect(page.get_by_text("#0", exact=True)).to_be_visible()
 
     def test_dataset_load_failure_is_visible(self, page: Page):
-        requests = _mock_dataset_load_failure(page)
+        _mock_dataset_load_failure(page)
 
         page.goto(BASE_URL)
         page.get_by_text("mock-cell", exact=True).click()
         _select_dataset(page, "broken-dataset")
 
         expect(page.get_by_text("Dataset mount unavailable", exact=True)).to_be_visible(timeout=5000)
-        page.wait_for_timeout(300)
-        assert requests["episodes"] == 0
 
 
 # ---------------------------------------------------------------------------
