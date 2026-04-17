@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 
 from backend.config import settings
 from backend.datasets.services.cycle_stamp_service import describe_stamp_state
@@ -53,9 +53,7 @@ class SplitRequest(BaseModel):
 class SplitIntoRequest(BaseModel):
     source_path: str
     episode_ids: list[int]
-    target_name: str
-    target_path: str | None = None  # If set, merge into this existing dataset
-    output_dir: str | None = None  # Used when target_path is None
+    destination_path: str
 
     @field_validator("episode_ids")
     @classmethod
@@ -64,11 +62,12 @@ class SplitIntoRequest(BaseModel):
             raise ValueError("episode_ids must not be empty")
         return v
 
-    @model_validator(mode="after")
-    def validate_mode_specific_paths(self):
-        if self.target_path is not None and self.output_dir is not None:
-            raise ValueError("Cannot provide both target_path and output_dir")
-        return self
+    @field_validator("destination_path")
+    @classmethod
+    def destination_path_must_be_absolute(cls, v: str) -> str:
+        if not Path(v).is_absolute():
+            raise ValueError("destination_path must be absolute")
+        return v
 
 
 class DeleteRequest(BaseModel):
@@ -109,6 +108,7 @@ class JobStatusResponse(BaseModel):
     completed_at: str | None = None
     error: str | None = None
     result_path: str | None = None
+    summary: dict[str, str | int] | None = None
 
 
 class StampCyclesStatusResponse(BaseModel):
@@ -140,33 +140,20 @@ async def split_dataset(req: SplitRequest):
 
 @router.post("/split-into", response_model=JobResponse, status_code=202)
 async def split_into_dataset(req: SplitIntoRequest):
-    """Split episodes into a new dataset, or merge them into an existing one."""
+    """Sync selected good episodes to one absolute destination path."""
     source = _validate_path(req.source_path)
+    destination = _validate_path(req.destination_path)
     if not source.exists():
         raise HTTPException(status_code=404, detail=f"Source path not found: {req.source_path}")
+    if source == destination:
+        raise HTTPException(status_code=400, detail="source and destination must differ")
 
-    if req.target_path is None:
-        # New dataset mode — create new derived dataset
-        output_dir = _validate_optional_path(req.output_dir)
-        job_id = await dataset_ops_service.split_dataset(
-            source_path=str(source),
-            episode_ids=req.episode_ids,
-            target_name=req.target_name,
-            output_dir=output_dir,
-        )
-        return JobResponse(job_id=job_id, operation="split", status="queued")
-    else:
-        # Existing dataset mode — split then merge into target
-        target = _validate_path(req.target_path)
-        if not target.exists():
-            raise HTTPException(status_code=404, detail=f"Target path not found: {req.target_path}")
-        job_id = await dataset_ops_service.split_and_merge(
-            source_path=str(source),
-            episode_ids=req.episode_ids,
-            target_path=str(target),
-            target_name=req.target_name,
-        )
-        return JobResponse(job_id=job_id, operation="split_and_merge", status="queued")
+    job_id = await dataset_ops_service.sync_good_episodes(
+        source_path=str(source),
+        episode_ids=req.episode_ids,
+        destination_path=str(destination),
+    )
+    return JobResponse(job_id=job_id, operation="sync_good_episodes", status="queued")
 
 
 @router.post("/merge", response_model=JobResponse, status_code=202)
@@ -241,4 +228,5 @@ async def get_job_status(job_id: str):
         completed_at=job.get("completed_at"),
         error=job.get("error"),
         result_path=job.get("result_path"),
+        summary=job.get("summary"),
     )

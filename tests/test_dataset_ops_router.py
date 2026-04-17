@@ -141,100 +141,50 @@ class TestSplitDataset:
 
 class TestSplitIntoDataset:
     @pytest.mark.asyncio
-    async def test_split_into_new_returns_202(self, client, tmp_path):
+    async def test_split_into_syncs_to_absolute_destination(self, client, tmp_path):
         source = tmp_path / "source-ds"
         source.mkdir()
-        source_path = f"{source.parent}/./{source.name}"
+        destination = tmp_path / "good-sync"
 
         with patch.object(
             dataset_ops_service,
-            "split_dataset",
+            "sync_good_episodes",
             new_callable=AsyncMock,
-            return_value="new-job-1",
-        ) as split_dataset:
-            resp = await client.post(
-                "/api/datasets/split-into",
-                json={
-                    "source_path": source_path,
-                    "episode_ids": [0, 1],
-                    "target_name": "new-split",
-                },
-            )
-
-        assert resp.status_code == 202
-        data = resp.json()
-        assert data["job_id"] == "new-job-1"
-        assert data["operation"] == "split"
-        split_dataset.assert_awaited_once_with(
-            source_path=str(source.resolve()),
-            episode_ids=[0, 1],
-            target_name="new-split",
-            output_dir=None,
-        )
-
-    @pytest.mark.asyncio
-    async def test_split_into_existing_returns_202(self, client, tmp_path):
-        source = tmp_path / "source-ds"
-        source.mkdir()
-        target = tmp_path / "target-ds"
-        target.mkdir()
-        source_path = f"{source.parent}/./{source.name}"
-        target_path = f"{target.parent}/./{target.name}"
-
-        with patch.object(
-            dataset_ops_service,
-            "split_and_merge",
-            new_callable=AsyncMock,
-            return_value="merge-job-2",
-        ) as split_and_merge:
-            resp = await client.post(
-                "/api/datasets/split-into",
-                json={
-                    "source_path": source_path,
-                    "episode_ids": [3, 5],
-                    "target_name": "target-ds",
-                    "target_path": target_path,
-                },
-            )
-
-        assert resp.status_code == 202
-        data = resp.json()
-        assert data["job_id"] == "merge-job-2"
-        assert data["operation"] == "split_and_merge"
-        split_and_merge.assert_awaited_once_with(
-            source_path=str(source.resolve()),
-            episode_ids=[3, 5],
-            target_path=str(target.resolve()),
-            target_name="target-ds",
-        )
-
-    @pytest.mark.asyncio
-    async def test_split_into_rejects_target_path_and_output_dir_together(self, client, tmp_path):
-        source = tmp_path / "source-ds"
-        source.mkdir()
-        target = tmp_path / "target-ds"
-        target.mkdir()
-
-        with patch.object(
-            dataset_ops_service,
-            "split_and_merge",
-            new_callable=AsyncMock,
-            return_value="merge-job-3",
-        ) as split_and_merge:
+            return_value="sync-job-1",
+        ) as sync_good_episodes:
             resp = await client.post(
                 "/api/datasets/split-into",
                 json={
                     "source_path": str(source),
-                    "episode_ids": [1],
-                    "target_name": "target-ds",
-                    "target_path": str(target),
-                    "output_dir": "/etc",
+                    "episode_ids": [0, 1],
+                    "destination_path": str(destination),
                 },
             )
 
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["job_id"] == "sync-job-1"
+        assert data["operation"] == "sync_good_episodes"
+        sync_good_episodes.assert_awaited_once_with(
+            source_path=str(source.resolve()),
+            episode_ids=[0, 1],
+            destination_path=str(destination.resolve()),
+        )
+
+    @pytest.mark.asyncio
+    async def test_split_into_rejects_relative_destination(self, client, tmp_path):
+        source = tmp_path / "source-ds"
+        source.mkdir()
+        resp = await client.post(
+            "/api/datasets/split-into",
+            json={
+                "source_path": str(source),
+                "episode_ids": [0],
+                "destination_path": "relative/path",
+            },
+        )
+
         assert resp.status_code == 422
-        assert "both target_path and output_dir" in str(resp.json()["detail"])
-        split_and_merge.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_split_into_404_source_missing(self, client):
@@ -243,14 +193,14 @@ class TestSplitIntoDataset:
             json={
                 "source_path": "/nonexistent/source",
                 "episode_ids": [0],
-                "target_name": "x",
+                "destination_path": "/nonexistent/target",
             },
         )
         assert resp.status_code == 404
         assert "Source path not found" in resp.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_split_into_404_target_missing(self, client, tmp_path):
+    async def test_split_into_rejects_self_merge(self, client, tmp_path):
         source = tmp_path / "source-ds"
         source.mkdir()
 
@@ -259,12 +209,11 @@ class TestSplitIntoDataset:
             json={
                 "source_path": str(source),
                 "episode_ids": [0],
-                "target_name": "x",
-                "target_path": "/nonexistent/target",
+                "destination_path": str(source),
             },
         )
-        assert resp.status_code == 404
-        assert "Target path not found" in resp.json()["detail"]
+        assert resp.status_code == 400
+        assert "source and destination must differ" in resp.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_split_into_422_empty_episodes(self, client, tmp_path):
@@ -276,7 +225,7 @@ class TestSplitIntoDataset:
             json={
                 "source_path": str(source),
                 "episode_ids": [],
-                "target_name": "x",
+                "destination_path": str(tmp_path / "good-sync"),
             },
         )
         assert resp.status_code == 422
@@ -502,12 +451,13 @@ class TestGetJobStatus:
     async def test_returns_job_status(self, client):
         job = {
             "id": "job-abc",
-            "operation": "split",
+            "operation": "sync_good_episodes",
             "status": "complete",
             "created_at": "2024-01-01T00:00:00+00:00",
             "completed_at": "2024-01-01T00:01:00+00:00",
             "error": None,
             "result_path": "/tmp/derived/my-split",
+            "summary": {"mode": "merge", "created": 2, "skipped_duplicates": 1},
         }
         with patch.object(dataset_ops_service, "get_job_status", return_value=job):
             resp = await client.get("/api/datasets/ops/status/job-abc")
@@ -515,11 +465,12 @@ class TestGetJobStatus:
         assert resp.status_code == 200
         data = resp.json()
         assert data["job_id"] == "job-abc"
-        assert data["operation"] == "split"
+        assert data["operation"] == "sync_good_episodes"
         assert data["status"] == "complete"
         assert data["completed_at"] == "2024-01-01T00:01:00+00:00"
         assert data["result_path"] == "/tmp/derived/my-split"
         assert data["error"] is None
+        assert data["summary"] == {"mode": "merge", "created": 2, "skipped_duplicates": 1}
 
     @pytest.mark.asyncio
     async def test_returns_queued_job(self, client):

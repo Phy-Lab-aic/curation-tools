@@ -600,52 +600,6 @@ class TestE2EFullWorkflow:
         assert source_frames > 0
 
 
-class TestE2ESplitAndMergeService:
-    """End-to-end: split_and_merge service operation (extract episodes into existing dataset)."""
-
-    @pytest.mark.asyncio
-    async def test_split_and_merge_workflow(self, sample_dataset: Path, tmp_path: Path) -> None:
-        from backend.datasets.services.dataset_ops_service import DatasetOpsService
-        from backend.datasets.services.dataset_ops_engine import (
-            split_dataset, read_info, read_episodes,
-        )
-        import asyncio
-
-        # Create target dataset with episodes [0, 1]
-        target = tmp_path / "target_ds"
-        split_dataset(sample_dataset, episode_ids=[0, 1], output_dir=target)
-
-        # Use service to split episodes [3, 4] from source and merge into target
-        svc = DatasetOpsService()
-        job_id = await svc.split_and_merge(
-            source_path=sample_dataset,
-            episode_ids=[3, 4],
-            target_path=target,
-            target_name="target_ds",
-        )
-        await asyncio.sleep(2.0)
-
-        job = svc.get_job_status(job_id)
-        assert job["status"] == "complete", f"Job failed: {job.get('error')}"
-
-        # Target should now have 4 episodes (2 original + 2 merged)
-        info = read_info(target)
-        assert info["total_episodes"] == 4
-
-        eps = read_episodes(target)
-        assert eps.column("episode_index").to_pylist() == [0, 1, 2, 3]
-
-        # Serials: first 2 from original target, next 2 from source
-        serials = eps.column("Serial_number").to_pylist()
-        assert serials == ["SN_000000", "SN_000001", "SN_000003", "SN_000004"]
-
-        # Continuous from/to indices
-        froms = eps.column("dataset_from_index").to_pylist()
-        tos = eps.column("dataset_to_index").to_pylist()
-        for i in range(1, len(froms)):
-            assert froms[i] == tos[i - 1]
-
-
 class TestE2EDataIntegrity:
     """End-to-end: verify data parquet content is preserved byte-accurately after operations."""
 
