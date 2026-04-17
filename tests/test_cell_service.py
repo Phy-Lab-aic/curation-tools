@@ -12,7 +12,10 @@ def mock_mount(tmp_path: Path):
     tmp_path/
       cell001/
         dataset_a/meta/info.json
+        dataset_a/ignored_nested/meta/info.json  <- should not be counted
         dataset_b/meta/info.json
+        Amore_dualpick/spray_clean/meta/info.json
+        Amore_dualpick/spray_clean/deeper/meta/info.json  <- should not be counted
       cell002/
         dataset_c/meta/info.json
       not_a_cell/          <- no cell* prefix, should be ignored
@@ -33,6 +36,25 @@ def mock_mount(tmp_path: Path):
             p = tmp_path / cell / ds / "meta"
             p.mkdir(parents=True)
             (p / "info.json").write_text(json.dumps(info))
+
+    nested_info = {
+        "fps": 15,
+        "total_episodes": 4,
+        "robot_type": "m1013",
+        "features": {},
+        "total_tasks": 1,
+    }
+    nested_dataset = tmp_path / "cell001" / "Amore_dualpick" / "spray_clean" / "meta"
+    nested_dataset.mkdir(parents=True)
+    (nested_dataset / "info.json").write_text(json.dumps(nested_info))
+
+    ignored_nested = tmp_path / "cell001" / "dataset_a" / "ignored_nested" / "meta"
+    ignored_nested.mkdir(parents=True)
+    (ignored_nested / "info.json").write_text(json.dumps(nested_info))
+
+    ignored_deeper = tmp_path / "cell001" / "Amore_dualpick" / "spray_clean" / "deeper" / "meta"
+    ignored_deeper.mkdir(parents=True)
+    (ignored_deeper / "info.json").write_text(json.dumps(nested_info))
 
     # Not a cell — should be ignored
     other = tmp_path / "not_a_cell" / "dataset_d" / "meta"
@@ -57,7 +79,7 @@ def test_scan_cells_ignores_non_cell_dirs(mock_mount):
 def test_scan_cells_counts_datasets(mock_mount):
     cells = scan_cells([str(mock_mount)], pattern="cell*")
     cell_map = {c.name: c for c in cells}
-    assert cell_map["cell001"].dataset_count == 2
+    assert cell_map["cell001"].dataset_count == 3
     assert cell_map["cell002"].dataset_count == 1
 
 
@@ -72,12 +94,20 @@ def test_scan_cells_nonexistent_root():
     assert cells == []
 
 
-def test_get_datasets_in_cell(mock_mount):
-    datasets = get_datasets_in_cell(str(mock_mount / "cell001"))
+@pytest.mark.asyncio
+async def test_get_datasets_in_cell(mock_mount):
+    datasets = await get_datasets_in_cell(str(mock_mount / "cell001"))
     names = {d.name for d in datasets}
-    assert names == {"dataset_a", "dataset_b"}
+    assert names == {"dataset_a", "dataset_b", "Amore_dualpick/spray_clean"}
+    assert "dataset_a/ignored_nested" not in names
+    assert "Amore_dualpick/spray_clean/deeper" not in names
 
 
-def test_get_datasets_reads_fps(mock_mount):
-    datasets = get_datasets_in_cell(str(mock_mount / "cell001"))
-    assert all(d.fps == 30 for d in datasets)
+@pytest.mark.asyncio
+async def test_get_datasets_reads_fps(mock_mount):
+    datasets = await get_datasets_in_cell(str(mock_mount / "cell001"))
+    dataset_map = {d.name: d for d in datasets}
+
+    assert dataset_map["dataset_a"].fps == 30
+    assert dataset_map["dataset_b"].fps == 30
+    assert dataset_map["Amore_dualpick/spray_clean"].fps == 15

@@ -18,6 +18,28 @@ from backend.datasets.schemas import CellInfo, DatasetSummary
 logger = logging.getLogger(__name__)
 
 
+def _find_dataset_roots(cell_dir: Path) -> list[tuple[Path, str]]:
+    """Return dataset roots under a cell with names relative to the cell root.
+
+    A dataset root is any directory containing meta/info.json. Once a dataset
+    root is found, recursion stops for that subtree to avoid double-counting
+    nested content inside an already-valid dataset.
+    """
+    dataset_roots: list[tuple[Path, str]] = []
+
+    def _walk(current_dir: Path) -> None:
+        for child in sorted(current_dir.iterdir()):
+            if not child.is_dir():
+                continue
+            if (child / "meta" / "info.json").exists():
+                dataset_roots.append((child, child.relative_to(cell_dir).as_posix()))
+                continue
+            _walk(child)
+
+    _walk(cell_dir)
+    return dataset_roots
+
+
 def scan_cells(roots: list[str], pattern: str = "cell*") -> list[CellInfo]:
     """Scan all roots for cell directories matching pattern.
 
@@ -60,23 +82,19 @@ async def get_datasets_in_cell(cell_path: str) -> list[DatasetSummary]:
         return []
 
     datasets: list[DatasetSummary] = []
-    for child in sorted(root.iterdir()):
-        if not child.is_dir():
-            continue
-        info_path = child / "meta" / "info.json"
-        if not info_path.exists():
-            continue
+    for dataset_dir, dataset_name in _find_dataset_roots(root):
+        info_path = dataset_dir / "meta" / "info.json"
         try:
             info = json.loads(info_path.read_text(encoding="utf-8").rstrip("\x00"))
         except (json.JSONDecodeError, OSError) as e:
             logger.warning("Cannot read %s: %s", info_path, e)
             continue
         fps = info.get("fps", 0)
-        grade_stats = _count_grades(child, fps)
+        grade_stats = _count_grades(dataset_dir, fps)
         graded = int(grade_stats["good"]) + int(grade_stats["normal"]) + int(grade_stats["bad"])
         datasets.append(DatasetSummary(
-            name=child.name,
-            path=str(child.resolve()),
+            name=dataset_name,
+            path=str(dataset_dir.resolve()),
             total_episodes=info.get("total_episodes", 0),
             graded_count=graded,
             good_count=int(grade_stats["good"]),
@@ -245,8 +263,5 @@ def _count_grades(dataset_dir: Path, fps: int = 0) -> dict[str, int | float]:
 
 
 def _count_datasets(cell_dir: Path) -> int:
-    """Count subdirectories of cell_dir that have meta/info.json."""
-    return sum(
-        1 for child in cell_dir.iterdir()
-        if child.is_dir() and (child / "meta" / "info.json").exists()
-    )
+    """Count dataset roots recursively under cell_dir."""
+    return len(_find_dataset_roots(cell_dir))
