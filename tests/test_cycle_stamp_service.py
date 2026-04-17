@@ -375,6 +375,9 @@ class TestOpsServiceIntegration:
         dataset_ops_service = DatasetOpsService()
 
         job_id = await dataset_ops_service.stamp_cycles(source_path=ds, overwrite=False)
+        queued_job = dataset_ops_service.get_job_status(job_id)
+        assert queued_job is not None
+        assert queued_job["status"] == "queued"
         job = await self._wait_for_job(dataset_ops_service, job_id)
 
         assert job["operation"] == "stamp_cycles"
@@ -445,3 +448,45 @@ class TestOpsServiceIntegration:
         assert job["status"] == "failed"
         assert job["completed_at"] is not None
         assert job["error"] == "cycle import boom"
+
+    @pytest.mark.asyncio
+    async def test_stamp_cycles_failure_restores_original_dataset(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from backend.datasets.services import cycle_stamp_service
+        from backend.datasets.services.dataset_ops_service import DatasetOpsService
+
+        ds = _write_fake_dataset(
+            tmp_path / "dataset",
+            [
+                make_states([0.9, 0.4, 0.3, 0.4, 0.79, 0.81], [0.9] * 6),
+                make_states([0.9, 0.9, 0.9, 0.9], [0.9] * 4),
+            ],
+        )
+        dataset_ops_service = DatasetOpsService()
+        parquet_paths = sorted((ds / "data" / "chunk-000").glob("file-*.parquet"))
+
+        def partially_stamp_then_fail(dataset_path: Path, *, overwrite: bool) -> None:
+            assert dataset_path == ds
+            assert overwrite is False
+            _add_stamp_column(parquet_paths[0], "is_last", [True] * 7)
+            raise RuntimeError("stamp write boom")
+
+        monkeypatch.setattr(
+            cycle_stamp_service,
+            "stamp_dataset_cycles",
+            partially_stamp_then_fail,
+        )
+
+        job_id = await dataset_ops_service.stamp_cycles(source_path=ds, overwrite=False)
+        job = await self._wait_for_job(dataset_ops_service, job_id)
+
+        assert job["status"] == "failed"
+        assert job["completed_at"] is not None
+        assert job["error"] == "stamp write boom"
+
+        restored_tables = [pq.read_table(path) for path in parquet_paths]
+        assert all("is_terminal" not in table.schema.names for table in restored_tables)
+        assert all("is_last" not in table.schema.names for table in restored_tables)

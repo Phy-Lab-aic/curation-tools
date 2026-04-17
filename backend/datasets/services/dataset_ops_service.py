@@ -131,7 +131,14 @@ class DatasetOpsService:
         source = Path(source_path)
 
         loop = asyncio.get_running_loop()
-        loop.run_in_executor(None, self._run_stamp_cycles, job_id, source, overwrite)
+        loop.call_soon(
+            loop.run_in_executor,
+            None,
+            self._run_stamp_cycles,
+            job_id,
+            source,
+            overwrite,
+        )
         return job_id
 
     # ------------------------------------------------------------------
@@ -247,7 +254,14 @@ class DatasetOpsService:
         try:
             from backend.datasets.services import cycle_stamp_service
 
-            cycle_stamp_service.stamp_dataset_cycles(source_path, overwrite=overwrite)
+            def stamp_into_copy(src: Path, dst: Path) -> None:
+                shutil.copytree(src, dst)
+                cycle_stamp_service.stamp_dataset_cycles(dst, overwrite=overwrite)
+
+            self._run_with_backup(
+                source_path,
+                stamp_into_copy,
+            )
 
             job["status"] = "complete"
             job["completed_at"] = datetime.now(timezone.utc).isoformat()
