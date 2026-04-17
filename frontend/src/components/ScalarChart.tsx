@@ -332,7 +332,7 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
                   currentFrame={currentFrame}
                   collapsed={obsCollapsed}
                   themeVersion={themeVersion}
-                  bands={bandsByName.get(name)}
+                  bands={bandsByName.get(unifyKey(key))}
                 />
               )
             })}
@@ -369,7 +369,7 @@ export function ScalarChart({ episodeIndex, currentFrame, onTerminalFrames }: Sc
                   currentFrame={currentFrame}
                   collapsed={actCollapsed}
                   themeVersion={themeVersion}
-                  bands={bandsByName.get(name)}
+                  bands={bandsByName.get(unifyKey(key))}
                 />
               )
             })}
