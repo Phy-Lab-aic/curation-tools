@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { TopNav } from './components/TopNav'
 import { LibraryPage } from './components/LibraryPage'
+import { SourcePage } from './components/SourcePage'
 import { CellPage } from './components/CellPage'
 import { DatasetPage } from './components/DatasetPage'
 import { ConverterPage } from './components/ConverterPage'
+import { shouldShowConverter } from './appChrome'
 import { useAppState } from './hooks/useAppState'
-import type { CellInfo, ConverterStatus, DatasetSummary } from './types'
+import type { CellInfo, ConverterStatus, DatasetSourceInfo, DatasetSummary } from './types'
 import './App.css'
 
 interface Theme {
@@ -58,7 +60,8 @@ function applyTheme(theme: Theme) {
 }
 
 export default function App() {
-  const { state, navigateHome, navigateToCell, navigateToDataset, navigateToConverter, setTab } = useAppState()
+  const { state, navigateHome, navigateToSource, navigateToCell, navigateToDataset, navigateToConverter, setTab } = useAppState()
+  const showConverter = shouldShowConverter(state)
 
   const [themeKey, setThemeKey] = useState(() => localStorage.getItem('app-theme') || 'dark')
 
@@ -74,25 +77,40 @@ export default function App() {
   })
 
   const fetchConverterStatus = useCallback(async () => {
+    if (!showConverter) return
     try {
       const res = await fetch('/api/converter/status')
       if (res.ok) setConverterStatus(await res.json())
     } catch {}
-  }, [])
+  }, [showConverter])
 
   useEffect(() => {
+    if (!showConverter) return
     fetchConverterStatus()
     const id = setInterval(fetchConverterStatus, 5000)
     return () => clearInterval(id)
-  }, [fetchConverterStatus])
+  }, [fetchConverterStatus, showConverter])
+
+  const handleSelectSource = useCallback((source: DatasetSourceInfo) => {
+    navigateToSource(source.name, source.path)
+  }, [navigateToSource])
 
   const handleSelectCell = useCallback((cell: CellInfo) => {
-    navigateToCell(cell.name, cell.path)
-  }, [navigateToCell])
+    if (state.view === 'source') {
+      navigateToCell(state.sourceName, state.sourcePath, cell.name, cell.path)
+    }
+  }, [state, navigateToCell])
 
   const handleSelectDataset = useCallback((ds: DatasetSummary) => {
     if (state.view === 'cell') {
-      navigateToDataset(state.cellName, state.cellPath, ds.path, ds.name)
+      navigateToDataset(
+        state.sourceName,
+        state.sourcePath,
+        state.cellName,
+        state.cellPath,
+        ds.path,
+        ds.name,
+      )
     }
   }, [state, navigateToDataset])
 
@@ -102,6 +120,7 @@ export default function App() {
         state={state}
         converterState={converterStatus.container_state}
         onNavigateHome={navigateHome}
+        onNavigateSource={navigateToSource}
         onNavigateCell={navigateToCell}
         onTabChange={setTab}
         onNavigateConverter={navigateToConverter}
@@ -111,7 +130,22 @@ export default function App() {
       />
       <div className="page-content">
         {state.view === 'library' && (
-          <LibraryPage onSelectCell={handleSelectCell} />
+          <LibraryPage onSelectSource={handleSelectSource} />
+        )}
+        {state.view === 'source' && (
+          <SourcePage
+            sourceName={state.sourceName}
+            sourcePath={state.sourcePath}
+            onSelectCell={handleSelectCell}
+            onSelectDataset={ds => navigateToDataset(
+              state.sourceName,
+              state.sourcePath,
+              state.sourceName,
+              state.sourcePath,
+              ds.path,
+              ds.name,
+            )}
+          />
         )}
         {state.view === 'cell' && (
           <CellPage

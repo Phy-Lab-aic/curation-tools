@@ -4,8 +4,16 @@ import type { AppState, CurateFilter, DatasetTab } from '../types'
 interface UseAppStateReturn {
   state: AppState
   navigateHome: () => void
-  navigateToCell: (cellName: string, cellPath: string) => void
-  navigateToDataset: (cellName: string, cellPath: string, datasetPath: string, datasetName: string) => void
+  navigateToSource: (sourceName: string, sourcePath: string) => void
+  navigateToCell: (sourceName: string, sourcePath: string, cellName: string, cellPath: string) => void
+  navigateToDataset: (
+    sourceName: string,
+    sourcePath: string,
+    cellName: string,
+    cellPath: string,
+    datasetPath: string,
+    datasetName: string,
+  ) => void
   navigateToConverter: () => void
   setTab: (tab: DatasetTab, filter?: CurateFilter) => void
 }
@@ -17,17 +25,32 @@ export function useAppState(): UseAppStateReturn {
     setState({ view: 'library' })
   }, [])
 
-  const navigateToCell = useCallback((cellName: string, cellPath: string) => {
-    setState({ view: 'cell', cellName, cellPath })
+  const navigateToSource = useCallback((sourceName: string, sourcePath: string) => {
+    setState({ view: 'source', sourceName, sourcePath })
+  }, [])
+
+  const navigateToCell = useCallback((sourceName: string, sourcePath: string, cellName: string, cellPath: string) => {
+    setState({ view: 'cell', sourceName, sourcePath, cellName, cellPath })
   }, [])
 
   const navigateToDataset = useCallback((
+    sourceName: string,
+    sourcePath: string,
     cellName: string,
     cellPath: string,
     datasetPath: string,
     datasetName: string,
   ) => {
-    setState({ view: 'dataset', cellName, cellPath, datasetPath, datasetName, tab: 'overview' })
+    setState({
+      view: 'dataset',
+      sourceName,
+      sourcePath,
+      cellName,
+      cellPath,
+      datasetPath,
+      datasetName,
+      tab: 'overview',
+    })
   }, [])
 
   const navigateToConverter = useCallback(() => {
@@ -40,5 +63,5 @@ export function useAppState(): UseAppStateReturn {
     )
   }, [])
 
-  return { state, navigateHome, navigateToCell, navigateToDataset, navigateToConverter, setTab }
+  return { state, navigateHome, navigateToSource, navigateToCell, navigateToDataset, navigateToConverter, setTab }
 }

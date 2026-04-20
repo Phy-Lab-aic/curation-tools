@@ -13,7 +13,7 @@ import json
 import logging
 from pathlib import Path
 
-from backend.datasets.schemas import CellInfo, DatasetSummary
+from backend.datasets.schemas import CellInfo, DatasetSourceInfo, DatasetSummary
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,25 @@ def scan_cells(roots: list[str], pattern: str = "cell*") -> list[CellInfo]:
                 active=True,
             ))
     return cells
+
+
+def list_dataset_sources(base_root: str, source_names: list[str], pattern: str = "cell*") -> list[DatasetSourceInfo]:
+    """Return configured source roots under a shared base path."""
+    base = Path(base_root)
+    sources: list[DatasetSourceInfo] = []
+    for source_name in source_names:
+        source_path = (base / source_name).resolve()
+        active = source_path.exists() and source_path.is_dir()
+        cell_count = len(scan_cells([str(source_path)], pattern=pattern)) if active else 0
+        sources.append(
+            DatasetSourceInfo(
+                name=source_name,
+                path=str(source_path),
+                cell_count=cell_count,
+                active=active,
+            )
+        )
+    return sources
 
 
 async def get_datasets_in_cell(cell_path: str) -> list[DatasetSummary]:

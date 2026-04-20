@@ -99,6 +99,13 @@ class CellInfo(BaseModel):
     active: bool
 
 
+class DatasetSourceInfo(BaseModel):
+    name: str
+    path: str
+    cell_count: int
+    active: bool
+
+
 class DatasetSummary(BaseModel):
     name: str
     path: str

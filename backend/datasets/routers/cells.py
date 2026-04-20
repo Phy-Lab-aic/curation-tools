@@ -1,20 +1,46 @@
-"""Router for cell and dataset listing endpoints."""
+"""Router for source, cell, and dataset listing endpoints."""
 
-from fastapi import APIRouter, HTTPException
 import urllib.parse
 from pathlib import Path
 
+from fastapi import APIRouter, HTTPException, Query
+
 from backend.core.config import settings
-from backend.datasets.schemas import CellInfo, DatasetSummary
-from backend.datasets.services.cell_service import get_datasets_in_cell, scan_cells
+from backend.datasets.schemas import CellInfo, DatasetSourceInfo, DatasetSummary
+from backend.datasets.services.cell_service import (
+    get_datasets_in_cell,
+    list_dataset_sources,
+    scan_cells,
+)
 
 router = APIRouter(prefix="/api/cells", tags=["cells"])
 
 
+def _resolve_allowed_root(root: str | None) -> list[str]:
+    if root is None:
+        return settings.allowed_dataset_roots
+
+    resolved = Path(root).resolve()
+    allowed_roots = [Path(item).resolve() for item in settings.allowed_dataset_roots]
+    if resolved not in allowed_roots:
+        raise HTTPException(status_code=403, detail="Access denied: root outside allowed roots")
+    return [str(resolved)]
+
+
+@router.get("/sources", response_model=list[DatasetSourceInfo])
+async def list_sources():
+    """Return configured dataset sources under the shared base path."""
+    return list_dataset_sources(
+        settings.dataset_root_base,
+        settings.dataset_sources,
+        pattern=settings.cell_name_pattern,
+    )
+
+
 @router.get("", response_model=list[CellInfo])
-async def list_cells():
-    """Scan allowed_dataset_roots for cell* directories."""
-    return scan_cells(settings.allowed_dataset_roots, pattern=settings.cell_name_pattern)
+async def list_cells(root: str | None = Query(None, description="Optional source root to scan for cells")):
+    """Scan allowed dataset roots for cell directories."""
+    return scan_cells(_resolve_allowed_root(root), pattern=settings.cell_name_pattern)
 
 
 @router.get("/{cell_path:path}/datasets", response_model=list[DatasetSummary])

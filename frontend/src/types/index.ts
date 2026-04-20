@@ -47,10 +47,17 @@ export interface TaskUpdate {
 
 export interface CellInfo {
   name: string        // "cell001"
-  path: string        // "/tmp/hf-mounts/Phy-lab/dataset/cell001"
-  mount_root: string  // "/tmp/hf-mounts/Phy-lab/dataset"
+  path: string        // "/mnt/.../lerobot/cell001"
+  mount_root: string  // "/mnt/.../lerobot"
   dataset_count: number
   active: boolean     // mount path is accessible
+}
+
+export interface DatasetSourceInfo {
+  name: string
+  path: string
+  cell_count: number
+  active: boolean
 }
 
 export interface DatasetSummary {
@@ -81,8 +88,9 @@ export interface CurateFilter {
 
 export type AppState =
   | { view: 'library' }
-  | { view: 'cell'; cellName: string; cellPath: string }
-  | { view: 'dataset'; cellName: string; cellPath: string; datasetPath: string; datasetName: string; tab: DatasetTab; filter?: CurateFilter }
+  | { view: 'source'; sourceName: string; sourcePath: string }
+  | { view: 'cell'; sourceName: string; sourcePath: string; cellName: string; cellPath: string }
+  | { view: 'dataset'; sourceName: string; sourcePath: string; cellName: string; cellPath: string; datasetPath: string; datasetName: string; tab: DatasetTab; filter?: CurateFilter }
   | { view: 'converter' }
 
 // ── Converter types ────────────────────────────

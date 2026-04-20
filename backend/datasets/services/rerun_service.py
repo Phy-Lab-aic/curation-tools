@@ -22,6 +22,17 @@ logger = logging.getLogger(__name__)
 _RERUN_READY = False
 
 
+def _resolve_video_fps(feature_meta: dict, dataset_fps: float) -> float:
+    """Return the best-known fps for a video feature."""
+    for key in ("video_info", "info"):
+        video_info = feature_meta.get(key)
+        if isinstance(video_info, dict):
+            value = video_info.get("video.fps")
+            if isinstance(value, (int, float)) and value > 0:
+                return float(value)
+    return dataset_fps if dataset_fps > 0 else 30.0
+
+
 def ensure_rerun_ready() -> None:
     """Raise a user-facing error when the Rerun viewer is unavailable."""
     if not HAS_RERUN:
@@ -81,6 +92,36 @@ def _log_scalar_columns(entity_prefix: str, row: dict, columns: list[str]) -> No
                 rr.log(f"{entity}/{i}", rr.Scalar(float(val)))
 
 
+def _resolve_episode_rows(
+    df: dict[str, list],
+    from_idx: int,
+    to_idx: int,
+    all_columns: list[str],
+) -> list[int]:
+    """Return file-local row positions for an episode slice."""
+    if not all_columns:
+        return []
+
+    row_count = len(df.get(all_columns[0], []))
+    if row_count == 0:
+        return []
+
+    if "index" in df:
+        positions = [
+            position
+            for position, value in enumerate(df["index"])
+            if value is not None and from_idx <= int(value) < to_idx
+        ]
+        if positions:
+            if "frame_index" in df:
+                positions.sort(key=lambda pos: int(df["frame_index"][pos]))
+            return positions
+
+    start = max(0, min(from_idx, row_count))
+    stop = max(start, min(to_idx, row_count))
+    return list(range(start, stop))
+
+
 async def visualize_episode(episode_index: int) -> None:
     """Visualize a single episode in Rerun."""
     import asyncio
@@ -88,6 +129,7 @@ async def visualize_episode(episode_index: int) -> None:
     ensure_rerun_ready()
     loc = dataset_service.get_episode_file_location(episode_index)
     dataset_path = Path(dataset_service.get_dataset_path())
+    dataset_info = dataset_service.get_info()
     features = dataset_service.get_features()
 
     from_idx = loc["dataset_from_index"]
@@ -125,10 +167,11 @@ async def visualize_episode(episode_index: int) -> None:
     # to avoid polluting visualizations with metadata like timestamp, index, etc.
 
     # Per-frame scalar logging
-    num_frames = to_idx - from_idx
-    for global_idx in range(from_idx, min(to_idx, len(df.get(all_columns[0], [])))):
-        rr.set_time("frame", sequence= global_idx - from_idx)
-        row = {col: df[col][global_idx] for col in all_columns if global_idx < len(df[col])}
+    row_positions = _resolve_episode_rows(df, from_idx, to_idx, all_columns)
+    num_frames = len(row_positions) if row_positions else max(0, to_idx - from_idx)
+    for sequence, row_position in enumerate(row_positions):
+        rr.set_time("frame", sequence=sequence)
+        row = {col: df[col][row_position] for col in all_columns if row_position < len(df[col])}
         _log_scalar_columns("observation", row, state_columns)
         _log_scalar_columns("action", row, action_columns)
 
@@ -142,6 +185,9 @@ async def visualize_episode(episode_index: int) -> None:
         vid_info = loc.get("videos", {}).get(vkey, {})
         vid_chunk = vid_info.get("chunk_index", chunk_idx)
         vid_file = vid_info.get("file_index", file_idx)
+        video_start_ts = float(vid_info.get("from_timestamp") or 0.0)
+        video_fps = _resolve_video_fps(_meta, float(dataset_info.get("fps") or 0))
+        start_frame = max(0, int(round(video_start_ts * video_fps)))
 
         video_path = dataset_path / f"videos/{vkey}/chunk-{vid_chunk:03d}/file-{vid_file:03d}.mp4"
         if not video_path.exists():
@@ -149,8 +195,7 @@ async def visualize_episode(episode_index: int) -> None:
             continue
 
         try:
-            # Video files are per-episode, so start from frame 0 (not global from_idx)
-            frames = _extract_video_frames(video_path, 0, num_frames)
+            frames = _extract_video_frames(video_path, start_frame, num_frames)
         except Exception as exc:
             logger.warning("Video extraction failed for %s: %s", vkey, exc)
             continue
