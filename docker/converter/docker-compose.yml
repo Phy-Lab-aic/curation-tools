@@ -1,8 +1,8 @@
 services:
   convert-server:
     build:
-      context: ../../..
-      dockerfile: curation-tools/docker/converter/Dockerfile
+      context: ../..
+      dockerfile: docker/converter/Dockerfile
     container_name: convert-server
     volumes:
       - /mnt/synology/data/data_div/2026_1:/data

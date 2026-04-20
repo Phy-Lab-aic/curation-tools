@@ -52,13 +52,10 @@ def _drop_cached_conversion_modules() -> None:
 def _resolve_repo_root(configured_root: Path) -> Path:
     repo_root = configured_root.resolve()
     if not repo_root.is_dir():
-        raise RuntimeError(f"rosbag-to-lerobot checkout not found: {repo_root}")
+        raise RuntimeError(f"conversion repo checkout not found: {repo_root}")
 
-    if (repo_root / "conversion" / "dataset_sync.py").is_file():
+    sync_module = repo_root / "conversion" / "dataset_sync.py"
+    if sync_module.is_file():
         return repo_root
 
-    worktree_matches = sorted((repo_root / ".worktrees").glob("*/conversion/dataset_sync.py"))
-    if len(worktree_matches) == 1:
-        return worktree_matches[0].parent.parent
-
-    raise RuntimeError(f"conversion.dataset_sync not found under: {repo_root}")
+    raise RuntimeError(f"conversion.dataset_sync not found under conversion repo: {repo_root}")

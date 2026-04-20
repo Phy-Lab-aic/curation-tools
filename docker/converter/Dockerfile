@@ -30,14 +30,11 @@ RUN pip install --no-cache-dir --break-system-packages --ignore-installed \
       "mcap>=0.0.10" \
       "mcap-ros2-support>=0.5.0"
 
-# 5) Copy app code
-COPY rosbag-to-lerobot/conversion /app/conversion
-COPY rosbag-to-lerobot/nas /app/nas
-COPY rosbag-to-lerobot/main.py /app/main.py
-COPY rosbag-to-lerobot/auto_converter.py /app/auto_converter.py
-COPY rosbag-to-lerobot/benchmark.py /app/benchmark.py
-COPY rosbag-to-lerobot/local_convert.py /app/local_convert.py
-COPY rosbag-to-lerobot/scripts/benchmark_convert.py /app/scripts/benchmark_convert.py
+# 5) Copy app code from the bundled conversion submodule
+COPY rosbag2lerobot-svt/conversion /app/conversion
+COPY rosbag2lerobot-svt/nas /app/nas
+COPY rosbag2lerobot-svt/auto_converter.py /app/auto_converter.py
+COPY conversion_configs/robots /app/configs/robots
 
 # ---- runtime ----
 FROM ros:jazzy-ros-core AS runtime
@@ -79,9 +76,13 @@ RUN find /usr/local/lib/python3.12/dist-packages \
 
 # Import smoke test
 RUN bash -c 'source /opt/ros/jazzy/setup.bash && \
-python3 -c "\
+PYTHONPATH="/app:${PYTHONPATH}" python3 -c "\
+from pathlib import Path; \
 import rosbag2_py; print(\"rosbag2_py OK\"); \
-from sensor_msgs.msg import CompressedImage; print(\"ROS2 msgs OK\") \
+from sensor_msgs.msg import CompressedImage; print(\"ROS2 msgs OK\"); \
+assert Path(\"/app/conversion/data_creator.py\").exists(); \
+import conversion.data_creator; print(\"conversion import OK\"); \
+import auto_converter; print(\"auto_converter import OK\") \
 "'
 
 # Source ROS2 setup in entrypoint
@@ -89,4 +90,4 @@ RUN printf '#!/bin/bash\nsource /opt/ros/jazzy/setup.bash\nexec "$@"\n' > /entry
  && chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python3", "/app/main.py"]
+CMD ["python3", "/app/auto_converter.py"]
