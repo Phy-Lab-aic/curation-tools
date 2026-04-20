@@ -1,0 +1,26 @@
+robot_type: rby1a
+arms:
+  - side: left
+    arm_joints:
+      - left_arm_0
+      - left_arm_1
+      - left_arm_2
+      - left_arm_3
+      - left_arm_4
+      - left_arm_5
+      - left_arm_6
+    gripper_joints:
+      - left_trigger
+  - side: right
+    arm_joints:
+      - right_arm_0
+      - right_arm_1
+      - right_arm_2
+      - right_arm_3
+      - right_arm_4
+      - right_arm_5
+      - right_arm_6
+    gripper_joints:
+      - right_trigger
+joint_filter:
+  exclude: []

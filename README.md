@@ -41,6 +41,8 @@ cd curation-tools
 # If already cloned without submodules
 git submodule update --init --recursive
 
+# The converter flow depends on the bundled rosbag2lerobot-svt submodule
+
 # Python environment
 uv venv .venv
 source .venv/bin/activate

@@ -1,4 +1,4 @@
-"""Docker CLI wrapper for the rosbag-to-lerobot auto_converter."""
+"""Docker CLI wrapper for the bundled rosbag2lerobot-svt auto_converter."""
 
 from __future__ import annotations
 

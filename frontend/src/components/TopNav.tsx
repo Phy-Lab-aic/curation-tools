@@ -1,4 +1,5 @@
 import type { AppState, DatasetTab, ConverterState } from '../types'
+import { shouldShowCellBreadcrumb, shouldShowConverter } from '../appChrome'
 
 interface ThemeOption { key: string; dot: string }
 
@@ -6,7 +7,8 @@ interface TopNavProps {
   state: AppState
   converterState: ConverterState
   onNavigateHome: () => void
-  onNavigateCell: (cellName: string, cellPath: string) => void
+  onNavigateSource: (sourceName: string, sourcePath: string) => void
+  onNavigateCell: (sourceName: string, sourcePath: string, cellName: string, cellPath: string) => void
   onTabChange?: (tab: DatasetTab) => void
   onNavigateConverter?: () => void
   themes: readonly ThemeOption[]
@@ -28,26 +30,38 @@ const DOT_CLASS: Record<ConverterState, string> = {
   unknown: 'converter-dot-stopped',
 }
 
-export function TopNav({ state, converterState, onNavigateHome, onNavigateCell, onTabChange, onNavigateConverter, themes, currentTheme, onThemeChange }: TopNavProps) {
+export function TopNav({ state, converterState, onNavigateHome, onNavigateSource, onNavigateCell, onTabChange, onNavigateConverter, themes, currentTheme, onThemeChange }: TopNavProps) {
+  const showConverter = shouldShowConverter(state)
+
   return (
     <nav className="top-nav">
       <button className="top-nav-logo" onClick={onNavigateHome}>
         robo<span>data</span>
       </button>
 
-      <button
-        className={`converter-indicator ${DOT_CLASS[converterState]}`}
-        onClick={onNavigateConverter}
-        title={`Converter: ${converterState}`}
-      >
-        <span className="converter-nav-dot" />
-      </button>
+      {showConverter && (
+        <button
+          className={`converter-indicator ${DOT_CLASS[converterState]}`}
+          onClick={onNavigateConverter}
+          title={`Converter: ${converterState}`}
+        >
+          <span className="converter-nav-dot" />
+        </button>
+      )}
 
       <div className="top-nav-breadcrumb">
-        {(state.view === 'cell' || state.view === 'dataset') && (
+        {(state.view === 'source' || state.view === 'cell' || state.view === 'dataset') && (
           <>
             <span className="sep">/</span>
-            <button onClick={() => onNavigateCell(state.cellName, state.cellPath)}>
+            <button onClick={() => onNavigateSource(state.sourceName, state.sourcePath)}>
+              <em>{state.sourceName}</em>
+            </button>
+          </>
+        )}
+        {(state.view === 'cell' || state.view === 'dataset') && shouldShowCellBreadcrumb(state) && (
+          <>
+            <span className="sep">/</span>
+            <button onClick={() => onNavigateCell(state.sourceName, state.sourcePath, state.cellName, state.cellPath)}>
               <em>{state.cellName}</em>
             </button>
           </>
