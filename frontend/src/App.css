@@ -1518,6 +1518,10 @@ code, .mono { font-family: var(--font-mono); }
 .log-badge-ok   { background: var(--c-green-dim); color: var(--c-green); }
 .log-badge-fail { background: var(--c-red-dim);   color: var(--c-red); }
 .log-badge-active { background: var(--c-blue-dim); color: var(--c-blue); }
+.log-badge-finalizing {
+  background: var(--c-blue-dim);
+  color: var(--c-blue);
+}
 .log-badge-scan { background: var(--accent-dim);  color: var(--accent); }
 .log-badge-warn { background: var(--c-yellow-dim); color: var(--c-yellow); }
 
