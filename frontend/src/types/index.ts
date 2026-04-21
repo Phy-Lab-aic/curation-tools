@@ -127,7 +127,16 @@ export interface ConverterStatus {
   summary: string
 }
 
-export type LogEventType = 'converted' | 'failed' | 'converting' | 'scan' | 'warning' | 'info' | 'error'
+export type LogEventType =
+  | 'converted'
+  | 'failed'
+  | 'converting'
+  | 'finalizing'
+  | 'finalized'
+  | 'scan'
+  | 'warning'
+  | 'info'
+  | 'error'
 
 export interface LogEvent {
   type: LogEventType
