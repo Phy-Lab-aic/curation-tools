@@ -204,10 +204,12 @@ export function ConverterProgress({
           const isQuickRunning = runningValidation.has(`${t.cell_task}:quick`)
           const isFullRunning = runningValidation.has(`${t.cell_task}:full`)
           const lifecycleLive = taskLive.get(t.cell_task)
-          const live = t.pending === 0
-            ? 'done'
-            : lifecycleLive === 'converting' || lifecycleLive === 'finalizing'
+          const live = hasPending
+            ? lifecycleLive === 'converting' || lifecycleLive === 'finalizing'
               ? lifecycleLive
+              : undefined
+            : t.done === t.total
+              ? 'done'
               : undefined
           const barClass = live === 'finalizing' ? 'cvp-card-bar is-finalizing' : 'cvp-card-bar'
           const fillClass = live === 'converting'
