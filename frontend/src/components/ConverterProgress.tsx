@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ConverterState, ConverterTaskProgress } from '../types'
+import type { ConverterState, ConverterTaskProgress, LogEvent } from '../types'
 
 type ValidationMode = 'quick' | 'full'
 
@@ -17,6 +17,7 @@ interface Props {
   tasks: ConverterTaskProgress[]
   containerState: ConverterState
   dockerAvailable: boolean
+  events: LogEvent[]
   onRefresh: () => void
 }
 
@@ -34,6 +35,7 @@ export function ConverterProgress({
   tasks,
   containerState,
   dockerAvailable,
+  events: _events,
   onRefresh,
 }: Props) {
   const [starting, setStarting] = useState<string | null>(null)
