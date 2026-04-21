@@ -119,7 +119,10 @@ class TestUpdateEpisode:
         # Verify directly in DB
         db = await get_db()
         async with db.execute(
-            "SELECT grade, tags FROM episode_annotations WHERE episode_index = 0"
+            """SELECT a.grade, a.tags
+               FROM annotations a
+               JOIN episode_serials es ON es.serial_number = a.serial_number
+               WHERE es.episode_index = 0"""
         ) as cursor:
             row = await cursor.fetchone()
         assert row is not None
@@ -165,7 +168,10 @@ class TestBulkGrade:
 
         db = await get_db()
         async with db.execute(
-            "SELECT episode_index, grade, tags FROM episode_annotations ORDER BY episode_index"
+            """SELECT es.episode_index, a.grade, a.tags
+               FROM annotations a
+               JOIN episode_serials es ON es.serial_number = a.serial_number
+               ORDER BY es.episode_index"""
         ) as cursor:
             rows = await cursor.fetchall()
 
@@ -230,7 +236,7 @@ class TestSidecarMigration:
 
         # Verify data is in the DB
         db = await get_db()
-        async with db.execute("SELECT COUNT(*) FROM episode_annotations") as cursor:
+        async with db.execute("SELECT COUNT(*) FROM annotations") as cursor:
             row = await cursor.fetchone()
         assert row[0] == 2
 

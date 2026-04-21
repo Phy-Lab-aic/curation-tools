@@ -169,10 +169,23 @@ async def _ensure_migrated(dataset_id: int, dataset_path: Path) -> None:
     logger.info("Migrated %d annotations from sidecar for %s", len(sidecar), dataset_path.name)
 
 
+async def _get_serial(db, dataset_id: int, episode_index: int) -> str | None:
+    """Resolve the Serial_number for an (dataset_id, episode_index) pair."""
+    async with db.execute(
+        "SELECT serial_number FROM episode_serials WHERE dataset_id = ? AND episode_index = ?",
+        (dataset_id, episode_index),
+    ) as cur:
+        row = await cur.fetchone()
+    return row[0] if row else None
+
+
 async def _load_annotations_from_db(dataset_id: int) -> dict[int, dict]:
     db = await get_db()
     async with db.execute(
-        "SELECT episode_index, grade, tags, reason FROM episode_annotations WHERE dataset_id = ?",
+        """SELECT es.episode_index, a.grade, a.tags, a.reason
+           FROM episode_serials es
+           LEFT JOIN annotations a ON a.serial_number = es.serial_number
+           WHERE es.dataset_id = ?""",
         (dataset_id,),
     ) as cursor:
         rows = await cursor.fetchall()
