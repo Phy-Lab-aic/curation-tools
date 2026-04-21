@@ -37,6 +37,10 @@ function eventTeaser(event: LogEvent): string {
       return `Failed ${recordingName(event.recording!)}${event.reason ? ` — ${event.reason}` : ''}`
     case 'converting':
       return `Processing ${event.task}`
+    case 'finalizing':
+      return `Finalizing ${event.task}`
+    case 'finalized':
+      return `Finalized ${event.task}`
     case 'scan':
       return `Scanned ${event.tasks} tasks, ${event.pending} pending`
     case 'warning':
@@ -92,6 +96,24 @@ function EventRow({ event }: { event: LogEvent }) {
         <div className="log-event log-converting">
           {time}
           <span className="log-badge log-badge-active">START</span>
+          <span className="log-task">{event.task}</span>
+        </div>
+      )
+
+    case 'finalizing':
+      return (
+        <div className="log-event log-finalizing">
+          {time}
+          <span className="log-badge log-badge-finalizing">FIN</span>
+          <span className="log-task">{event.task}</span>
+        </div>
+      )
+
+    case 'finalized':
+      return (
+        <div className="log-event log-finalized">
+          {time}
+          <span className="log-badge log-badge-ok">OK</span>
           <span className="log-task">{event.task}</span>
         </div>
       )
