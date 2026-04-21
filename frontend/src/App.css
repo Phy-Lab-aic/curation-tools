@@ -1361,6 +1361,7 @@ code, .mono { font-family: var(--font-mono); }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .cvp-bar-fill,
   .cvp-card-bar-fill {
     transition: none;
   }
