@@ -3,11 +3,10 @@ import type { ConverterState, LogEvent } from '../types'
 
 interface Props {
   containerState: ConverterState
+  events: LogEvent[]
   open: boolean
   onToggle: () => void
 }
-
-const MAX_EVENTS = 200
 
 function formatTime(ts: string) {
   return ts.split(' ')[1] || ts
@@ -134,56 +133,10 @@ function EventRow({ event }: { event: LogEvent }) {
   }
 }
 
-export function ConverterLogs({ containerState, open, onToggle }: Props) {
-  const [events, setEvents] = useState<LogEvent[]>([])
+export function ConverterLogs({ containerState, events, open, onToggle }: Props) {
   const [autoScroll, setAutoScroll] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (containerState !== 'running') return
-
-    let ws: WebSocket | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let attempt = 0
-    let cancelled = false
-
-    const connect = () => {
-      if (cancelled) return
-      setEvents([])
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      ws = new WebSocket(`${proto}//${window.location.host}/api/converter/logs`)
-
-      ws.onmessage = (evt) => {
-        try {
-          const event: LogEvent = JSON.parse(evt.data)
-          setEvents(prev => {
-            const next = [...prev, event]
-            return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next
-          })
-        } catch {
-          // skip
-        }
-      }
-
-      ws.onopen = () => { attempt = 0 }
-      ws.onerror = () => {}
-      ws.onclose = () => {
-        if (cancelled) return
-        attempt++
-        const delay = Math.min(1000 * 2 ** attempt, 10000)
-        reconnectTimer = setTimeout(connect, delay)
-      }
-    }
-
-    connect()
-
-    return () => {
-      cancelled = true
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      ws?.close()
-    }
-  }, [containerState])
 
   useEffect(() => {
     if (autoScroll && open) {
