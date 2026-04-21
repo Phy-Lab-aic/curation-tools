@@ -56,6 +56,14 @@ def _create_mock_dataset(root: Path) -> Path:
         "data/file_index": pa.array([0, 0, 0], type=pa.int64()),
         "dataset_from_index": pa.array([0, 100, 200], type=pa.int64()),
         "dataset_to_index": pa.array([100, 200, 300], type=pa.int64()),
+        "Serial_number": pa.array(
+            [
+                "MOCK_20260101_000000_000000",
+                "MOCK_20260101_000001_000000",
+                "MOCK_20260101_000002_000000",
+            ],
+            type=pa.string(),
+        ),
     })
     pq.write_table(ep_table, ds / "meta" / "episodes" / "chunk-000" / "file-000.parquet")
 
