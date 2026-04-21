@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ConverterState, ConverterTaskProgress, LogEvent } from '../types'
 
 type TaskLive = 'converting' | 'finalizing' | 'done'
@@ -33,26 +33,36 @@ function taskCell(cell_task: string) {
   return parts[0] || ''
 }
 
-function deriveTaskLive(events: LogEvent[]): Map<string, TaskLive> {
-  const live = new Map<string, TaskLive>()
-  let convertingTask: string | null = null
-  for (const ev of events) {
-    if (!ev.task) continue
-    if (ev.type === 'converting') {
-      if (convertingTask && convertingTask !== ev.task && live.get(convertingTask) === 'converting') {
-        live.delete(convertingTask)
-      }
-      live.set(ev.task, 'converting')
-      convertingTask = ev.task
-    } else if (ev.type === 'finalizing') {
-      live.set(ev.task, 'finalizing')
-      if (convertingTask === ev.task) convertingTask = null
-    } else if (ev.type === 'finalized') {
-      live.set(ev.task, 'done')
-      if (convertingTask === ev.task) convertingTask = null
+function applyTaskLiveEvent(
+  live: Map<string, TaskLive>,
+  ev: LogEvent,
+  convertingTask: string | null,
+): string | null {
+  if (!ev.task) return convertingTask
+  if (ev.type === 'converting') {
+    if (convertingTask && convertingTask !== ev.task && live.get(convertingTask) === 'converting') {
+      live.delete(convertingTask)
     }
+    live.set(ev.task, 'converting')
+    return ev.task
   }
-  return live
+  if (ev.type === 'finalizing') {
+    live.set(ev.task, 'finalizing')
+    return convertingTask === ev.task ? null : convertingTask
+  }
+  if (ev.type === 'finalized') {
+    live.set(ev.task, 'done')
+    return convertingTask === ev.task ? null : convertingTask
+  }
+  return convertingTask
+}
+
+function sameTaskLive(a: Map<string, TaskLive>, b: Map<string, TaskLive>) {
+  if (a.size !== b.size) return false
+  for (const [key, value] of a) {
+    if (b.get(key) !== value) return false
+  }
+  return true
 }
 
 export function ConverterProgress({
@@ -64,9 +74,25 @@ export function ConverterProgress({
 }: Props) {
   const [starting, setStarting] = useState<string | null>(null)
   const [runningValidation, setRunningValidation] = useState<Set<string>>(new Set())
-  const taskLive = useMemo(() => {
-    if (containerState !== 'running') return new Map<string, TaskLive>()
-    return deriveTaskLive(events)
+  const convertingTaskRef = useRef<string | null>(null)
+  const [taskLive, setTaskLive] = useState<Map<string, TaskLive>>(new Map())
+
+  useEffect(() => {
+    if (containerState !== 'running') {
+      convertingTaskRef.current = null
+      setTaskLive(prev => (prev.size === 0 ? prev : new Map()))
+      return
+    }
+
+    setTaskLive(prev => {
+      const next = new Map(prev)
+      let convertingTask = convertingTaskRef.current
+      for (const ev of events) {
+        convertingTask = applyTaskLiveEvent(next, ev, convertingTask)
+      }
+      convertingTaskRef.current = convertingTask
+      return sameTaskLive(prev, next) ? prev : next
+    })
   }, [containerState, events])
 
   const startTask = async (cell_task: string) => {
@@ -177,11 +203,11 @@ export function ConverterProgress({
           const full = t.validation.full
           const isQuickRunning = runningValidation.has(`${t.cell_task}:quick`)
           const isFullRunning = runningValidation.has(`${t.cell_task}:full`)
-          const eventLive = taskLive.get(t.cell_task)
-          const live = eventLive === 'converting' || eventLive === 'finalizing'
-            ? eventLive
-            : (t.done === t.total && t.pending === 0) || (eventLive === 'done' && t.pending === 0)
-              ? 'done'
+          const lifecycleLive = taskLive.get(t.cell_task)
+          const live = t.pending === 0
+            ? 'done'
+            : lifecycleLive === 'converting' || lifecycleLive === 'finalizing'
+              ? lifecycleLive
               : undefined
           const barClass = live === 'finalizing' ? 'cvp-card-bar is-finalizing' : 'cvp-card-bar'
           const fillClass = live === 'converting'
