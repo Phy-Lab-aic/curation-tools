@@ -535,7 +535,7 @@ def _row_to_episode(
         dataset_to_index=int(row.get("dataset_to_index", 0)),
         grade=row.get("grade"),
         tags=tags,
-        created_at=_parse_created_at(row.get("serial_number")),
+        created_at=_parse_created_at(row.get("Serial_number")),
     ).model_dump()
 
 
