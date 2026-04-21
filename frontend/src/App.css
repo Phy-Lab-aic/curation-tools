@@ -1361,6 +1361,10 @@ code, .mono { font-family: var(--font-mono); }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .cvp-card-bar-fill {
+    transition: none;
+  }
+
   .cvp-card-bar-fill.is-converting,
   .cvp-card-bar.is-finalizing,
   .cvp-status-badge .dot {
