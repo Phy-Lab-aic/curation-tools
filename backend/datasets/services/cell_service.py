@@ -182,6 +182,45 @@ async def _upsert_datasets_to_db(cell_name: str, datasets: list[DatasetSummary])
     await db.commit()
 
 
+async def _rebuild_episode_serials(db, dataset_id: int, dataset_dir: Path) -> None:
+    """Replace all rows in episode_serials for dataset_id using current parquet.
+
+    Only reads the ``episode_index`` and ``Serial_number`` columns. Episodes with
+    missing or empty Serial_number are skipped with a warning; if the
+    Serial_number column is absent from a parquet file the whole file is
+    skipped with a warning.
+    """
+    from glob import glob
+
+    import pyarrow.parquet as pq
+
+    pattern = str(dataset_dir / "meta" / "episodes" / "chunk-*" / "file-*.parquet")
+    collected: list[tuple[int, int, str]] = []
+    for parquet_path in sorted(glob(pattern)):
+        schema = pq.read_schema(parquet_path)
+        if "Serial_number" not in schema.names:
+            logger.warning("parquet %s missing Serial_number; skipping", parquet_path)
+            continue
+        table = pq.read_table(parquet_path, columns=["episode_index", "Serial_number"])
+        indices = table.column("episode_index").to_pylist()
+        serials = table.column("Serial_number").to_pylist()
+        for idx, serial in zip(indices, serials):
+            if serial is None or serial == "":
+                logger.warning(
+                    "episode %s in %s has empty Serial_number; skipping",
+                    idx, dataset_dir,
+                )
+                continue
+            collected.append((dataset_id, int(idx), str(serial)))
+
+    await db.execute("DELETE FROM episode_serials WHERE dataset_id = ?", (dataset_id,))
+    if collected:
+        await db.executemany(
+            "INSERT INTO episode_serials (dataset_id, episode_index, serial_number) "
+            "VALUES (?, ?, ?)",
+            collected,
+        )
+
 
 def _count_grades(dataset_dir: Path, fps: int = 0) -> dict[str, int | float]:
     """Count grades and durations from parquet files and sidecar JSON (sidecar wins).
