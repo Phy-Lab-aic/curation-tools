@@ -39,6 +39,7 @@ function applyTaskLiveEvent(
   convertingTask: string | null,
 ): string | null {
   if (!ev.task) return convertingTask
+  const currentLive = live.get(ev.task)
   if (ev.type === 'converting') {
     if (convertingTask && convertingTask !== ev.task && live.get(convertingTask) === 'converting') {
       live.delete(convertingTask)
@@ -47,6 +48,9 @@ function applyTaskLiveEvent(
     return ev.task
   }
   if (ev.type === 'finalizing') {
+    if (currentLive === 'done') {
+      return convertingTask
+    }
     live.set(ev.task, 'finalizing')
     return convertingTask === ev.task ? null : convertingTask
   }
