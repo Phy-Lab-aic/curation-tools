@@ -131,25 +131,62 @@ async def get_datasets_in_cell(cell_path: str) -> list[DatasetSummary]:
 
 
 async def _upsert_datasets_to_db(cell_name: str, datasets: list[DatasetSummary]) -> None:
-    """Upsert dataset summaries into the SQLite DB."""
+    """Upsert dataset summaries, prune vanished datasets, and rebuild
+    episode_serials lazily (only when meta/info.json mtime changes).
+    """
     from backend.core.db import get_db
 
     db = await get_db()
+    live_paths = sorted({ds.path for ds in datasets})
+
+    # (a) Remove datasets in this cell that no longer exist on disk.
+    if live_paths:
+        placeholders = ",".join("?" * len(live_paths))
+        await db.execute(
+            f"DELETE FROM datasets WHERE cell_name = ? AND path NOT IN ({placeholders})",
+            (cell_name, *live_paths),
+        )
+    else:
+        await db.execute("DELETE FROM datasets WHERE cell_name = ?", (cell_name,))
+
     for ds in datasets:
+        info_json = Path(ds.path) / "meta" / "info.json"
+        try:
+            info_mtime = info_json.stat().st_mtime
+        except OSError:
+            logger.warning("cannot stat %s; skipping dataset", info_json)
+            continue
+
+        async with db.execute(
+            "SELECT id, info_json_mtime FROM datasets WHERE path = ?", (ds.path,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        cached_mtime = row[1] if row else None
+
         await db.execute(
             """
-            INSERT INTO datasets (path, name, cell_name, fps, total_episodes, robot_type, synced_at)
-            VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            INSERT INTO datasets (
+                path, name, cell_name, fps, total_episodes, robot_type,
+                info_json_mtime, synced_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
             ON CONFLICT(path) DO UPDATE SET
               name=excluded.name, cell_name=excluded.cell_name,
               fps=excluded.fps, total_episodes=excluded.total_episodes,
-              robot_type=excluded.robot_type, synced_at=excluded.synced_at
+              robot_type=excluded.robot_type,
+              info_json_mtime=excluded.info_json_mtime,
+              synced_at=excluded.synced_at
             """,
-            (ds.path, ds.name, cell_name, ds.fps, ds.total_episodes, ds.robot_type),
+            (ds.path, ds.name, cell_name, ds.fps, ds.total_episodes,
+             ds.robot_type, info_mtime),
         )
+
         async with db.execute("SELECT id FROM datasets WHERE path = ?", (ds.path,)) as cursor:
-            row = await cursor.fetchone()
-            dataset_id = row[0]
+            dataset_id = (await cursor.fetchone())[0]
+
+        if cached_mtime is None or cached_mtime != info_mtime:
+            await _rebuild_episode_serials(db, dataset_id, Path(ds.path))
+
         await db.execute(
             """
             INSERT INTO dataset_stats (
@@ -168,14 +205,8 @@ async def _upsert_datasets_to_db(cell_name: str, datasets: list[DatasetSummary])
               updated_at=excluded.updated_at
             """,
             (
-                dataset_id,
-                ds.graded_count,
-                ds.good_count,
-                ds.normal_count,
-                ds.bad_count,
-                ds.total_duration_sec,
-                ds.good_duration_sec,
-                ds.normal_duration_sec,
+                dataset_id, ds.graded_count, ds.good_count, ds.normal_count, ds.bad_count,
+                ds.total_duration_sec, ds.good_duration_sec, ds.normal_duration_sec,
                 ds.bad_duration_sec,
             ),
         )
