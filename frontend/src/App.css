@@ -1333,7 +1333,7 @@ code, .mono { font-family: var(--font-mono); }
   background: linear-gradient(
     90deg,
     var(--c-green) 0%,
-    rgba(166, 227, 161, 0.4) 40%,
+    var(--c-green-dim) 40%,
     var(--c-green) 80%
   );
   background-size: 200% 100%;
@@ -1356,8 +1356,8 @@ code, .mono { font-family: var(--font-mono); }
   100% { background-position: -200% 0; }
 }
 @keyframes cvp-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(137, 180, 250, 0.35); }
-  50% { box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.15); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--c-blue-dim); }
+  50% { box-shadow: 0 0 0 2px var(--c-blue-dim); }
 }
 
 @media (prefers-reduced-motion: reduce) {
