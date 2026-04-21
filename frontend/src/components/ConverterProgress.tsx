@@ -35,11 +35,22 @@ function taskCell(cell_task: string) {
 
 function deriveTaskLive(events: LogEvent[]): Map<string, TaskLive> {
   const live = new Map<string, TaskLive>()
+  let convertingTask: string | null = null
   for (const ev of events) {
     if (!ev.task) continue
-    if (ev.type === 'converting') live.set(ev.task, 'converting')
-    else if (ev.type === 'finalizing') live.set(ev.task, 'finalizing')
-    else if (ev.type === 'finalized') live.set(ev.task, 'done')
+    if (ev.type === 'converting') {
+      if (convertingTask && convertingTask !== ev.task && live.get(convertingTask) === 'converting') {
+        live.delete(convertingTask)
+      }
+      live.set(ev.task, 'converting')
+      convertingTask = ev.task
+    } else if (ev.type === 'finalizing') {
+      live.set(ev.task, 'finalizing')
+      if (convertingTask === ev.task) convertingTask = null
+    } else if (ev.type === 'finalized') {
+      live.set(ev.task, 'done')
+      if (convertingTask === ev.task) convertingTask = null
+    }
   }
   return live
 }
@@ -166,12 +177,17 @@ export function ConverterProgress({
           const full = t.validation.full
           const isQuickRunning = runningValidation.has(`${t.cell_task}:quick`)
           const isFullRunning = runningValidation.has(`${t.cell_task}:full`)
-          const live = taskLive.get(t.cell_task)
+          const eventLive = taskLive.get(t.cell_task)
+          const live = eventLive === 'converting' || eventLive === 'finalizing'
+            ? eventLive
+            : (t.done === t.total && t.pending === 0) || (eventLive === 'done' && t.pending === 0)
+              ? 'done'
+              : undefined
           const barClass = live === 'finalizing' ? 'cvp-card-bar is-finalizing' : 'cvp-card-bar'
           const fillClass = live === 'converting'
             ? 'cvp-card-bar-fill is-converting'
             : 'cvp-card-bar-fill'
-          const fillWidth = live === 'finalizing' ? '100%' : `${pct}%`
+          const fillWidth = live === 'finalizing' || live === 'done' ? '100%' : `${pct}%`
 
           return (
             <div key={t.cell_task} className="cvp-card">
@@ -188,19 +204,19 @@ export function ConverterProgress({
               <div className="cvp-card-footer">
                 <div className="cvp-card-footer-left">
                   {live === 'converting' && (
-                    <span className="cvp-status-badge st-converting">
+                    <span className="cvp-status-badge st-converting" role="status" aria-live="polite">
                       <span className="dot" />
                       Converting
                     </span>
                   )}
                   {live === 'finalizing' && (
-                    <span className="cvp-status-badge st-finalizing">
+                    <span className="cvp-status-badge st-finalizing" role="status" aria-live="polite">
                       <span className="dot" />
                       Finalizing
                     </span>
                   )}
                   {live === 'done' && (
-                    <span className="cvp-status-badge st-done">
+                    <span className="cvp-status-badge st-done" role="status" aria-live="polite">
                       <span className="dot" />
                       Done
                     </span>
