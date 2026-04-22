@@ -54,6 +54,8 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
     label: string
   } | null>(null)
   const [lastBulkOp, setLastBulkOp] = useState<LastBulkOp | null>(null)
+  const [isUndoing, setIsUndoing] = useState(false)
+  const [undoError, setUndoError] = useState<string | null>(null)
   const initializedRef = useRef(false)
 
   // Close context menu on click anywhere
@@ -103,6 +105,7 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
         grade: 'bad',
         reason,
       })
+      setUndoError(null)
       setLastBulkOp({
         field: m.field,
         episodeIndices: m.episodeIndices,
@@ -116,7 +119,7 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
   )
 
   const undoLastBulkBad = useCallback(async () => {
-    if (!lastBulkOp) return
+    if (!lastBulkOp || isUndoing) return
 
     const grouped = new Map<string, { grade: string; reason: string | null; episodeIndices: number[] }>()
     const ungradedEpisodeIndices: number[] = []
@@ -143,7 +146,10 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
       })
     }
 
-    await Promise.all([
+    setIsUndoing(true)
+    setUndoError(null)
+
+    const restoreResults = await Promise.allSettled([
       ...Array.from(grouped.values()).map(group => (
         client.post('/episodes/bulk-grade', {
           episode_indices: group.episodeIndices,
@@ -158,17 +164,29 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
         })
       )),
     ])
+    const failedRestoreCount = restoreResults.filter(result => result.status === 'rejected').length
 
-    await onBulkGradeApplied()
-    void addChart(datasetPath, lastBulkOp.field, lastBulkOp.field === 'length' ? 'histogram' : 'auto')
-    void addChart(datasetPath, 'grade', 'auto')
-    setLastBulkOp(null)
-  }, [lastBulkOp, datasetPath, addChart, onBulkGradeApplied])
+    await Promise.allSettled([
+      onBulkGradeApplied(),
+      addChart(datasetPath, lastBulkOp.field, lastBulkOp.field === 'length' ? 'histogram' : 'auto'),
+      addChart(datasetPath, 'grade', 'auto'),
+    ])
+
+    if (failedRestoreCount === 0) {
+      setLastBulkOp(null)
+      setUndoError(null)
+    } else {
+      setUndoError(`되돌리기 일부 실패 (${failedRestoreCount}건) · 다시 시도하세요`)
+    }
+    setIsUndoing(false)
+  }, [lastBulkOp, isUndoing, datasetPath, addChart, onBulkGradeApplied])
 
   useEffect(() => {
     initializedRef.current = false
     setSelectedFields(new Set())
     setLastBulkOp(null)
+    setUndoError(null)
+    setIsUndoing(false)
   }, [datasetPath])
 
   useEffect(() => {
@@ -244,11 +262,17 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
           <div className="overview-undo-banner">
             <span>방금 {lastBulkOp.episodeIndices.length}개를 bad 처리</span>
             <span aria-hidden="true">·</span>
-            <button type="button" className="overview-undo-banner-button" onClick={() => void undoLastBulkBad()}>
-              되돌리기
+            <button
+              type="button"
+              className="overview-undo-banner-button"
+              onClick={() => void undoLastBulkBad()}
+              disabled={isUndoing}
+            >
+              {isUndoing ? '되돌리는 중...' : '되돌리기'}
             </button>
           </div>
         )}
+        {lastBulkOp && undoError && <div className="overview-undo-error">{undoError}</div>}
         {gradeChart && <GradeSummary chart={gradeChart} fps={fps} episodes={episodes} onNavigateCurate={onNavigateCurate} />}
 
         {loading && <div className="loading-pulse" style={{ fontSize: 11, color: 'var(--text-muted)' }}>Computing...</div>}

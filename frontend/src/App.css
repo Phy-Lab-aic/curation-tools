@@ -188,6 +188,17 @@ code, .mono { font-family: var(--font-mono); }
   color: var(--text);
 }
 
+.overview-undo-banner-button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.overview-undo-error {
+  margin: -4px 0 10px;
+  color: var(--c-red);
+  font-size: 11px;
+}
+
 /* ── Library page ──────────────────────────────── */
 .library-page {
   flex: 1;
