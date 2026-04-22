@@ -173,17 +173,22 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
     ])
     const failedRestoreCount = restoreResults.filter(result => result.status === 'rejected').length
 
-    await Promise.allSettled([
+    const refreshResults = await Promise.allSettled([
       onBulkGradeApplied(),
       addChart(datasetPath, lastBulkOp.field, lastBulkOp.field === 'length' ? 'histogram' : 'auto'),
       addChart(datasetPath, 'grade', 'auto'),
     ])
+    const failedRefreshCount = refreshResults.filter(result => result.status === 'rejected').length
 
-    if (failedRestoreCount === 0) {
+    if (failedRestoreCount === 0 && failedRefreshCount === 0) {
       setLastBulkOp(null)
       setUndoError(null)
-    } else {
+    } else if (failedRestoreCount === 0) {
+      setUndoError(`되돌리기는 완료됐지만 화면 갱신에 실패했습니다 (${failedRefreshCount}건) · 다시 시도하세요`)
+    } else if (failedRefreshCount === 0) {
       setUndoError(`되돌리기 일부 실패 (${failedRestoreCount}건) · 다시 시도하세요`)
+    } else {
+      setUndoError(`되돌리기 일부 실패 및 화면 갱신 실패 (${failedRestoreCount}/${failedRefreshCount}건) · 다시 시도하세요`)
     }
     setIsUndoing(false)
   }, [lastBulkOp, isUndoing, datasetPath, addChart, onBulkGradeApplied])

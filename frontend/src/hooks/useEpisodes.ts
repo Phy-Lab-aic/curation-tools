@@ -32,6 +32,7 @@ export function useEpisodes(): UseEpisodesReturn {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch episodes'
       setError(message)
+      throw err instanceof Error ? err : new Error(message)
     } finally {
       setLoading(false)
     }
