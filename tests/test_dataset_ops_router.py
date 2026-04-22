@@ -499,3 +499,169 @@ class TestGetJobStatus:
 
         assert resp.status_code == 404
         assert "Job not found" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# GET /api/datasets/browse-dirs
+# ---------------------------------------------------------------------------
+
+
+class TestBrowseDirs:
+    @pytest.mark.asyncio
+    async def test_lists_subdirectories_inside_allowed_root(self, client, tmp_path):
+        # The autouse fixture adds tmp_path to allowed_dataset_roots.
+        (tmp_path / "alpha").mkdir()
+        (tmp_path / "beta").mkdir()
+        (tmp_path / "gamma").mkdir()
+        # LeRobot-looking dataset (meta/info.json present).
+        (tmp_path / "alpha" / "meta").mkdir()
+        (tmp_path / "alpha" / "meta" / "info.json").write_text("{}")
+        # Hidden dirs must be skipped.
+        (tmp_path / ".hidden").mkdir()
+
+        resp = await client.get(f"/api/datasets/browse-dirs?path={tmp_path}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["path"] == str(tmp_path)
+        names = [e["name"] for e in data["entries"]]
+        assert names == ["alpha", "beta", "gamma"]
+        assert data["entries"][0]["is_lerobot_dataset"] is True
+        assert data["entries"][1]["is_lerobot_dataset"] is False
+
+    @pytest.mark.asyncio
+    async def test_rejects_path_outside_allowed_roots(self, client):
+        resp = await client.get("/api/datasets/browse-dirs?path=/etc")
+        assert resp.status_code == 400
+        assert "outside allowed roots" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_parent_is_null_at_root(self, client, tmp_path):
+        # tmp_path is itself an allowed root; browsing it should have no parent.
+        resp = await client.get(f"/api/datasets/browse-dirs?path={tmp_path}")
+        assert resp.status_code == 200
+        assert resp.json()["parent"] is None
+
+    @pytest.mark.asyncio
+    async def test_parent_populated_for_subdir(self, client, tmp_path):
+        (tmp_path / "child").mkdir()
+        resp = await client.get(f"/api/datasets/browse-dirs?path={tmp_path / 'child'}")
+        assert resp.status_code == 200
+        assert resp.json()["parent"] == str(tmp_path)
+
+    @pytest.mark.asyncio
+    async def test_returns_404_for_missing_directory(self, client, tmp_path):
+        resp = await client.get(f"/api/datasets/browse-dirs?path={tmp_path / 'nope'}")
+        assert resp.status_code == 404
+
+
+class TestDatasetSummary:
+    @pytest.mark.asyncio
+    async def test_returns_metadata_for_lerobot_dataset(self, client, tmp_path):
+        import json
+
+        ds = tmp_path / "ds01"
+        (ds / "meta").mkdir(parents=True)
+        (ds / "meta" / "info.json").write_text(
+            json.dumps(
+                {
+                    "total_episodes": 42,
+                    "robot_type": "panda",
+                    "fps": 30,
+                    "features": {"a": {}, "b": {}, "c": {}},
+                }
+            )
+        )
+
+        resp = await client.get(f"/api/datasets/summary?path={ds}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["path"] == str(ds)
+        assert data["total_episodes"] == 42
+        assert data["robot_type"] == "panda"
+        assert data["fps"] == 30
+        assert data["features_count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_handles_missing_optional_fields(self, client, tmp_path):
+        import json
+
+        ds = tmp_path / "ds02"
+        (ds / "meta").mkdir(parents=True)
+        (ds / "meta" / "info.json").write_text(json.dumps({}))
+
+        resp = await client.get(f"/api/datasets/summary?path={ds}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_episodes"] == 0
+        assert data["robot_type"] is None
+        assert data["fps"] == 0
+        assert data["features_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_reads_info_with_trailing_nul_bytes(self, client, tmp_path):
+        ds = tmp_path / "ds03"
+        (ds / "meta").mkdir(parents=True)
+        (ds / "meta" / "info.json").write_bytes(
+            b'{"total_episodes": 7, "fps": 15, "features": {"cam": {}}}\x00\x00'
+        )
+
+        resp = await client.get(f"/api/datasets/summary?path={ds}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_episodes"] == 7
+        assert data["fps"] == 15
+        assert data["features_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_returns_422_for_malformed_numeric_metadata(self, client, tmp_path):
+        import json
+
+        ds = tmp_path / "ds04"
+        (ds / "meta").mkdir(parents=True)
+        (ds / "meta" / "info.json").write_text(
+            json.dumps(
+                {
+                    "total_episodes": "forty-two",
+                    "fps": 30,
+                }
+            )
+        )
+
+        resp = await client.get(f"/api/datasets/summary?path={ds}")
+        assert resp.status_code == 422
+        assert "Invalid total_episodes in info.json" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_returns_404_if_not_lerobot_dataset(self, client, tmp_path):
+        plain = tmp_path / "plain"
+        plain.mkdir()
+
+        resp = await client.get(f"/api/datasets/summary?path={plain}")
+        assert resp.status_code == 404
+        assert "Not a LeRobot dataset" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_returns_404_if_path_missing(self, client, tmp_path):
+        resp = await client.get(f"/api/datasets/summary?path={tmp_path / 'nope'}")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_rejects_path_outside_allowed_roots(self, client):
+        resp = await client.get("/api/datasets/summary?path=/etc")
+        assert resp.status_code == 400
+        assert "outside allowed roots" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_returns_500_if_info_read_fails(self, client, tmp_path):
+        ds = tmp_path / "ds05"
+        (ds / "meta").mkdir(parents=True)
+        (ds / "meta" / "info.json").write_text("{}")
+
+        with patch(
+            "backend.datasets.routers.dataset_ops.read_info",
+            side_effect=ValueError("bad info"),
+        ):
+            resp = await client.get(f"/api/datasets/summary?path={ds}")
+
+        assert resp.status_code == 500
+        assert "Failed to read info.json" in resp.json()["detail"]
