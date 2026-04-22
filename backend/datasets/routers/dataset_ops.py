@@ -8,6 +8,7 @@ from pydantic import BaseModel, field_validator
 
 from backend.config import settings
 from backend.datasets.services.cycle_stamp_service import describe_stamp_state
+from backend.datasets.services.dataset_ops_engine import read_info
 from backend.datasets.services.dataset_ops_service import dataset_ops_service
 
 
@@ -25,6 +26,16 @@ def _validate_optional_path(path_str: str | None) -> str | None:
     if path_str is None:
         return None
     return str(_validate_path(path_str))
+
+
+def _coerce_summary_int(field_name: str, value: object) -> int:
+    """Convert summary numeric metadata into ints with a controlled HTTP error."""
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid {field_name} in info.json") from exc
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +127,27 @@ class StampCyclesStatusResponse(BaseModel):
     is_terminal_count_sample: int
 
 
+class BrowseDirEntry(BaseModel):
+    name: str
+    path: str
+    is_lerobot_dataset: bool
+
+
+class BrowseDirsResponse(BaseModel):
+    path: str
+    parent: str | None
+    roots: list[str]
+    entries: list[BrowseDirEntry]
+
+
+class SummaryResponse(BaseModel):
+    path: str
+    total_episodes: int
+    robot_type: str | None
+    fps: int
+    features_count: int
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -203,6 +235,85 @@ async def stamp_cycles(req: StampCyclesRequest):
         overwrite=req.overwrite,
     )
     return JobResponse(job_id=job_id, operation="stamp_cycles", status="queued")
+
+
+@router.get("/browse-dirs", response_model=BrowseDirsResponse)
+async def browse_dirs(path: str | None = Query(None, description="Directory to list; defaults to dataset_root_base")):
+    """List subdirectories under *path* for the destination-path picker.
+
+    Scope: anywhere inside `allowed_dataset_roots`. When *path* is omitted
+    (or equals the base), the response `parent` is null — the picker
+    treats that as the top of the browsable tree.
+    """
+    allowed_roots = [Path(r).resolve() for r in settings.allowed_dataset_roots]
+    if not allowed_roots:
+        raise HTTPException(status_code=500, detail="No allowed dataset roots configured")
+
+    base = Path(settings.dataset_root_base).resolve()
+    target = Path(path).resolve() if path else base
+
+    def _inside(candidate: Path) -> bool:
+        return any(candidate == r or r in candidate.parents for r in allowed_roots)
+
+    if not _inside(target):
+        raise HTTPException(status_code=400, detail=f"Path outside allowed roots: {path}")
+    if not target.exists() or not target.is_dir():
+        raise HTTPException(status_code=404, detail=f"Directory not found: {target}")
+
+    entries: list[BrowseDirEntry] = []
+    try:
+        for child in sorted(target.iterdir(), key=lambda p: p.name.lower()):
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            is_lerobot = (child / "meta" / "info.json").exists()
+            entries.append(
+                BrowseDirEntry(
+                    name=child.name,
+                    path=str(child.resolve()),
+                    is_lerobot_dataset=is_lerobot,
+                )
+            )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {target}") from exc
+
+    parent: str | None = None
+    if _inside(target.parent) and target != target.parent:
+        # Don't let the user navigate above every allowed root.
+        if any(target == r for r in allowed_roots):
+            parent = None
+        else:
+            parent = str(target.parent)
+
+    return BrowseDirsResponse(
+        path=str(target),
+        parent=parent,
+        roots=[str(r) for r in allowed_roots],
+        entries=entries,
+    )
+
+
+@router.get("/summary", response_model=SummaryResponse)
+async def dataset_summary(path: str = Query(..., description="Absolute dataset path to summarize")):
+    """Return a small metadata summary used by the Out tab's TargetSummary."""
+    resolved = _validate_path(path)
+
+    info_path = resolved / "meta" / "info.json"
+    if not info_path.exists():
+        raise HTTPException(status_code=404, detail="Not a LeRobot dataset")
+
+    try:
+        info = read_info(resolved)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read info.json: {exc}") from exc
+
+    features = info.get("features") or {}
+    return SummaryResponse(
+        path=str(resolved),
+        total_episodes=_coerce_summary_int("total_episodes", info.get("total_episodes")),
+        robot_type=info.get("robot_type"),
+        fps=_coerce_summary_int("fps", info.get("fps")),
+        features_count=len(features) if isinstance(features, dict) else 0,
+    )
 
 
 @router.get("/stamp-cycles/status", response_model=StampCyclesStatusResponse)
