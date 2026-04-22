@@ -123,6 +123,9 @@ export interface ConverterTaskProgress {
 export interface ConverterStatus {
   container_state: ConverterState
   docker_available: boolean
+  exit_code: number | null
+  oom_killed: boolean
+  finished_at: string | null
   tasks: ConverterTaskProgress[]
   summary: string
 }

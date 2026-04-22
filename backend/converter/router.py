@@ -148,6 +148,9 @@ async def get_status():
     return {
         "container_state": status.container_state,
         "docker_available": status.docker_available,
+        "exit_code": status.exit_code,
+        "oom_killed": status.oom_killed,
+        "finished_at": status.finished_at,
         "tasks": [
             {
                 "cell_task": t.cell_task,
