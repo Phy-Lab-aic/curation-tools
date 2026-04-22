@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ConverterControls } from './ConverterControls'
 import { ConverterProgress } from './ConverterProgress'
 import { ConverterLogs } from './ConverterLogs'
+import { ConverterOomBanner } from './ConverterOomBanner'
 import type { ConverterStatus, LogEvent } from '../types'
 
 interface Props {
@@ -74,6 +75,9 @@ export function ConverterPage({ status, onRefresh }: Props) {
 
   return (
     <div className="converter-page">
+      {status.oom_killed && status.container_state === 'stopped' && (
+        <ConverterOomBanner finishedAt={status.finished_at} />
+      )}
       <ConverterControls
         containerState={status.container_state}
         dockerAvailable={status.docker_available}

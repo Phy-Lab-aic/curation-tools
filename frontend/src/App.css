@@ -1101,6 +1101,48 @@ code, .mono { font-family: var(--font-mono); }
   gap: 12px;
 }
 
+.converter-oom-banner {
+  flex-shrink: 0;
+  border: 1px solid var(--c-red-dim);
+  background: var(--c-red-dim);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--c-red-dim) inset;
+}
+
+.converter-oom-banner-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-red);
+  margin-bottom: 8px;
+}
+
+.converter-oom-banner-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.converter-oom-banner-meta + .converter-oom-banner-meta {
+  margin-top: 4px;
+}
+
+.converter-oom-banner-label {
+  color: var(--text-muted);
+}
+
+.converter-oom-banner-value {
+  min-width: 0;
+  font-family: var(--font-mono);
+  color: var(--text);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
 .converter-body {
   flex: 1;
   overflow-y: auto;
