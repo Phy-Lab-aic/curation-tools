@@ -102,6 +102,13 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
     setTerminalTimestamps([])
   }, [datasetPath])
 
+  useEffect(() => {
+    setSelectedEpisode(prev => {
+      if (!prev) return prev
+      return episodes.find(ep => ep.episode_index === prev.episode_index) ?? null
+    })
+  }, [episodes])
+
   const datasetReady = dataset?.path === datasetPath
 
   const fps = dataset?.fps ?? 30
