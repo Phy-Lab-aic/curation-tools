@@ -111,9 +111,16 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
         episodeIndices: m.episodeIndices,
         prevByIdx,
       })
-      await onBulkGradeApplied()
-      void addChart(datasetPath, m.field, m.field === 'length' ? 'histogram' : 'auto')
-      void addChart(datasetPath, 'grade', 'auto')
+
+      const refreshResults = await Promise.allSettled([
+        onBulkGradeApplied(),
+        addChart(datasetPath, m.field, m.field === 'length' ? 'histogram' : 'auto'),
+        addChart(datasetPath, 'grade', 'auto'),
+      ])
+      const failedRefreshCount = refreshResults.filter(result => result.status === 'rejected').length
+      if (failedRefreshCount > 0) {
+        setUndoError(`bad 처리는 완료됐지만 화면 갱신에 실패했습니다 (${failedRefreshCount}건) · 다시 시도하세요`)
+      }
     },
     [bulkReasonModal, episodes, datasetPath, addChart, onBulkGradeApplied],
   )
