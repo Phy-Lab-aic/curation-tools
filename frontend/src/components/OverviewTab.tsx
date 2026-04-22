@@ -21,6 +21,17 @@ interface OverviewTabProps {
   onBulkGradeApplied: () => Promise<void>
 }
 
+interface BulkEpisodeState {
+  grade: string | null
+  reason: string | null
+}
+
+interface LastBulkOp {
+  field: string
+  episodeIndices: number[]
+  prevByIdx: Record<number, BulkEpisodeState>
+}
+
 const CHART_COLORS = ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#ff9830']
 const AUTO_FIELDS = new Set(['grade', 'tags', 'length', 'task_instruction', 'collection_date'])
 
@@ -42,6 +53,7 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
     field: string
     label: string
   } | null>(null)
+  const [lastBulkOp, setLastBulkOp] = useState<LastBulkOp | null>(null)
   const initializedRef = useRef(false)
 
   // Close context menu on click anywhere
@@ -75,22 +87,88 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
     async (reason: string) => {
       const m = bulkReasonModal
       if (!m) return
+      const prevByIdx: Record<number, BulkEpisodeState> = {}
+      for (const episodeIndex of m.episodeIndices) {
+        const episode = episodes.find(ep => ep.episode_index === episodeIndex)
+        if (!episode) continue
+        prevByIdx[episodeIndex] = {
+          grade: episode.grade,
+          reason: episode.reason,
+        }
+      }
+
       setBulkReasonModal(null)
       await client.post('/episodes/bulk-grade', {
         episode_indices: m.episodeIndices,
         grade: 'bad',
         reason,
       })
+      setLastBulkOp({
+        field: m.field,
+        episodeIndices: m.episodeIndices,
+        prevByIdx,
+      })
       await onBulkGradeApplied()
       void addChart(datasetPath, m.field, m.field === 'length' ? 'histogram' : 'auto')
       void addChart(datasetPath, 'grade', 'auto')
     },
-    [bulkReasonModal, datasetPath, addChart, onBulkGradeApplied],
+    [bulkReasonModal, episodes, datasetPath, addChart, onBulkGradeApplied],
   )
+
+  const undoLastBulkBad = useCallback(async () => {
+    if (!lastBulkOp) return
+
+    const grouped = new Map<string, { grade: string; reason: string | null; episodeIndices: number[] }>()
+    const ungradedEpisodeIndices: number[] = []
+
+    for (const episodeIndex of lastBulkOp.episodeIndices) {
+      const prev = lastBulkOp.prevByIdx[episodeIndex]
+      if (!prev) continue
+      if (prev.grade == null) {
+        ungradedEpisodeIndices.push(episodeIndex)
+        continue
+      }
+
+      const key = JSON.stringify([prev.grade, prev.reason])
+      const existing = grouped.get(key)
+      if (existing) {
+        existing.episodeIndices.push(episodeIndex)
+        continue
+      }
+
+      grouped.set(key, {
+        grade: prev.grade,
+        reason: prev.reason,
+        episodeIndices: [episodeIndex],
+      })
+    }
+
+    await Promise.all([
+      ...Array.from(grouped.values()).map(group => (
+        client.post('/episodes/bulk-grade', {
+          episode_indices: group.episodeIndices,
+          grade: group.grade,
+          reason: group.reason,
+        })
+      )),
+      ...ungradedEpisodeIndices.map(episodeIndex => (
+        client.patch(`/episodes/${episodeIndex}`, {
+          grade: null,
+          reason: null,
+        })
+      )),
+    ])
+
+    await onBulkGradeApplied()
+    void addChart(datasetPath, lastBulkOp.field, lastBulkOp.field === 'length' ? 'histogram' : 'auto')
+    void addChart(datasetPath, 'grade', 'auto')
+    setLastBulkOp(null)
+  }, [lastBulkOp, datasetPath, addChart, onBulkGradeApplied])
 
   useEffect(() => {
     initializedRef.current = false
     setSelectedFields(new Set())
+    setLastBulkOp(null)
   }, [datasetPath])
 
   useEffect(() => {
@@ -162,6 +240,15 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBu
       </div>
 
       <div className="overview-charts">
+        {lastBulkOp && (
+          <div className="overview-undo-banner">
+            <span>방금 {lastBulkOp.episodeIndices.length}개를 bad 처리</span>
+            <span aria-hidden="true">·</span>
+            <button type="button" className="overview-undo-banner-button" onClick={() => void undoLastBulkBad()}>
+              되돌리기
+            </button>
+          </div>
+        )}
         {gradeChart && <GradeSummary chart={gradeChart} fps={fps} episodes={episodes} onNavigateCurate={onNavigateCurate} />}
 
         {loading && <div className="loading-pulse" style={{ fontSize: 11, color: 'var(--text-muted)' }}>Computing...</div>}
