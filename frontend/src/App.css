@@ -161,6 +161,33 @@ code, .mono { font-family: var(--font-mono); }
   flex-direction: column;
 }
 
+.overview-undo-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.overview-undo-banner-button {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--interactive);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.overview-undo-banner-button:hover {
+  color: var(--text);
+}
+
 /* ── Library page ──────────────────────────────── */
 .library-page {
   flex: 1;
