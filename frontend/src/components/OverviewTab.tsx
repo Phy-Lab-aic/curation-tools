@@ -18,6 +18,18 @@ interface OverviewTabProps {
   fps: number
   episodes: Episode[]
   onNavigateCurate: (filter: CurateFilter) => void
+  onBulkGradeApplied: () => Promise<void>
+}
+
+interface BulkEpisodeState {
+  grade: string | null
+  reason: string | null
+}
+
+interface LastBulkOp {
+  field: string
+  episodeIndices: number[]
+  prevByIdx: Record<number, BulkEpisodeState>
 }
 
 const CHART_COLORS = ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#ff9830']
@@ -31,7 +43,7 @@ const FIELD_LABELS: Record<string, string> = {
   collection_date: 'Collection Date',
 }
 
-export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: OverviewTabProps) {
+export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBulkGradeApplied }: OverviewTabProps) {
   const { fields, charts, loading, error, fetchFields, addChart, removeChart } = useDistribution()
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
   const [chartIntensity, setChartIntensity] = useState(1)
@@ -41,6 +53,9 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
     field: string
     label: string
   } | null>(null)
+  const [lastBulkOp, setLastBulkOp] = useState<LastBulkOp | null>(null)
+  const [isUndoing, setIsUndoing] = useState(false)
+  const [undoError, setUndoError] = useState<string | null>(null)
   const initializedRef = useRef(false)
 
   // Close context menu on click anywhere
@@ -74,21 +89,116 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
     async (reason: string) => {
       const m = bulkReasonModal
       if (!m) return
+      const prevByIdx: Record<number, BulkEpisodeState> = {}
+      for (const episodeIndex of m.episodeIndices) {
+        const episode = episodes.find(ep => ep.episode_index === episodeIndex)
+        if (!episode) continue
+        prevByIdx[episodeIndex] = {
+          grade: episode.grade,
+          reason: episode.reason,
+        }
+      }
+
       setBulkReasonModal(null)
       await client.post('/episodes/bulk-grade', {
         episode_indices: m.episodeIndices,
         grade: 'bad',
         reason,
       })
-      void addChart(datasetPath, m.field, m.field === 'length' ? 'histogram' : 'auto')
-      void addChart(datasetPath, 'grade', 'auto')
+      setUndoError(null)
+      setLastBulkOp({
+        field: m.field,
+        episodeIndices: m.episodeIndices,
+        prevByIdx,
+      })
+
+      const refreshResults = await Promise.allSettled([
+        onBulkGradeApplied(),
+        addChart(datasetPath, m.field, m.field === 'length' ? 'histogram' : 'auto'),
+        addChart(datasetPath, 'grade', 'auto'),
+      ])
+      const failedRefreshCount = refreshResults.filter(result => result.status === 'rejected').length
+      if (failedRefreshCount > 0) {
+        setUndoError(`bad 처리는 완료됐지만 화면 갱신에 실패했습니다 (${failedRefreshCount}건) · 다시 시도하세요`)
+      }
     },
-    [bulkReasonModal, datasetPath, addChart],
+    [bulkReasonModal, episodes, datasetPath, addChart, onBulkGradeApplied],
   )
+
+  const undoLastBulkBad = useCallback(async () => {
+    if (!lastBulkOp || isUndoing) return
+
+    const grouped = new Map<string, { grade: string; reason: string | null; episodeIndices: number[] }>()
+    const ungradedEpisodeIndices: number[] = []
+
+    for (const episodeIndex of lastBulkOp.episodeIndices) {
+      const prev = lastBulkOp.prevByIdx[episodeIndex]
+      if (!prev) continue
+      if (prev.grade == null) {
+        ungradedEpisodeIndices.push(episodeIndex)
+        continue
+      }
+
+      const key = JSON.stringify([prev.grade, prev.reason])
+      const existing = grouped.get(key)
+      if (existing) {
+        existing.episodeIndices.push(episodeIndex)
+        continue
+      }
+
+      grouped.set(key, {
+        grade: prev.grade,
+        reason: prev.reason,
+        episodeIndices: [episodeIndex],
+      })
+    }
+
+    setIsUndoing(true)
+    setUndoError(null)
+
+    const restoreResults = await Promise.allSettled([
+      ...Array.from(grouped.values()).map(group => (
+        client.post('/episodes/bulk-grade', {
+          episode_indices: group.episodeIndices,
+          grade: group.grade,
+          reason: group.reason,
+        })
+      )),
+      ...ungradedEpisodeIndices.map(episodeIndex => (
+        client.patch(`/episodes/${episodeIndex}`, {
+          grade: null,
+          reason: null,
+        })
+      )),
+    ])
+    const failedRestoreCount = restoreResults.filter(result => result.status === 'rejected').length
+
+    const refreshResults = await Promise.allSettled([
+      onBulkGradeApplied(),
+      addChart(datasetPath, lastBulkOp.field, lastBulkOp.field === 'length' ? 'histogram' : 'auto'),
+      addChart(datasetPath, 'grade', 'auto'),
+    ])
+    const failedRefreshCount = refreshResults.filter(result => result.status === 'rejected').length
+
+    if (failedRestoreCount === 0 && failedRefreshCount === 0) {
+      setLastBulkOp(null)
+      setUndoError(null)
+    } else if (failedRestoreCount === 0) {
+      setUndoError(`되돌리기는 완료됐지만 화면 갱신에 실패했습니다 (${failedRefreshCount}건) · 다시 시도하세요`)
+    } else if (failedRefreshCount === 0) {
+      setUndoError(`되돌리기 일부 실패 (${failedRestoreCount}건) · 다시 시도하세요`)
+    } else {
+      setUndoError(`되돌리기 일부 실패 및 화면 갱신 실패 (${failedRestoreCount}/${failedRefreshCount}건) · 다시 시도하세요`)
+    }
+    setIsUndoing(false)
+  }, [lastBulkOp, isUndoing, datasetPath, addChart, onBulkGradeApplied])
 
   useEffect(() => {
     initializedRef.current = false
     setSelectedFields(new Set())
+    setLastBulkOp(null)
+    setUndoError(null)
+    setIsUndoing(false)
   }, [datasetPath])
 
   useEffect(() => {
@@ -160,6 +270,21 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
       </div>
 
       <div className="overview-charts">
+        {lastBulkOp && (
+          <div className="overview-undo-banner">
+            <span>방금 {lastBulkOp.episodeIndices.length}개를 bad 처리</span>
+            <span aria-hidden="true">·</span>
+            <button
+              type="button"
+              className="overview-undo-banner-button"
+              onClick={() => void undoLastBulkBad()}
+              disabled={isUndoing}
+            >
+              {isUndoing ? '되돌리는 중...' : '되돌리기'}
+            </button>
+          </div>
+        )}
+        {lastBulkOp && undoError && <div className="overview-undo-error">{undoError}</div>}
         {gradeChart && <GradeSummary chart={gradeChart} fps={fps} episodes={episodes} onNavigateCurate={onNavigateCurate} />}
 
         {loading && <div className="loading-pulse" style={{ fontSize: 11, color: 'var(--text-muted)' }}>Computing...</div>}
@@ -474,6 +599,7 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
 }) {
   const gradientId = `gradient-${chart.field}`
   const hoveredLabelRef = useRef<string | null>(null)
+  type ChartHoverState = { activeLabel?: string | number } | null | undefined
 
   const formatLabel = (label: string) => {
     if (!fps || chart.field !== 'length') return label
@@ -495,7 +621,14 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
         }
       } : undefined}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chart.bins} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+          <BarChart
+            data={chart.bins}
+            margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
+            onMouseMove={(state: ChartHoverState) => {
+              hoveredLabelRef.current = typeof state?.activeLabel === 'string' ? state.activeLabel : null
+            }}
+            onMouseLeave={() => { hoveredLabelRef.current = null }}
+          >
             <defs>
               <linearGradient id={gradientId} x1="0" y1="1" x2="0" y2="0">
                 <stop offset="0%" stopColor={color} stopOpacity={intensity * 0.5} />
@@ -531,11 +664,6 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
                 if (typeof label === 'string') onBarClick(label)
               } : undefined}
               activeBar={onBarClick ? { strokeOpacity: 0.8 } : undefined}
-              onMouseEnter={(data: BarRectangleItem) => {
-                const label = data.payload?.label
-                hoveredLabelRef.current = typeof label === 'string' ? label : null
-              }}
-              onMouseLeave={() => { hoveredLabelRef.current = null }}
             />
           </BarChart>
         </ResponsiveContainer>
