@@ -474,6 +474,7 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
 }) {
   const gradientId = `gradient-${chart.field}`
   const hoveredLabelRef = useRef<string | null>(null)
+  type ChartHoverState = { activeLabel?: string | number } | null | undefined
 
   const formatLabel = (label: string) => {
     if (!fps || chart.field !== 'length') return label
@@ -495,7 +496,14 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
         }
       } : undefined}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chart.bins} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+          <BarChart
+            data={chart.bins}
+            margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
+            onMouseMove={(state: ChartHoverState) => {
+              hoveredLabelRef.current = typeof state?.activeLabel === 'string' ? state.activeLabel : null
+            }}
+            onMouseLeave={() => { hoveredLabelRef.current = null }}
+          >
             <defs>
               <linearGradient id={gradientId} x1="0" y1="1" x2="0" y2="0">
                 <stop offset="0%" stopColor={color} stopOpacity={intensity * 0.5} />
@@ -531,11 +539,6 @@ function ChartPanel({ chart, color, fps, onBarClick, onBarContextMenu, intensity
                 if (typeof label === 'string') onBarClick(label)
               } : undefined}
               activeBar={onBarClick ? { strokeOpacity: 0.8 } : undefined}
-              onMouseEnter={(data: BarRectangleItem) => {
-                const label = data.payload?.label
-                hoveredLabelRef.current = typeof label === 'string' ? label : null
-              }}
-              onMouseLeave={() => { hoveredLabelRef.current = null }}
             />
           </BarChart>
         </ResponsiveContainer>
