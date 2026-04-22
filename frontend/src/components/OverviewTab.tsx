@@ -18,6 +18,7 @@ interface OverviewTabProps {
   fps: number
   episodes: Episode[]
   onNavigateCurate: (filter: CurateFilter) => void
+  onBulkGradeApplied: () => Promise<void>
 }
 
 const CHART_COLORS = ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#ff9830']
@@ -31,7 +32,7 @@ const FIELD_LABELS: Record<string, string> = {
   collection_date: 'Collection Date',
 }
 
-export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: OverviewTabProps) {
+export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate, onBulkGradeApplied }: OverviewTabProps) {
   const { fields, charts, loading, error, fetchFields, addChart, removeChart } = useDistribution()
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set())
   const [chartIntensity, setChartIntensity] = useState(1)
@@ -80,10 +81,11 @@ export function OverviewTab({ datasetPath, fps, episodes, onNavigateCurate }: Ov
         grade: 'bad',
         reason,
       })
+      await onBulkGradeApplied()
       void addChart(datasetPath, m.field, m.field === 'length' ? 'histogram' : 'auto')
       void addChart(datasetPath, 'grade', 'auto')
     },
-    [bulkReasonModal, datasetPath, addChart],
+    [bulkReasonModal, datasetPath, addChart, onBulkGradeApplied],
   )
 
   useEffect(() => {

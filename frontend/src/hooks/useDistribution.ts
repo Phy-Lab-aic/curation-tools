@@ -43,8 +43,9 @@ export function useDistribution(): UseDistributionReturn {
         chart_type: chartType,
       })
       setCharts(prev => {
-        const filtered = prev.filter(c => c.field !== field)
-        return [...filtered, resp.data]
+        const existingIndex = prev.findIndex(c => c.field === field)
+        if (existingIndex === -1) return [...prev, resp.data]
+        return prev.map((chart, index) => index === existingIndex ? resp.data : chart)
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to compute distribution')

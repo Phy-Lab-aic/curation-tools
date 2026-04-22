@@ -276,6 +276,7 @@ export function DatasetPage({ datasetPath, datasetName: _datasetName, tab, filte
           fps={dataset?.fps ?? 30}
           episodes={episodes}
           onNavigateCurate={(f) => onSetTab('curate', f)}
+          onBulkGradeApplied={() => fetchEpisodes()}
         />
       </div>
     )
