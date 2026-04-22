@@ -29,7 +29,18 @@ interface StampStatus {
   is_terminal_count_sample: number
 }
 
-type TabId = 'split' | 'merge' | 'delete' | 'cycles'
+type TargetMode = 'create' | 'merge'
+type Target = { mode: TargetMode; path: string }
+
+interface SummaryResponse {
+  path: string
+  total_episodes: number
+  robot_type: string | null
+  fps: number
+  features_count: number
+}
+
+type TabId = 'out' | 'delete' | 'cycles'
 
 function useJobPoller() {
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
@@ -120,26 +131,365 @@ function formatEpisodeRanges(indices: number[]): string {
   return `Episodes: ${ranges.join(', ')}`
 }
 
-function SplitTab({
+interface BrowseDirEntry {
+  name: string
+  path: string
+  is_lerobot_dataset: boolean
+}
+
+interface BrowseDirsResponse {
+  path: string
+  parent: string | null
+  roots: string[]
+  entries: BrowseDirEntry[]
+}
+
+function formatSuggestedName(sourceDatasetName: string): string {
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  return `${sourceDatasetName}__out_${yyyy}${mm}${dd}`
+}
+
+function uniqueName(base: string, existing: Set<string>): string {
+  if (!existing.has(base)) return base
+  let i = 2
+  while (existing.has(`${base}_${i}`)) i += 1
+  return `${base}_${i}`
+}
+
+function joinChildPath(parent: string, name: string): string {
+  return parent === '/' ? `/${name}` : `${parent}/${name}`
+}
+
+function DestinationPicker({
+  sourceDatasetName,
+  value,
+  onChange,
+  disabled,
+}: {
+  sourceDatasetName: string
+  value: Target | null
+  onChange: (t: Target | null) => void
+  disabled?: boolean
+}) {
+  const [currentDir, setCurrentDir] = useState<string | null>(null)
+  const [parent, setParent] = useState<string | null>(null)
+  const [entries, setEntries] = useState<BrowseDirEntry[]>([])
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newDatasetName, setNewDatasetName] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const browseRequestRef = useRef(0)
+
+  const fetchDir = useCallback(async (path: string | null) => {
+    const requestId = browseRequestRef.current + 1
+    browseRequestRef.current = requestId
+    setLoading(true)
+    setError(null)
+    setActionError(null)
+    try {
+      const url = path
+        ? `/datasets/browse-dirs?path=${encodeURIComponent(path)}`
+        : '/datasets/browse-dirs'
+      const resp = await client.get<BrowseDirsResponse>(url)
+      if (requestId !== browseRequestRef.current) return
+      setCurrentDir(resp.data.path)
+      setParent(resp.data.parent)
+      setEntries(resp.data.entries)
+    } catch (err: unknown) {
+      if (requestId !== browseRequestRef.current) return
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to load directory'
+      setError(msg)
+    } finally {
+      if (requestId !== browseRequestRef.current) return
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void fetchDir(null) }, [fetchDir])
+
+  const existingNames = new Set(entries.map(entry => entry.name))
+  const suggestedName = uniqueName(formatSuggestedName(sourceDatasetName), existingNames)
+  const trimmedDatasetName = newDatasetName.trim()
+  const hasPathSeparators = /[\\/]/.test(trimmedDatasetName)
+  const isReservedDatasetName = trimmedDatasetName === '.' || trimmedDatasetName === '..'
+  const invalidDatasetName = trimmedDatasetName.length > 0 && (hasPathSeparators || isReservedDatasetName)
+  const hasDuplicateName = trimmedDatasetName.length > 0 && existingNames.has(trimmedDatasetName)
+  const resolvedDatasetName = trimmedDatasetName.length > 0
+    ? uniqueName(trimmedDatasetName, existingNames)
+    : ''
+  const canConfirmCreate = Boolean(currentDir) && trimmedDatasetName.length > 0 && !invalidDatasetName && !disabled
+
+  const breadcrumb = currentDir ? currentDir.split('/').filter(Boolean) : []
+
+  const openCreate = () => {
+    setCreateOpen(true)
+    setNewDatasetName(suggestedName)
+    setActionError(null)
+  }
+
+  const confirmCreate = () => {
+    if (!currentDir) {
+      setActionError('Choose a destination directory first')
+      return
+    }
+    if (!trimmedDatasetName) {
+      setActionError('Enter a dataset name')
+      return
+    }
+    if (invalidDatasetName) {
+      setActionError('Enter a single dataset name, not a path')
+      return
+    }
+
+    onChange({ mode: 'create', path: joinChildPath(currentDir, resolvedDatasetName) })
+    setCreateOpen(false)
+    setActionError(null)
+  }
+
+  return (
+    <div style={s.pickerBox}>
+      <div style={s.pickerBreadcrumb}>
+        <span style={s.pickerPathRoot}>/</span>
+        {breadcrumb.map((seg, i) => (
+          <span key={i} style={s.pickerPathSeg}>
+            {seg}
+            {i < breadcrumb.length - 1 && <span style={s.pickerPathSep}>/</span>}
+          </span>
+        ))}
+      </div>
+
+      <div style={s.pickerList}>
+        {loading && <div style={s.pickerHint}>Loading…</div>}
+        {!loading && parent && (
+          <button
+            style={s.pickerEntry}
+            onClick={() => void fetchDir(parent)}
+            disabled={disabled}
+            type="button"
+          >
+            <span style={s.pickerIcon}>↑</span>
+            <span>..</span>
+          </button>
+        )}
+        {!loading && entries.length === 0 && !parent && (
+          <div style={s.pickerHint}>No subdirectories</div>
+        )}
+        {!loading && entries.map(entry => (
+          <button
+            key={entry.path}
+            style={{
+              ...s.pickerEntry,
+              ...(entry.is_lerobot_dataset && value?.mode === 'merge' && value.path === entry.path ? s.pickerEntrySelected : {}),
+            }}
+            onClick={() => {
+              if (entry.is_lerobot_dataset) {
+                onChange({ mode: 'merge', path: entry.path })
+                setCreateOpen(false)
+                setActionError(null)
+                return
+              }
+              void fetchDir(entry.path)
+            }}
+            disabled={disabled}
+            type="button"
+          >
+            <span style={s.pickerIcon}>{entry.is_lerobot_dataset ? '◆' : '▸'}</span>
+            <span>{entry.name}</span>
+          </button>
+        ))}
+        {error && <div style={s.errorText}>{error}</div>}
+      </div>
+
+      <div style={s.pickerCreateRow}>
+        {!createOpen ? (
+          <button
+            style={s.pickerCreateToggleBtn}
+            onClick={openCreate}
+            disabled={disabled || !currentDir}
+            type="button"
+          >
+            Create new dataset here
+          </button>
+        ) : (
+          <>
+            <span style={s.pickerNewLabel}>New dataset name</span>
+            <input
+              style={s.textInput}
+              type="text"
+              value={newDatasetName}
+              onChange={e => {
+                setNewDatasetName(e.target.value)
+                setActionError(null)
+              }}
+              disabled={disabled}
+            />
+            {trimmedDatasetName.length === 0 ? (
+              <div style={s.pickerCreateHint}>Enter a dataset name inside the current directory.</div>
+            ) : invalidDatasetName ? (
+              <div style={s.errorText}>Use a single dataset name without path separators, `.` or `..`.</div>
+            ) : hasDuplicateName ? (
+              <div style={s.pickerCreateHint}>
+                {joinChildPath(currentDir ?? '/', trimmedDatasetName)} already exists here, so {joinChildPath(currentDir ?? '/', resolvedDatasetName)} will be used instead.
+              </div>
+            ) : currentDir ? (
+              <div style={s.pickerCreateHint}>{joinChildPath(currentDir, trimmedDatasetName)}</div>
+            ) : null}
+            <div style={s.pickerCreateActions}>
+              <button
+                style={{ ...s.pickerCreateConfirmBtn, opacity: canConfirmCreate ? 1 : 0.6 }}
+                onClick={confirmCreate}
+                disabled={!canConfirmCreate}
+                type="button"
+              >
+                Select Create Target
+              </button>
+              <button
+                style={s.refreshBtn}
+                onClick={() => {
+                  setCreateOpen(false)
+                  setActionError(null)
+                }}
+                disabled={disabled}
+                type="button"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {actionError && <div style={s.errorText}>{actionError}</div>}
+    </div>
+  )
+}
+
+function TargetSummary({ target }: { target: Target }) {
+  const [summary, setSummary] = useState<SummaryResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (target.mode === 'create') {
+      setSummary(null)
+      setLoading(false)
+      setError(null)
+      return
+    }
+
+    let cancelled = false
+
+    const fetchSummary = async () => {
+      setLoading(true)
+      setError(null)
+      setSummary(null)
+      try {
+        const resp = await client.get<SummaryResponse>(`/datasets/summary?path=${encodeURIComponent(target.path)}`)
+        if (!cancelled) {
+          setSummary(resp.data)
+        }
+      } catch (err: unknown) {
+        if (cancelled) return
+        const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to load dataset summary'
+        setSummary(null)
+        setError(msg)
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void fetchSummary()
+
+    return () => {
+      cancelled = true
+    }
+  }, [target])
+
+  if (target.mode === 'create') {
+    return (
+      <div style={s.targetSummaryBox}>
+        <div style={s.targetSummaryHead}>Create new Out dataset</div>
+        <div style={s.targetSummaryPath}>{target.path}</div>
+        <div style={s.targetSummaryCaption}>Selected episodes will be written into a new dataset at this path.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={s.targetSummaryBox}>
+      <div style={s.targetSummaryHead}>Merge into existing dataset</div>
+      <div style={s.targetSummaryPath}>{target.path}</div>
+      {loading && <div style={s.targetSummaryCaption}>Loading dataset summary...</div>}
+      {error && <div style={s.errorText}>{error}</div>}
+      {!loading && !error && summary && (
+        <>
+          <div style={s.targetSummaryMetrics}>
+            <div style={s.targetMetric}>
+              <span style={s.targetMetricLabel}>Episodes</span>
+              <span style={s.targetMetricValue}>{summary.total_episodes}</span>
+            </div>
+            <div style={s.targetMetric}>
+              <span style={s.targetMetricLabel}>Robot</span>
+              <span style={s.targetMetricValue}>{summary.robot_type ?? 'Unknown'}</span>
+            </div>
+            <div style={s.targetMetric}>
+              <span style={s.targetMetricLabel}>FPS</span>
+              <span style={s.targetMetricValue}>{summary.fps}</span>
+            </div>
+            <div style={s.targetMetric}>
+              <span style={s.targetMetricLabel}>Features</span>
+              <span style={s.targetMetricValue}>{summary.features_count}</span>
+            </div>
+          </div>
+          <div style={s.targetSummaryCaption}>Existing dataset metadata loaded from `meta/info.json`.</div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function OutTab({
   datasetPath,
   episodes,
 }: {
   datasetPath: string | null
   episodes: Episode[]
 }) {
+  const [selectedGrades, setSelectedGrades] = useState<Set<string>>(new Set())
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
-  const [destinationPath, setDestinationPath] = useState('')
+  const [target, setTarget] = useState<Target | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { jobStatus, polling, startPolling, reset } = useJobPoller()
 
-  const goodEpisodes = episodes.filter(e => e.grade === 'good')
-  const allTags = Array.from(
-    new Set(goodEpisodes.flatMap(e => e.tags ?? [])),
-  ).sort()
-  const matchingEpisodes = selectedTags.size === 0
-    ? goodEpisodes
-    : goodEpisodes.filter(e => (e.tags ?? []).some(tag => selectedTags.has(tag)))
+  useEffect(() => {
+    setSelectedGrades(new Set())
+    setSelectedTags(new Set())
+    setTarget(null)
+    setSubmitting(false)
+    setSubmitError(null)
+    reset()
+  }, [datasetPath, reset])
+
+  const allTags = Array.from(new Set(episodes.flatMap(e => e.tags ?? []))).sort()
+  const matchingEpisodes = episodes
+    .filter(e => selectedGrades.size === 0 || selectedGrades.has(e.grade ?? 'Ungraded'))
+    .filter(e => selectedTags.size === 0 || (e.tags ?? []).some(t => selectedTags.has(t)))
+
+  const toggleGrade = (grade: string) => {
+    setSelectedGrades(prev => {
+      const next = new Set(prev)
+      if (next.has(grade)) next.delete(grade)
+      else next.add(grade)
+      return next
+    })
+  }
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev => {
@@ -153,11 +503,11 @@ function SplitTab({
   const handleSubmit = async () => {
     if (!datasetPath) return
     if (matchingEpisodes.length === 0) {
-      setSubmitError('No good episodes match the selected tags')
+      setSubmitError('No episodes match the selected grade and tag filters')
       return
     }
-    if (!destinationPath.trim()) {
-      setSubmitError('Enter an absolute destination path')
+    if (!target) {
+      setSubmitError('Choose where the Out dataset should be created or merged')
       return
     }
 
@@ -169,11 +519,11 @@ function SplitTab({
       const resp = await client.post<{ job_id: string; operation: string; status: string }>('/datasets/split-into', {
         source_path: datasetPath,
         episode_ids: matchingEpisodes.map(e => e.episode_index).sort((a, b) => a - b),
-        destination_path: destinationPath.trim(),
+        destination_path: target.path,
       })
       startPolling(resp.data.job_id)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Sync failed'
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Out run failed'
       setSubmitError(msg)
     } finally {
       setSubmitting(false)
@@ -181,17 +531,42 @@ function SplitTab({
   }
 
   if (!datasetPath) {
-    return <div style={s.emptyState}>Load a dataset first to sync good episodes.</div>
+    return <div style={s.emptyState}>Load a dataset first to prepare an Out dataset.</div>
   }
 
+  const datasetSegments = datasetPath.split('/').filter(Boolean)
+  const sourceDatasetName = datasetSegments[datasetSegments.length - 1] ?? 'dataset'
   const syncComplete = jobStatus?.status === 'complete' || jobStatus?.status === 'completed'
-  const submitDisabled = submitting || polling || !destinationPath.trim() || matchingEpisodes.length === 0
+  const submitDisabled = submitting || polling || !target || matchingEpisodes.length === 0
 
   return (
     <div style={s.tabContent}>
-      <div style={s.fieldLabel}>Good Episode Filter</div>
+      <div style={s.fieldLabel}>Filter by Grade</div>
+      <div style={s.chipRow}>
+        {GRADE_OPTIONS.map(grade => {
+          const active = selectedGrades.has(grade)
+          const color = grade === 'good' ? 'var(--c-green)' : grade === 'bad' ? 'var(--c-red)' : grade === 'normal' ? 'var(--c-yellow)' : 'var(--text-muted)'
+          return (
+            <button
+              key={grade}
+              style={{
+                ...s.chip,
+                borderColor: active ? color : 'var(--border3)',
+                color: active ? color : 'var(--text-dim)',
+                background: active ? `${color}18` : 'transparent',
+              }}
+              onClick={() => toggleGrade(grade)}
+              type="button"
+            >
+              {grade}
+            </button>
+          )
+        })}
+      </div>
+
+      <div style={s.fieldLabel}>Filter by Tag</div>
       {allTags.length === 0 ? (
-        <div style={s.empty}>No tags found on good episodes. All good episodes will be synced.</div>
+        <div style={s.empty}>No tags found in this dataset.</div>
       ) : (
         <div style={s.chipRow}>
           {allTags.map(tag => {
@@ -206,6 +581,7 @@ function SplitTab({
                   background: active ? 'var(--interactive-dim)' : 'transparent',
                 }}
                 onClick={() => toggleTag(tag)}
+                type="button"
               >
                 {tag}
               </button>
@@ -215,25 +591,35 @@ function SplitTab({
       )}
 
       <div style={s.matchPreview}>
-        <span style={{ color: matchingEpisodes.length > 0 ? 'var(--interactive)' : 'var(--text-dim)' }}>
-          {matchingEpisodes.length} good episode{matchingEpisodes.length !== 1 ? 's' : ''} selected
+        <span style={{ color: matchingEpisodes.length > 0 ? 'var(--interactive)' : 'var(--c-red)' }}>
+          {matchingEpisodes.length} episode{matchingEpisodes.length !== 1 ? 's' : ''} selected for Out
         </span>
-        {matchingEpisodes.length > 0 && (
-          <div style={s.matchRanges}>
-            {formatEpisodeRanges(matchingEpisodes.map(e => e.episode_index))}
-          </div>
+        {matchingEpisodes.length > 0 ? (
+          <>
+            <div style={s.matchRanges}>
+              {formatEpisodeRanges(matchingEpisodes.map(e => e.episode_index))}
+            </div>
+            <span style={s.targetSummaryCaption}>
+              {selectedGrades.size === 0 && selectedTags.size === 0
+                ? 'No filters selected, so all episodes will be included.'
+                : 'Episodes must match every active grade and tag filter.'}
+            </span>
+          </>
+        ) : (
+          <span style={s.errorText}>
+            No episodes match the current filters. Clear one or more filters to enable Run Out.
+          </span>
         )}
       </div>
 
-      <div style={s.fieldLabel}>Destination Path</div>
-      <input
-        style={s.textInput}
-        type="text"
-        placeholder="/absolute/path/to/good-sync"
-        value={destinationPath}
-        onChange={e => setDestinationPath(e.target.value)}
+      <div style={s.fieldLabel}>Destination</div>
+      <DestinationPicker
+        sourceDatasetName={sourceDatasetName}
+        value={target}
+        onChange={setTarget}
         disabled={submitting || polling}
       />
+      {target && <TargetSummary target={target} />}
 
       {submitError && <div style={s.errorText}>{submitError}</div>}
 
@@ -253,125 +639,7 @@ function SplitTab({
         onClick={handleSubmit}
         disabled={submitDisabled}
       >
-        {submitting ? 'Submitting...' : 'Sync Good Episodes'}
-      </button>
-
-      <JobProgress jobStatus={jobStatus} polling={polling} />
-    </div>
-  )
-}
-
-function MergeTab() {
-  const [availableDatasets, setAvailableDatasets] = useState<{ name: string; path: string }[]>([])
-  const [loadingDatasets, setLoadingDatasets] = useState(false)
-  const [datasetsError, setDatasetsError] = useState<string | null>(null)
-  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
-  const [targetName, setTargetName] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const { jobStatus, polling, startPolling, reset } = useJobPoller()
-
-  const fetchDatasets = useCallback(async () => {
-    setLoadingDatasets(true)
-    setDatasetsError(null)
-    try {
-      // Fetch available datasets list
-      const resp = await client.get<{ name: string; path: string }[]>('/datasets/list')
-      setAvailableDatasets(resp.data)
-    } catch {
-      setDatasetsError('Failed to load datasets')
-    } finally {
-      setLoadingDatasets(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void fetchDatasets()
-  }, [fetchDatasets])
-
-  const toggleDataset = (path: string) => {
-    setSelectedPaths(prev => {
-      const next = new Set(prev)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
-      return next
-    })
-  }
-
-  const handleSubmit = async () => {
-    if (selectedPaths.size < 2) { setSubmitError('Select at least 2 datasets'); return }
-    if (!targetName.trim()) { setSubmitError('Enter a target dataset name'); return }
-
-    setSubmitting(true)
-    setSubmitError(null)
-    reset()
-
-    try {
-      const resp = await client.post<{ job_id: string; operation: string; status: string }>('/datasets/merge', {
-        source_paths: Array.from(selectedPaths),
-        target_name: targetName.trim(),
-      })
-      startPolling(resp.data.job_id)
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Merge failed'
-      setSubmitError(msg)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div style={s.tabContent}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <div style={s.fieldLabel}>
-          Datasets ({selectedPaths.size} selected)
-        </div>
-        <button style={s.refreshBtn} onClick={fetchDatasets} disabled={loadingDatasets}>
-          {loadingDatasets ? '...' : 'Refresh'}
-        </button>
-      </div>
-
-      {datasetsError && <div style={s.errorText}>{datasetsError}</div>}
-
-      <div style={s.episodeList}>
-        {loadingDatasets && <div style={s.empty}>Loading...</div>}
-        {!loadingDatasets && availableDatasets.length === 0 && (
-          <div style={s.emptyState}>No datasets available for merge. Mount datasets via Hub Sync first.</div>
-        )}
-        {availableDatasets.map(ds => (
-          <label key={ds.path} style={s.checkRow}>
-            <input
-              type="checkbox"
-              checked={selectedPaths.has(ds.path)}
-              onChange={() => toggleDataset(ds.path)}
-              style={s.checkbox}
-            />
-            <span style={s.epLabel}>
-              <span style={{ ...s.epIndex, color: 'var(--interactive)' }}>{ds.name}</span>
-              <span style={s.epTask}>{ds.path}</span>
-            </span>
-          </label>
-        ))}
-      </div>
-
-      <div style={s.fieldLabel}>Target dataset name</div>
-      <input
-        style={s.textInput}
-        type="text"
-        placeholder="e.g. merged_dataset"
-        value={targetName}
-        onChange={e => setTargetName(e.target.value)}
-        disabled={submitting || polling}
-      />
-
-      {submitError && <div style={s.errorText}>{submitError}</div>}
-
-      <button
-        style={{ ...s.actionBtn, opacity: submitting || polling ? 0.6 : 1 }}
-        onClick={handleSubmit}
-        disabled={submitting || polling}
-      >
-        {submitting ? 'Submitting...' : 'Merge Datasets'}
+        {submitting ? 'Submitting...' : 'Run Out'}
       </button>
 
       <JobProgress jobStatus={jobStatus} polling={polling} />
@@ -731,13 +999,13 @@ function CyclesTab({ datasetPath }: { datasetPath: string | null }) {
 }
 
 export function TrimPanel({ datasetPath, episodes }: TrimPanelProps) {
-  const [tab, setTab] = useState<TabId>('split')
+  const [tab, setTab] = useState<TabId>('out')
 
   return (
     <div style={s.container}>
       <div style={s.body}>
         <div style={s.tabs}>
-          {(['split', 'merge', 'delete', 'cycles'] as TabId[]).map(t => (
+          {(['out', 'delete', 'cycles'] as TabId[]).map(t => (
             <button
               key={t}
               style={{ ...s.tabBtn, ...(tab === t ? (t === 'delete' ? { ...s.tabBtnActive, color: 'var(--c-red)' } : s.tabBtnActive) : {}) }}
@@ -748,8 +1016,7 @@ export function TrimPanel({ datasetPath, episodes }: TrimPanelProps) {
           ))}
         </div>
 
-        {tab === 'split' && <SplitTab datasetPath={datasetPath} episodes={episodes} />}
-        {tab === 'merge' && <MergeTab />}
+        {tab === 'out' && <OutTab datasetPath={datasetPath} episodes={episodes} />}
         {tab === 'delete' && <DeleteTab datasetPath={datasetPath} episodes={episodes} />}
         {tab === 'cycles' && <CyclesTab datasetPath={datasetPath} />}
       </div>
@@ -799,15 +1066,6 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-  },
-  selectAllBtn: {
-    background: 'transparent',
-    border: '1px solid var(--border3)',
-    borderRadius: 3,
-    color: 'var(--text-muted)',
-    fontSize: 10,
-    padding: '2px 6px',
-    cursor: 'pointer',
   },
   modeToggle: {
     display: 'flex',
@@ -867,55 +1125,6 @@ const s: Record<string, React.CSSProperties> = {
     padding: '2px 6px',
     cursor: 'pointer',
   },
-  episodeList: {
-    maxHeight: 180,
-    overflowY: 'auto' as const,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 2,
-    background: 'var(--panel2)',
-    borderRadius: 4,
-    border: '1px solid var(--border2)',
-    padding: '4px',
-  },
-  checkRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '4px 6px',
-    borderRadius: 3,
-    cursor: 'pointer',
-    fontSize: 12,
-  },
-  checkbox: {
-    flexShrink: 0,
-    accentColor: 'var(--interactive)',
-  },
-  epLabel: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
-    overflow: 'hidden',
-  },
-  epIndex: {
-    color: '#888',
-    fontSize: 11,
-    fontFamily: 'var(--font-mono)',
-    flexShrink: 0,
-  },
-  gradeTag: {
-    fontSize: 10,
-    fontWeight: 600,
-    flexShrink: 0,
-  },
-  epTask: {
-    color: 'var(--text-muted)',
-    fontSize: 11,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap' as const,
-  },
   textInput: {
     background: 'var(--border2)',
     border: '1px solid var(--border3)',
@@ -965,6 +1174,169 @@ const s: Record<string, React.CSSProperties> = {
     color: 'var(--text-dim)',
     fontSize: 12,
     padding: '6px 0',
+  },
+  pickerBox: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 6,
+    background: 'var(--panel2)',
+    border: '1px solid var(--border2)',
+    borderRadius: 4,
+    padding: 8,
+  },
+  pickerBreadcrumb: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    alignItems: 'center',
+    gap: 2,
+    fontSize: 11,
+    color: 'var(--text-muted)',
+    fontFamily: 'var(--font-mono)',
+    padding: '2px 4px',
+  },
+  pickerPathRoot: {
+    color: 'var(--text-dim)',
+  },
+  pickerPathSeg: {
+    color: 'var(--text)',
+    display: 'inline-flex',
+    alignItems: 'center',
+  },
+  pickerPathSep: {
+    color: 'var(--text-dim)',
+    margin: '0 2px',
+  },
+  pickerList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 2,
+    maxHeight: 200,
+    overflowY: 'auto' as const,
+    border: '1px solid var(--border3)',
+    borderRadius: 3,
+    padding: 4,
+    background: 'var(--panel)',
+  },
+  pickerEntry: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--text)',
+    textAlign: 'left' as const,
+    fontSize: 12,
+    padding: '4px 8px',
+    borderRadius: 3,
+    cursor: 'pointer',
+  },
+  pickerEntrySelected: {
+    background: 'var(--interactive-dim)',
+    color: 'var(--interactive)',
+    border: '1px solid var(--interactive)',
+  },
+  pickerIcon: {
+    color: 'var(--text-dim)',
+    fontSize: 11,
+    width: 12,
+    display: 'inline-block',
+  },
+  pickerHint: {
+    color: 'var(--text-dim)',
+    fontSize: 11,
+    padding: '4px 8px',
+  },
+  pickerCreateRow: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 4,
+  },
+  pickerCreateActions: {
+    display: 'flex',
+    gap: 6,
+    flexWrap: 'wrap' as const,
+  },
+  pickerCreateToggleBtn: {
+    background: 'transparent',
+    border: '1px dashed var(--border3)',
+    borderRadius: 4,
+    color: 'var(--text)',
+    fontSize: 12,
+    padding: '6px 10px',
+    cursor: 'pointer',
+    alignSelf: 'flex-start' as const,
+  },
+  pickerCreateConfirmBtn: {
+    background: 'var(--interactive)',
+    border: 'none',
+    borderRadius: 4,
+    color: '#fff',
+    fontSize: 12,
+    padding: '6px 10px',
+    cursor: 'pointer',
+  },
+  pickerCreateHint: {
+    color: 'var(--text-muted)',
+    fontSize: 11,
+    fontFamily: 'var(--font-mono)',
+    wordBreak: 'break-all' as const,
+  },
+  pickerNewLabel: {
+    fontSize: 10,
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  targetSummaryBox: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 8,
+    background: 'var(--panel2)',
+    border: '1px solid var(--border2)',
+    borderRadius: 4,
+    padding: '8px 10px',
+  },
+  targetSummaryHead: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: 'var(--text)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  targetSummaryPath: {
+    color: 'var(--text)',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    wordBreak: 'break-all' as const,
+  },
+  targetSummaryCaption: {
+    color: 'var(--text-muted)',
+    fontSize: 11,
+  },
+  targetSummaryMetrics: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
+    gap: 6,
+  },
+  targetMetric: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 2,
+    padding: '6px 8px',
+    background: 'var(--panel)',
+    border: '1px solid var(--border3)',
+    borderRadius: 4,
+  },
+  targetMetricLabel: {
+    color: 'var(--text-muted)',
+    fontSize: 10,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  targetMetricValue: {
+    color: 'var(--text)',
+    fontSize: 12,
+    fontWeight: 600,
   },
   emptyState: {
     fontSize: 13,
